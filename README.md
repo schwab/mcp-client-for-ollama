@@ -59,6 +59,7 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 ## Features
 
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
+- 🧠 **Self-Editing System Prompt**: The model can modify its own instructions and persona in real-time using built-in tools (`builtin.get_system_prompt` and `builtin.set_system_prompt`).
 - 🌐 **Multi-Server Support**: Connect to multiple MCP servers simultaneously
 - 🚀 **Multiple Transport Types**: Supports STDIO, SSE, and Streamable HTTP server connections
 - ☁️ **Ollama Cloud Support**: Works seamlessly with Ollama Cloud models for tool calling, enabling access to powerful cloud-hosted models while using local MCP tools
@@ -297,7 +298,19 @@ The model selection interface shows all available models in your Ollama installa
 
 The `model-config` (`mc`) command opens the advanced model settings interface, allowing you to fine-tune how the model generates responses:
 
+> [!IMPORTANT]
+> Changes made in the model configuration menu or by the AI's self-editing tools are temporary for the current session. To make them permanent, remember to save your settings using the `save-config` (`sc`) command.
+
 ![ollmcp model configuration interface](https://github.com/jonigl/mcp-client-for-ollama/blob/main/misc/ollmcp-model-configuration.png?raw=true)
+
+#### AI-Controlled System Prompt (Self-Editing)
+
+In addition to manual configuration, the client includes built-in tools that allow the model to get and set its own system prompt during a conversation.
+
+- `builtin.get_system_prompt`: The model can use this tool to retrieve its current system prompt.
+- `builtin.set_system_prompt`: The model can use this tool to change its persona, instructions, or behavior on the fly.
+
+This enables dynamic, in-conversation persona switching and instruction refinement, guided by the user's requests. For example, a user could say, "From now on, you are a pirate," and the model can use the `set_system_prompt` tool to update its core instructions accordingly.
 
 #### System Prompt
 
