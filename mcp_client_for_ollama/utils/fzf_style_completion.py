@@ -18,6 +18,10 @@ class FZFStyleCompleter(Completer):
             ignore_case=True
         ))
 
+    def update_sessions(self, new_sessions):
+        """Update the sessions dictionary for the completer."""
+        self.sessions = new_sessions
+
     def get_completions(self, document, complete_event):
         """
         This is the synchronous version of get_completions.

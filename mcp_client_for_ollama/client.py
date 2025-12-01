@@ -400,6 +400,10 @@ class MCPClient:
         self.tool_manager.set_available_tools(available_tools)
         self.tool_manager.set_enabled_tools(enabled_tools)
 
+        # Update the FZFStyleCompleter with the new sessions
+        if hasattr(self.prompt_session.completer, 'update_sessions'):
+            self.prompt_session.completer.update_sessions(self.sessions)
+
     def select_tools(self):
         """Let the user select which tools to enable using interactive prompts with server-based grouping"""
         # Call the tool manager's select_tools method
