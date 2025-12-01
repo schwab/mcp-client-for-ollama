@@ -180,20 +180,25 @@ class FZFStyleCompleter(Completer):
                 for item in session_items:
                     clean_name = re.sub(r'\[.*?\]\s*', '', item['name']).strip()
                     
-                    # Construct the full path for completion
-                    # Handle root directory case to avoid double slashes
-                    if dir_to_list == '/':
-                        full_path = '/' + clean_name
-                    else:
-                        full_path = os.path.join(dir_to_list, clean_name)
-                    
                     # Fuzzy match against the search term
-                    if not search_term or search_term.lower() in clean_name.lower():
+                    if not search_term or clean_name.lower().startswith(search_term.lower()):
+                        # Construct the full path for display
+                        if dir_to_list == '/':
+                            display_path = '/' + clean_name
+                        else:
+                            display_path = os.path.join(dir_to_list, clean_name)
+                        
+                        # The text to insert is just the clean_name, not the full path
+                        # If it's a directory, add a '/' to make it easier to continue typing
+                        text_to_insert = clean_name
+                        if item.get('type') == 'directory':
+                            text_to_insert += '/'
+
                         display_meta = f"[{item.get('type', 'file').upper()}]"
                         yield Completion(
-                            full_path,
+                            text_to_insert,
                             start_position=-len(search_term), # Replace only the search term part
-                            display=full_path,
+                            display=display_path,
                             display_meta=display_meta
                         )
             except Exception as e:
