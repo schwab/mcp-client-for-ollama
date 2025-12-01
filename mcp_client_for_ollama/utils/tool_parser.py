@@ -38,7 +38,8 @@ class ToolParser:
     def _parse_markdown_blocks(self, text: str) -> List[Dict[str, Any]]:
         """Strategy 1: Find and parse all markdown JSON blocks."""
         potential_tool_calls = []
-        json_blocks = re.findall(r"""```json\n(.*?)\n```""", text, re.DOTALL)
+        json_blocks = re.findall(r"""```\s*json
+(.*?)```""", text, re.DOTALL)
         if json_blocks:
             for block in json_blocks:
                 try:
