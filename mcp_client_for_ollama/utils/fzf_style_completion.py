@@ -12,6 +12,7 @@ class FZFStyleCompleter(Completer):
     def __init__(self, sessions=None, console=None):
         self.sessions = sessions if sessions is not None else {}
         self.console = console
+        self.allowed_dirs = None # Initialize allowed directories to None
         # Just wrap a WordCompleter with FuzzyCompleter
         self.completer = FuzzyCompleter(WordCompleter(
             list(INTERACTIVE_COMMANDS.keys()),
@@ -21,6 +22,36 @@ class FZFStyleCompleter(Completer):
     def update_sessions(self, new_sessions):
         """Update the sessions dictionary for the completer."""
         self.sessions = new_sessions
+        self.allowed_dirs = None # Reset allowed_dirs when sessions are updated
+
+    async def _fetch_allowed_directories(self):
+        """Fetch allowed directories from the filesystem tool."""
+        if 'filesystem' not in self.sessions:
+            self.allowed_dirs = []
+            return
+
+        try:
+            list_result = await self.sessions['filesystem']['session'].call_tool(
+                'list_allowed_directories', {}
+            )
+            if list_result.content and isinstance(list_result.content[0].text, str):
+                content_text = list_result.content[0].text.strip()
+                try:
+                    list_data = json.loads(content_text)
+                    if isinstance(list_data, dict) and 'items' in list_data:
+                        self.allowed_dirs = [item['name'] for item in list_data['items'] if item.get('type') == 'directory']
+                    elif isinstance(list_data, list):
+                        self.allowed_dirs = [s for s in list_data if isinstance(s, str)]
+                    else:
+                        self.allowed_dirs = []
+                except json.JSONDecodeError:
+                    self.allowed_dirs = [line.strip() for line in content_text.split('\n') if line.strip()]
+            else:
+                self.allowed_dirs = []
+        except Exception as e:
+            if self.console:
+                self.console.print(f"[red]Error fetching allowed directories: {e}[/red]")
+            self.allowed_dirs = []
 
     def get_completions(self, document, complete_event):
         """
@@ -64,6 +95,14 @@ class FZFStyleCompleter(Completer):
         
         # For now, assume @-command is for filesystem paths
         if 'filesystem' in self.sessions:
+            if self.allowed_dirs is None:
+                await self._fetch_allowed_directories()
+
+            if not self.allowed_dirs:
+                if self.console:
+                    self.console.print("[yellow]No allowed directories configured for filesystem tool.[/yellow]")
+                return
+
             try:
                 # Determine the directory to list and the search term
                 path_parts = at_command_text.split('/')
@@ -76,7 +115,16 @@ class FZFStyleCompleter(Completer):
                     dir_to_list = '/' + '/'.join(path_parts[:-1])
                     search_term = path_parts[-1]
                 else:
-                    # List root and filter by current text
+                    # If no path is typed yet, suggest allowed root directories
+                    if not at_command_text:
+                        for allowed_dir in self.allowed_dirs:
+                            yield Completion(
+                                allowed_dir,
+                                start_position=-len(text_before_cursor),
+                                display=allowed_dir,
+                                display_meta="[DIRECTORY]"
+                            )
+                        return
                     dir_to_list = '/'
                     search_term = at_command_text
 
@@ -85,6 +133,18 @@ class FZFStyleCompleter(Completer):
                 if not dir_to_list.startswith('/'):
                     dir_to_list = '/' + dir_to_list
                 
+                # Validate if the requested directory is within allowed directories
+                is_allowed = False
+                for allowed_path in self.allowed_dirs:
+                    if dir_to_list.startswith(allowed_path):
+                        is_allowed = True
+                        break
+                
+                if not is_allowed:
+                    if self.console:
+                        self.console.print(f"[red]Error: Access denied - path outside allowed directories: {dir_to_list} not in {self.allowed_dirs}[/red]")
+                    return
+
                 # Call list_directory tool
                 list_result = await self.sessions['filesystem']['session'].call_tool(
                     'list_directory',
