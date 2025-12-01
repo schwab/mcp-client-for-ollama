@@ -160,6 +160,10 @@ class FZFStyleCompleter(Completer):
                     {'path': dir_to_list}
                 )
                 
+                # Debugging: Print the raw output from list_directory
+                if self.console:
+                    self.console.print(f"[yellow]DEBUG: list_directory('{dir_to_list}') raw result: {list_result.content}[/yellow]")
+
                 session_items = []
                 if list_result.content and isinstance(list_result.content[0].text, str):
                     content_text = list_result.content[0].text.strip()
