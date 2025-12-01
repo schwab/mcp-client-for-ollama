@@ -76,24 +76,36 @@ class ToolParser:
 
     def _convert_json_to_tool_call(self, tc_json: Dict[str, Any]) -> Optional[Message.ToolCall]:
         """Converts a JSON dictionary to a Message.ToolCall object."""
-        # Case 1: Standard format {'function': {'name': ..., 'arguments': ...}}
-        if (isinstance(tc_json, dict) and 'function' in tc_json and 
-            isinstance(tc_json['function'], dict) and 'name' in tc_json['function'] and 
-            'arguments' in tc_json['function']):
+        if not isinstance(tc_json, dict):
+            return None
+
+        name = None
+        args = None
+
+        # Check for standard format {'function': {...}}
+        if 'function' in tc_json and isinstance(tc_json['function'], dict):
+            func_dict = tc_json['function']
+            name = func_dict.get('name') or func_dict.get('function_name')
+            # Use a more careful check for arguments to handle cases where it's present but None
+            if 'arguments' in func_dict:
+                args = func_dict['arguments']
+            elif 'function_args' in func_dict:
+                args = func_dict['function_args']
+        
+        # If not found, check for flattened format
+        if name is None:
+            name = tc_json.get('name') or tc_json.get('function_name')
+        if args is None:
+            if 'arguments' in tc_json:
+                args = tc_json['arguments']
+            elif 'function_args' in tc_json:
+                args = tc_json['function_args']
+
+        # We must have a name and args (even if args is an empty dict)
+        if name is not None and args is not None:
+            return Message.ToolCall(
+                function=Message.ToolCall.Function(name=name, arguments=args)
+            )
             
-            return Message.ToolCall(
-                function=Message.ToolCall.Function(
-                    name=tc_json['function']['name'],
-                    arguments=tc_json['function']['arguments']
-                )
-            )
-        # Case 2: Flattened format {'name': ..., 'arguments': ...}
-        elif (isinstance(tc_json, dict) and 'name' in tc_json and 'arguments' in tc_json):
-            return Message.ToolCall(
-                function=Message.ToolCall.Function(
-                    name=tc_json['name'],
-                    arguments=tc_json['arguments']
-                )
-            )
         return None
 

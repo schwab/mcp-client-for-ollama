@@ -76,5 +76,21 @@ This is some text in between.
         self.assertEqual(tool_calls[0].function.name, "test.tool")
         self.assertEqual(tool_calls[0].function.arguments, {"arg1": "val1"})
 
+    def test_parse_flattened_aliases(self):
+        """Test parsing flattened format with aliased keys."""
+        test_text = '{"function_name": "test.tool", "function_args": {"arg1": "val1"}}'
+        tool_calls = self.parser.parse(test_text)
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0].function.name, "test.tool")
+        self.assertEqual(tool_calls[0].function.arguments, {"arg1": "val1"})
+
+    def test_parse_nested_aliases(self):
+        """Test parsing nested format with aliased keys."""
+        test_text = '{"function": {"function_name": "test.tool", "function_args": {"arg1": "val1"}}}'
+        tool_calls = self.parser.parse(test_text)
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0].function.name, "test.tool")
+        self.assertEqual(tool_calls[0].function.arguments, {"arg1": "val1"})
+
 if __name__ == '__main__':
     unittest.main()
