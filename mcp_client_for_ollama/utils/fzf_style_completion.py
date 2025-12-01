@@ -9,9 +9,10 @@ from .constants import INTERACTIVE_COMMANDS
 class FZFStyleCompleter(Completer):
     """Simple FZF-style completer with fuzzy matching."""
 
-    def __init__(self, sessions=None, console=None):
+    def __init__(self, sessions=None, console=None, status_messages=None):
         self.sessions = sessions if sessions is not None else {}
         self.console = console
+        self.status_messages = status_messages # Store the list for messages
         self.allowed_dirs = None # Initialize allowed directories to None
         # Just wrap a WordCompleter with FuzzyCompleter
         self.completer = FuzzyCompleter(WordCompleter(
@@ -58,8 +59,8 @@ class FZFStyleCompleter(Completer):
             else:
                 self.allowed_dirs = []
         except Exception as e:
-            if self.console:
-                self.console.print(f"[red]Error fetching allowed directories: {e}[/red]")
+            if self.status_messages is not None:
+                self.status_messages.append(f"[red]Error fetching allowed directories: {e}[/red]")
             self.allowed_dirs = []
 
     def get_completions(self, document, complete_event):
@@ -108,8 +109,8 @@ class FZFStyleCompleter(Completer):
                 await self._fetch_allowed_directories()
 
             if not self.allowed_dirs:
-                if self.console:
-                    self.console.print("[yellow]No allowed directories configured for filesystem tool.[/yellow]")
+                if self.status_messages is not None:
+                    self.status_messages.append("[yellow]No allowed directories configured for filesystem tool.[/yellow]")
                 return
 
             try:
@@ -159,8 +160,8 @@ class FZFStyleCompleter(Completer):
                         break
                 
                 if not is_allowed:
-                    if self.console:
-                        self.console.print(f"[red]Error: Access denied - path outside allowed directories: {dir_to_list} not in {self.allowed_dirs}[/red]")
+                    if self.status_messages is not None:
+                        self.status_messages.append(f"[red]Error: Access denied - path outside allowed directories: {dir_to_list} not in {self.allowed_dirs}[/red]")
                     return
 
                 # Call list_directory tool
@@ -170,8 +171,8 @@ class FZFStyleCompleter(Completer):
                 )
                 
                 # Debugging: Print the raw output from list_directory
-                if self.console:
-                    self.console.print(f"[yellow]DEBUG: list_directory('{dir_to_list}') raw result: {list_result.content}[/yellow]")
+                if self.status_messages is not None:
+                    self.status_messages.append(f"[yellow]DEBUG: list_directory('{dir_to_list}') raw result: {list_result.content}[/yellow]")
 
                 session_items = []
                 if list_result.content and isinstance(list_result.content[0].text, str):
@@ -215,9 +216,9 @@ class FZFStyleCompleter(Completer):
                             display_meta=display_meta
                         )
             except Exception as e:
-                if self.console:
-                    self.console.print(f"[red]Error fetching filesystem completions: {e}[/red]")
+                if self.status_messages is not None:
+                    self.status_messages.append(f"[red]Error fetching filesystem completions: {e}[/red]")
         else:
-            if self.console:
-                self.console.print("[yellow]Filesystem tool not available for @-commands.[/yellow]")
+            if self.status_messages is not None:
+                self.status_messages.append("[yellow]Filesystem tool not available for @-commands.[/yellow]")
 

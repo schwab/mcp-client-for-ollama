@@ -63,7 +63,7 @@ class MCPClient:
         self.chat_history = []  # Add chat history list to store interactions
         # Command completer for interactive prompts
         self.prompt_session = PromptSession(
-            completer=FZFStyleCompleter(sessions=self.sessions, console=self.console),
+            completer=FZFStyleCompleter(sessions=self.sessions, console=self.console, status_messages=self.status_messages),
             style=Style.from_dict(DEFAULT_COMPLETION_STYLE)
         )
         # Context retention settings
@@ -80,6 +80,7 @@ class MCPClient:
         self.loop_limit = 3  # Maximum follow-up tool loops per query
         self.default_configuration_status = False  # Track if default configuration was loaded successfully
         self.session_save_directory = "/projects/journal/.ollmcp_sessions" # Default, will be loaded from config
+        self.status_messages = [] # List to store temporary status/error messages for display in toolbar
 
         # Store server connection parameters for reloading
         self.server_connection_params = {
@@ -696,12 +697,19 @@ class MCPClient:
                     prompt_text += f"/{tool_count}-tool" if tool_count == 1 else f"/{tool_count}-tools"
 
             user_input = await self.prompt_session.prompt_async(
-                f"{prompt_text}❯ "
+                f"{prompt_text}❯ ",
+                bottom_toolbar=self._get_bottom_toolbar_content
             )
+            # Clear messages after they have been displayed
+            self.status_messages.clear()
             return user_input
         except KeyboardInterrupt:
+            # Clear messages on exit
+            self.status_messages.clear()
             return "quit"
         except EOFError:
+            # Clear messages on exit
+            self.status_messages.clear()
             return "quit"
 
     async def display_check_for_updates(self):
@@ -719,6 +727,13 @@ class MCPClient:
         except Exception:
             # Silently fail - version check should not block program usage
             pass
+
+    def _get_bottom_toolbar_content(self):
+        """Callable to get content for the bottom toolbar."""
+        if self.status_messages:
+            # Join messages with a newline, or format them as needed
+            return Text("\n".join(self.status_messages), style="bold red")
+        return None
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
