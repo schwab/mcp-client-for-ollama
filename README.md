@@ -457,6 +457,15 @@ The Performance Metrics feature displays detailed model performance data after e
 - Case-insensitive matching for convenience
 - Centralized command list for consistency
 
+### ✨**NEW** Filesystem Autocompletion (`@` command)
+
+The client now supports autocompletion for filesystem paths using the `@` symbol. When you type `@` followed by a partial path, the completer will suggest files and directories from your system. This feature is available when a `filesystem` tool is enabled and connected to an MCP server.
+
+**Usage:**
+- Type `@` followed by a partial path (e.g., `@/home/user/doc`) to get suggestions for files and directories.
+- The autocompletion will show both files and directories, allowing you to quickly navigate and select paths.
+- This feature leverages the `filesystem.list_directory` tool.
+
 ### Contextual Prompt
 
 The chat prompt now gives you clear, contextual information at a glance:
