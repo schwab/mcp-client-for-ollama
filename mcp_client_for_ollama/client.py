@@ -61,6 +61,7 @@ class MCPClient:
         self.sessions = {}  # Dict to store multiple sessions
         # UI components
         self.chat_history = []  # Add chat history list to store interactions
+        self.status_messages = [] # List to store temporary status/error messages for display in toolbar
         # Command completer for interactive prompts
         self.prompt_session = PromptSession(
             completer=FZFStyleCompleter(sessions=self.sessions, console=self.console, status_messages=self.status_messages),
@@ -80,7 +81,6 @@ class MCPClient:
         self.loop_limit = 3  # Maximum follow-up tool loops per query
         self.default_configuration_status = False  # Track if default configuration was loaded successfully
         self.session_save_directory = "/projects/journal/.ollmcp_sessions" # Default, will be loaded from config
-        self.status_messages = [] # List to store temporary status/error messages for display in toolbar
 
         # Store server connection parameters for reloading
         self.server_connection_params = {
