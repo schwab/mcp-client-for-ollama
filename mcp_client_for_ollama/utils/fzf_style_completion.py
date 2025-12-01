@@ -114,31 +114,40 @@ class FZFStyleCompleter(Completer):
 
             try:
                 # Determine the directory to list and the search term
-                path_parts = at_command_text.split('/')
-                if len(path_parts) > 1 and at_command_text.endswith('/'):
-                    # If ends with '/', list that directory
-                    dir_to_list = '/' + '/'.join(path_parts[:-1])
-                    search_term = ''
-                elif len(path_parts) > 1:
-                    # List parent directory and filter by last part
-                    dir_to_list = '/' + '/'.join(path_parts[:-1])
-                    search_term = path_parts[-1]
-                else:
+                # Handle cases like "@", "@/", "@foo", "@foo/", "@foo/bar"
+                if not at_command_text:
                     # If no path is typed yet, suggest allowed root directories
-                    if not at_command_text:
-                        for allowed_dir in self.allowed_dirs:
-                            yield Completion(
-                                allowed_dir,
-                                start_position=-len(text_before_cursor),
-                                display=allowed_dir,
-                                display_meta="[DIRECTORY]"
-                            )
-                        return
-                    dir_to_list = '/'
-                    search_term = at_command_text
+                    for allowed_dir in self.allowed_dirs:
+                        yield Completion(
+                            allowed_dir,
+                            start_position=-len(text_before_cursor),
+                            display=allowed_dir,
+                            display_meta="[DIRECTORY]"
+                        )
+                    return
+                
+                # Normalize path to handle cases like "//" or "/./"
+                normalized_at_command_text = os.path.normpath(at_command_text)
+                
+                # If the command text ends with a slash, it means we want to list that directory
+                if at_command_text.endswith('/'):
+                    dir_to_list = normalized_at_command_text
+                    search_term = ''
+                else:
+                    # Otherwise, the last part is the search term, and the rest is the directory
+                    # Special case for root directory
+                    if normalized_at_command_text == '/':
+                        dir_to_list = '/'
+                        search_term = ''
+                    else:
+                        dir_to_list = os.path.dirname(normalized_at_command_text)
+                        search_term = os.path.basename(normalized_at_command_text)
+                        
+                        # If dirname returns empty for a path like "foo", it means it's in the current dir
+                        if dir_to_list == '':
+                            dir_to_list = '/'
 
                 # Ensure dir_to_list is absolute and normalized
-                dir_to_list = os.path.normpath(dir_to_list)
                 if not dir_to_list.startswith('/'):
                     dir_to_list = '/' + dir_to_list
                 
