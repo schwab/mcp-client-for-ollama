@@ -49,10 +49,12 @@ class FZFStyleCompleter(Completer):
                     match = re.search(r"\[\s*'(.*?)'\s*\]", content_text)
                     if match:
                         # Extract paths, splitting by "', '" and stripping quotes
-                        self.allowed_dirs = [p.strip("'") for p in match.group(1).split("', '")]
+                        parsed_dirs = [p.strip("'") for p in match.group(1).split("', '")]
+                        self.allowed_dirs = [d for d in parsed_dirs if d.startswith('/')] # Filter to ensure they are paths
                     else:
                         # Fallback to splitting by newline if no specific pattern found
-                        self.allowed_dirs = [line.strip() for line in content_text.split('\n') if line.strip()]
+                        parsed_dirs = [line.strip() for line in content_text.split('\n') if line.strip()]
+                        self.allowed_dirs = [d for d in parsed_dirs if d.startswith('/')] # Filter to ensure they are paths
             else:
                 self.allowed_dirs = []
         except Exception as e:
@@ -190,7 +192,7 @@ class FZFStyleCompleter(Completer):
                         display_meta = f"[{item.get('type', 'file').upper()}]"
                         yield Completion(
                             full_path,
-                            start_position=-len(at_command_text), # Replace the @-command part
+                            start_position=-len(search_term), # Replace only the search term part
                             display=full_path,
                             display_meta=display_meta
                         )
