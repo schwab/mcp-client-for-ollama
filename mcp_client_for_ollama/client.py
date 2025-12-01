@@ -1,6 +1,7 @@
 """MCP Client for Ollama - A TUI client for interacting with Ollama models and MCP servers"""
 import asyncio
 import os
+import json
 from contextlib import AsyncExitStack
 from typing import List, Optional
 
@@ -27,8 +28,12 @@ from .utils.hil_manager import HumanInTheLoopManager
 from .utils.fzf_style_completion import FZFStyleCompleter
 
 
+SESSION_SAVE_DIR = "/projects/journal/.ollmcp_sessions"
+
+
 class MCPClient:
     """Main client class for interacting with Ollama and MCP servers"""
+
 
     def __init__(self, model: str = DEFAULT_MODEL, host: str = DEFAULT_OLLAMA_HOST):
         # Initialize session and client objects
@@ -87,6 +92,130 @@ class MCPClient:
     def display_current_model(self):
         """Display the currently selected model"""
         self.model_manager.display_current_model()
+
+    def _has_filesystem_tool(self) -> bool:
+        """Check if the filesystem tool is available."""
+        return 'filesystem' in self.sessions
+
+    async def save_session(self):
+        """Save the current chat history to a named session file."""
+        try:
+            if not self.chat_history:
+                self.console.print("[yellow]Chat history is empty. Nothing to save.[/yellow]")
+                return
+
+            session_name = await self.get_user_input("Session name (e.g., 'my-writing-session')")
+            if not session_name:
+                self.console.print("[yellow]Save cancelled.[/yellow]")
+                return
+
+            # Sanitize name to be a valid filename
+            filename = "".join(c for c in session_name if c.isalnum() or c in ('-', '_')).rstrip()
+            if not filename:
+                self.console.print("[red]Invalid session name. Use letters, numbers, hyphens, or underscores.[/red]")
+                return
+            
+            file_path = f"{SESSION_SAVE_DIR}/{filename}.json"
+
+            # Ensure directory exists
+            try:
+                await self.sessions['filesystem']['session'].call_tool('create_directory', {'path': SESSION_SAVE_DIR})
+            except Exception as e:
+                # It's okay if the directory already exists.
+                if "file exists" not in str(e).lower():
+                    self.console.print(f"[yellow]Warning: Could not create session directory (it may already exist): {e}[/yellow]")
+                    pass
+
+            # Serialize chat history
+            history_json = json.dumps(self.chat_history, indent=2)
+
+            # Write file using filesystem tool
+            with self.console.status(f"[cyan]Saving session '{session_name}'...[/cyan]"):
+                await self.sessions['filesystem']['session'].call_tool(
+                    'write_file', 
+                    {'path': file_path, 'content': history_json}
+                )
+            
+            self.console.print(f"[green]Session '{session_name}' saved successfully to {file_path}[/green]")
+
+        except Exception as e:
+            self.console.print(f"[red]An error occurred while saving the session: {e}[/red]")
+
+    async def load_session(self):
+        """Load a chat history from a named session file."""
+        try:
+            with self.console.status("[cyan]Fetching saved sessions...[/cyan]"):
+                list_result = await self.sessions['filesystem']['session'].call_tool(
+                    'list_directory',
+                    {'path': SESSION_SAVE_DIR}
+                )
+            
+            sessions = []
+            # Result from tool might be a string that needs parsing.
+            if list_result.content and isinstance(list_result.content[0].text, str):
+                try:
+                    # Handle if the tool returns a JSON string list
+                    loaded_sessions = json.loads(list_result.content[0].text)
+                    if isinstance(loaded_sessions, list):
+                        sessions = [s for s in loaded_sessions if isinstance(s, str) and s.endswith('.json')]
+                except json.JSONDecodeError:
+                    # Handle if the tool returns a simple string with newlines
+                    sessions = [line.strip() for line in list_result.content[0].text.split('\n') if line.strip().endswith('.json')]
+
+            if not sessions:
+                self.console.print(f"[yellow]No saved sessions found in {SESSION_SAVE_DIR}[/yellow]")
+                return
+
+            self.clear_console()
+            self.console.print(Panel("[bold]Load a Session[/bold]", border_style="blue"))
+            
+            for i, session_file in enumerate(sessions):
+                display_name = session_file.replace('.json', '')
+                self.console.print(f"[magenta]{i + 1}[/magenta]. {display_name}")
+            
+            self.console.print("\nEnter the number of the session to load, or 'q' to cancel.")
+
+            while True:
+                selection = await self.get_user_input("Load session")
+                if not selection or selection.lower() in ['q', 'quit']:
+                    self.clear_console()
+                    self.display_available_tools()
+                    self.display_current_model()
+                    self._display_chat_history()
+                    return
+                
+                try:
+                    index = int(selection) - 1
+                    if 0 <= index < len(sessions):
+                        selected_file = sessions[index]
+                        file_path = f"{SESSION_SAVE_DIR}/{selected_file}"
+                        
+                        with self.console.status(f"[cyan]Loading session '{selected_file}'...[/cyan]"):
+                            read_result = await self.sessions['filesystem']['session'].call_tool(
+                                'read_file',
+                                {'path': file_path}
+                            )
+                        
+                        history_json = read_result.content[0].text
+                        self.chat_history = json.loads(history_json)
+                        self.actual_token_count = 0 # Reset token count
+
+                        self.clear_console()
+                        self.console.print(f"[green]Session '{selected_file.replace('.json', '')}' loaded successfully.[/green]")
+                        self.display_available_tools()
+                        self.display_current_model()
+                        self._display_chat_history()
+                        return
+                    else:
+                        self.console.print("[red]Invalid number. Please try again.[/red]")
+                except ValueError:
+                    self.console.print("[red]Invalid input. Please enter a number or 'q'.[/red]")
+
+        except Exception as e:
+            if "no such file or directory" in str(e).lower():
+                self.console.print(f"[yellow]No saved sessions found (session directory does not exist: {SESSION_SAVE_DIR}).[/yellow]")
+            else:
+                self.console.print(f"[red]An error occurred while loading sessions: {e}[/red]")
 
     async def supports_thinking_mode(self) -> bool:
         """Check if the current model supports thinking mode by checking its capabilities
@@ -369,17 +498,19 @@ class MCPClient:
                 result = None
                 with self.console.status(f"[cyan]⏳ Running {tool_name}...[/cyan]"):
                     result = await self.sessions[server_name]["session"].call_tool(actual_tool_name, tool_args)
+                    if result.content:
+                        tool_response = f"{result.content[0].text}"
 
-                tool_response = f"{result.content[0].text}"
+                        # Display the tool response
+                        self.tool_display_manager.display_tool_response(tool_name, tool_args, tool_response, show=self.show_tool_execution)
 
-                # Display the tool response
-                self.tool_display_manager.display_tool_response(tool_name, tool_args, tool_response, show=self.show_tool_execution)
-
-                messages.append({
-                    "role": "tool",
-                    "content": tool_response,
-                    "tool_name": tool_name
-                })
+                        messages.append({
+                            "role": "tool",
+                            "content": tool_response,
+                            "tool_name": tool_name
+                        })
+                    else:
+                        messages.append("No tool response found.")
 
             # Get stream response from Ollama with the tool results
             chat_params_followup = {
@@ -578,6 +709,20 @@ class MCPClient:
                     self.hil_manager.toggle()
                     continue
 
+                if query.lower() in ['save-session', 'ss']:
+                    if self._has_filesystem_tool():
+                        await self.save_session()
+                    else:
+                        self.console.print("[red]Error: The 'filesystem' service is required to save sessions.[/red]")
+                    continue
+
+                if query.lower() in ['load-session', 'ls']:
+                    if self._has_filesystem_tool():
+                        await self.load_session()
+                    else:
+                        self.console.print("[red]Error: The 'filesystem' service is required to load sessions.[/red]")
+                    continue
+
                 # Check if query is too short and not a special command
                 if len(query.strip()) < 5:
                     self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
@@ -647,6 +792,10 @@ class MCPClient:
             "• Type [bold]save-config[/bold] or [bold]sc[/bold] to save the current configuration\n"
             "• Type [bold]load-config[/bold] or [bold]lc[/bold] to load a configuration\n"
             "• Type [bold]reset-config[/bold] or [bold]rc[/bold] to reset configuration to defaults\n\n"
+
+            "[bold cyan]Session Management:[/bold cyan] [dim](Requires 'filesystem' service)[/dim]\n"
+            "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
+            "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n\n"
 
 
             "[bold cyan]Basic Commands:[/bold cyan]\n"
