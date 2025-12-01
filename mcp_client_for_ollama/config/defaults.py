@@ -50,7 +50,8 @@ def default_config() -> dict:
         },
         "hilSettings": {
             "enabled": True
-        }
+        },
+        "sessionSaveDirectory": "/projects/journal/.ollmcp_sessions"
     }
 
 def get_config_path(config_name: str = "default") -> str:

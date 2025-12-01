@@ -29,9 +29,6 @@ from .utils.hil_manager import HumanInTheLoopManager
 from .utils.fzf_style_completion import FZFStyleCompleter
 
 
-SESSION_SAVE_DIR = "/projects/journal/.ollmcp_sessions"
-
-
 class MCPClient:
     """Main client class for interacting with Ollama and MCP servers"""
 
@@ -82,6 +79,7 @@ class MCPClient:
         # Agent mode settings
         self.loop_limit = 3  # Maximum follow-up tool loops per query
         self.default_configuration_status = False  # Track if default configuration was loaded successfully
+        self.session_save_directory = "/projects/journal/.ollmcp_sessions" # Default, will be loaded from config
 
         # Store server connection parameters for reloading
         self.server_connection_params = {
@@ -116,11 +114,11 @@ class MCPClient:
                 self.console.print("[red]Invalid session name. Use letters, numbers, hyphens, or underscores.[/red]")
                 return
             
-            file_path = f"{SESSION_SAVE_DIR}/{filename}.json"
+            file_path = f"{self.session_save_directory}/{filename}.json"
 
             # Ensure directory exists
             try:
-                await self.sessions['filesystem']['session'].call_tool('create_directory', {'path': SESSION_SAVE_DIR})
+                await self.sessions['filesystem']['session'].call_tool('create_directory', {'path': self.session_save_directory})
             except Exception as e:
                 # It's okay if the directory already exists.
                 if "file exists" not in str(e).lower():
@@ -153,7 +151,7 @@ class MCPClient:
             with self.console.status("[cyan]Fetching saved sessions...[/cyan]"):
                 list_result = await self.sessions['filesystem']['session'].call_tool(
                     'list_directory',
-                    {'path': SESSION_SAVE_DIR}
+                    {'path': self.session_save_directory}
                 )
             
             session_items = []
@@ -189,7 +187,7 @@ class MCPClient:
                     session_items.append({'name': clean_name, 'type': 'file'})
 
             if not session_items:
-                self.console.print(f"[yellow]No saved sessions found in {SESSION_SAVE_DIR}[/yellow]")
+                self.console.print(f"[yellow]No saved sessions found in {self.session_save_directory}[/yellow]")
                 return
 
             self.clear_console()
@@ -220,7 +218,7 @@ class MCPClient:
                 if 0 <= index < len(session_items):
                     try:
                         selected_filename = session_items[index]['name']
-                        file_path = f"{SESSION_SAVE_DIR}/{selected_filename}"
+                        file_path = f"{self.session_save_directory}/{selected_filename}"
                         
                         with self.console.status(f"[cyan]Loading session '{selected_filename.replace('.json', '')}'...[/cyan]"):
                             read_result = await self.sessions['filesystem']['session'].call_tool(
@@ -246,7 +244,7 @@ class MCPClient:
 
         except Exception as e:
             if "no such file or directory" in str(e).lower():
-                self.console.print(f"[yellow]No saved sessions found (session directory does not exist: {SESSION_SAVE_DIR}).[/yellow]")
+                self.console.print(f"[yellow]No saved sessions found (session directory does not exist: {self.session_save_directory}).[/yellow]")
             else:
                 self.console.print(f"[red]An error occurred while loading sessions: {e}[/red]")
 
@@ -285,6 +283,53 @@ class MCPClient:
                 border_style="magenta",
                 expand=False
             ))
+
+    async def _change_session_save_location(self):
+        """Allow the user to change the directory where sessions are saved."""
+        if not self._has_filesystem_tool():
+            self.console.print("[red]Error: The 'filesystem' service is required to change the session save location.[/red]")
+            return
+
+        self.clear_console()
+        self.console.print(Panel("[bold]Change Session Save Location[/bold]", border_style="blue"))
+        self.console.print(f"Current session save directory: [cyan]{self.session_save_directory}[/cyan]\n")
+        self.console.print("Please enter the absolute path to the new directory where you want to save sessions.")
+        self.console.print("The '.ollmcp_sessions' folder will be created inside this directory.")
+        self.console.print("Type 'q' or 'quit' to cancel.")
+
+        while True:
+            new_base_path = await self.get_user_input("New base directory")
+            if not new_base_path or new_base_path.lower() in ['q', 'quit']:
+                self.console.print("[yellow]Session save location change cancelled.[/yellow]")
+                break
+
+            new_base_path = new_base_path.strip()
+            if not os.path.isabs(new_base_path):
+                self.console.print("[red]Error: Path must be absolute. Please try again.[/red]")
+                continue
+
+            # Construct the full new session save directory
+            proposed_session_dir = os.path.join(new_base_path, ".ollmcp_sessions")
+
+            # Check if the proposed directory exists or can be created
+            try:
+                # Use the filesystem tool to check if the directory exists or can be created
+                # We'll try to create it, if it exists, it won't raise an error
+                await self.sessions['filesystem']['session'].call_tool('create_directory', {'path': proposed_session_dir})
+                
+                self.session_save_directory = proposed_session_dir
+                self.save_configuration() # Save the updated configuration
+                self.console.print(f"[green]Session save directory updated to: {self.session_save_directory}[/green]")
+                break
+            except Exception as e:
+                self.console.print(f"[red]Error: Could not set session save directory to '{proposed_session_dir}'. Reason: {e}[/red]")
+                self.console.print("[yellow]Please ensure the path is valid and accessible by the 'filesystem' tool.[/yellow]")
+                continue
+        
+        self.display_available_tools()
+        self.display_current_model()
+        self._display_chat_history()
+
 
     async def supports_thinking_mode(self) -> bool:
         """Check if the current model supports thinking mode by checking its capabilities
@@ -796,6 +841,10 @@ class MCPClient:
                     await self.reparse_last()
                     continue
 
+                if query.lower() in ['session-dir', 'sd']:
+                    await self._change_session_save_location()
+                    continue
+
                 # Check if query is too short and not a special command
                 if len(query.strip()) < 5:
                     self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
@@ -868,7 +917,8 @@ class MCPClient:
 
             "[bold cyan]Session Management:[/bold cyan] [dim](Requires 'filesystem' service)[/dim]\n"
             "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
-            "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n\n"
+            "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n"
+            "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n\n"
 
             "[bold cyan]Debugging:[/bold cyan]\n"
             "• Type [bold]reparse-last[/bold] or [bold]rl[/bold] to re-run the tool parser on the last response\n\n"
@@ -1055,7 +1105,8 @@ class MCPClient:
             },
             "hilSettings": {
                 "enabled": self.hil_manager.is_enabled()
-            }
+            },
+            "sessionSaveDirectory": self.session_save_directory
         }
 
         # Use the ConfigManager to save the configuration
@@ -1128,6 +1179,10 @@ class MCPClient:
         if "hilSettings" in config_data:
             if "enabled" in config_data["hilSettings"]:
                 self.hil_manager.set_enabled(config_data["hilSettings"]["enabled"])
+
+        # Load session save directory if specified
+        if "sessionSaveDirectory" in config_data:
+            self.session_save_directory = config_data["sessionSaveDirectory"]
 
         return True
 

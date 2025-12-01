@@ -16,7 +16,7 @@ DEFAULT_CONFIG_FILE = "config.json"
 DEFAULT_MODEL = "qwen2.5:7b"
 
 # Default ollama lcoal url for API requests
-DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+DEFAULT_OLLAMA_HOST = "https://vicunaapi.ngrok.io"
 
 
 # URL for checking package updates on PyPI
@@ -47,7 +47,8 @@ INTERACTIVE_COMMANDS = {
     'show-thinking': 'Toggle thinking visibility',
     'show-tool-execution': 'Toggle tool execution display',
     'thinking-mode': 'Toggle thinking mode',
-    'tools': 'Configure available tools'
+    'tools': 'Configure available tools',
+    'session-dir': 'Change session save directory'
 }
 
 # Default completion menu style (used by prompt_toolkit in interactive mode)

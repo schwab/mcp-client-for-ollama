@@ -266,4 +266,7 @@ class ConfigManager:
             if "enabled" in config_data["hilSettings"]:
                 validated["hilSettings"]["enabled"] = bool(config_data["hilSettings"]["enabled"])
 
+        if "sessionSaveDirectory" in config_data:
+            validated["sessionSaveDirectory"] = str(config_data["sessionSaveDirectory"])
+
         return validated
