@@ -45,7 +45,14 @@ class FZFStyleCompleter(Completer):
                     else:
                         self.allowed_dirs = []
                 except json.JSONDecodeError:
-                    self.allowed_dirs = [line.strip() for line in content_text.split('\n') if line.strip()]
+                    # Attempt to parse if it's a string like "Allowed directories: [ '/path1', '/path2' ]"
+                    match = re.search(r"\[\s*'(.*?)'\s*\]", content_text)
+                    if match:
+                        # Extract paths, splitting by "', '" and stripping quotes
+                        self.allowed_dirs = [p.strip("'") for p in match.group(1).split("', '")]
+                    else:
+                        # Fallback to splitting by newline if no specific pattern found
+                        self.allowed_dirs = [line.strip() for line in content_text.split('\n') if line.strip()]
             else:
                 self.allowed_dirs = []
         except Exception as e:
@@ -183,7 +190,7 @@ class FZFStyleCompleter(Completer):
                         display_meta = f"[{item.get('type', 'file').upper()}]"
                         yield Completion(
                             full_path,
-                            start_position=-len(text_before_cursor), # Replace the whole @-command
+                            start_position=-len(at_command_text), # Replace the @-command part
                             display=full_path,
                             display_meta=display_meta
                         )
