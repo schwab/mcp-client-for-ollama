@@ -16,13 +16,17 @@ class ToolParser:
         
         It uses multiple strategies to find tool calls:
         1. Find all markdown JSON blocks.
-        2. If none, fall back to parsing the entire text as a single JSON object or array.
+        2. If none, find JSON objects embedded directly in the text.
+        3. If none, fall back to parsing the entire text as a single JSON object or array.
         
         Returns:
             A list of Message.ToolCall objects found in the text.
         """
         tool_calls: List[Message.ToolCall] = []
         potential_tool_jsons = self._parse_markdown_blocks(text)
+
+        if not potential_tool_jsons:
+            potential_tool_jsons = self._parse_embedded_json(text)
 
         if not potential_tool_jsons:
             potential_tool_jsons = self._parse_full_text(text)
@@ -52,8 +56,44 @@ class ToolParser:
                     continue
         return potential_tool_calls
     
+    def _parse_embedded_json(self, text: str) -> List[Dict[str, Any]]:
+        """Strategy 2: Find and parse JSON objects embedded in the text."""
+        potential_tool_calls = []
+        
+        # Clean up special tokens that might interfere with parsing
+        cleaned_text = re.sub(r'<\|im_start\|>', '', text)
+        cleaned_text = re.sub(r'<\|im_end\|>', '', cleaned_text)
+
+        # Find all possible start indices of a JSON object
+        start_indices = [m.start() for m in re.finditer(r'\{', cleaned_text)]
+        
+        for start_index in start_indices:
+            balance = 1
+            for i in range(start_index + 1, len(cleaned_text)):
+                if cleaned_text[i] == '{':
+                    balance += 1
+                elif cleaned_text[i] == '}':
+                    balance -= 1
+                
+                if balance == 0:
+                    potential_json_str = cleaned_text[start_index : i + 1]
+                    try:
+                        parsed = json.loads(potential_json_str)
+                        if isinstance(parsed, dict):
+                            # Basic validation to see if it looks like a tool call
+                            has_name = 'name' in parsed or 'function_name' in parsed or 'function' in parsed
+                            has_args = 'arguments' in parsed or 'function_args' in parsed
+                            if has_name and has_args:
+                                potential_tool_calls.append(parsed)
+                    except json.JSONDecodeError:
+                        pass  # Not a valid JSON object, ignore
+                    # Break from inner loop to continue searching from the next start index
+                    break
+        
+        return potential_tool_calls
+
     def _parse_full_text(self, text: str) -> List[Dict[str, Any]]:
-        """Strategy 2: Parse the entire text as a single JSON object or array."""
+        """Strategy 3: Parse the entire text as a single JSON object or array."""
         potential_tool_calls = []
         try:
             text_to_parse = text.strip()

@@ -2,6 +2,7 @@
 import asyncio
 import os
 import json
+import re
 from contextlib import AsyncExitStack
 from typing import List, Optional
 
@@ -65,7 +66,7 @@ class MCPClient:
         self.chat_history = []  # Add chat history list to store interactions
         # Command completer for interactive prompts
         self.prompt_session = PromptSession(
-            completer=FZFStyleCompleter(),
+            completer=FZFStyleCompleter(sessions=self.sessions, console=self.console),
             style=Style.from_dict(DEFAULT_COMPLETION_STYLE)
         )
         # Context retention settings
@@ -131,10 +132,15 @@ class MCPClient:
 
             # Write file using filesystem tool
             with self.console.status(f"[cyan]Saving session '{session_name}'...[/cyan]"):
-                await self.sessions['filesystem']['session'].call_tool(
+                write_result = await self.sessions['filesystem']['session'].call_tool(
                     'write_file', 
                     {'path': file_path, 'content': history_json}
                 )
+            
+            # Check the tool's response for errors
+            if write_result.status == "error":
+                error_msg = write_result.error_message if hasattr(write_result, 'error_message') else "Unknown error from filesystem tool."
+                raise Exception(f"Filesystem tool reported an error: {error_msg}")
             
             self.console.print(f"[green]Session '{session_name}' saved successfully to {file_path}[/green]")
 
@@ -150,28 +156,49 @@ class MCPClient:
                     {'path': SESSION_SAVE_DIR}
                 )
             
-            sessions = []
-            # Result from tool might be a string that needs parsing.
+            session_items = []
+            raw_filenames = []
             if list_result.content and isinstance(list_result.content[0].text, str):
+                content_text = list_result.content[0].text.strip()
+                
+                # Try to parse as JSON first
                 try:
-                    # Handle if the tool returns a JSON string list
-                    loaded_sessions = json.loads(list_result.content[0].text)
-                    if isinstance(loaded_sessions, list):
-                        sessions = [s for s in loaded_sessions if isinstance(s, str) and s.endswith('.json')]
+                    list_data = json.loads(content_text)
+                    # Handle complex JSON object with 'items' from advanced servers
+                    if isinstance(list_data, dict) and 'items' in list_data:
+                        raw_filenames = [
+                            item['name'] for item in list_data['items']
+                            if item.get('type', '') == 'file' and item.get('name', '').endswith('.json')
+                        ]
+                    # Handle simple JSON list of strings
+                    elif isinstance(list_data, list):
+                        raw_filenames = [s for s in list_data if isinstance(s, str) and s.endswith('.json')]
+                    else:
+                        # If it's JSON but not a dict with 'items' or a list, it's unexpected.
+                        self.console.print(f"[yellow]Warning: Unexpected JSON format from list_directory tool: {content_text[:100]}...[/yellow]")
+                        raw_filenames = [] # Clear to prevent processing unexpected format
                 except json.JSONDecodeError:
-                    # Handle if the tool returns a simple string with newlines
-                    sessions = [line.strip() for line in list_result.content[0].text.split('\n') if line.strip().endswith('.json')]
+                    # If it's not JSON, treat as simple newline-separated string
+                    raw_filenames = [line.strip() for line in content_text.split('\n') if line.strip()]
 
-            if not sessions:
+            # Clean the raw filenames and create the session_items
+            for filename in raw_filenames:
+                # Strip any decorative tags like [FILE], [DIR], etc. and ensure it's a json file
+                clean_name = re.sub(r'\[.*?\]\s*', '', filename).strip()
+                if clean_name.endswith('.json'):
+                    session_items.append({'name': clean_name, 'type': 'file'})
+
+            if not session_items:
                 self.console.print(f"[yellow]No saved sessions found in {SESSION_SAVE_DIR}[/yellow]")
                 return
 
             self.clear_console()
             self.console.print(Panel("[bold]Load a Session[/bold]", border_style="blue"))
             
-            for i, session_file in enumerate(sessions):
-                display_name = session_file.replace('.json', '')
-                self.console.print(f"[magenta]{i + 1}[/magenta]. {display_name}")
+            for i, item in enumerate(session_items):
+                display_name = item['name'].replace('.json', '')
+                display_type = f"[{item.get('type', 'file').upper()}]"
+                self.console.print(f"[magenta]{i + 1}[/magenta]. {display_type} {display_name}")
             
             self.console.print("\nEnter the number of the session to load, or 'q' to cancel.")
 
@@ -185,12 +212,17 @@ class MCPClient:
                     return
                 
                 try:
-                    index = int(selection) - 1
-                    if 0 <= index < len(sessions):
-                        selected_file = sessions[index]
-                        file_path = f"{SESSION_SAVE_DIR}/{selected_file}"
+                    index = int(selection.strip()) - 1
+                except (ValueError, TypeError):
+                    self.console.print("[red]Invalid input. Please enter a number or 'q'.[/red]")
+                    continue
+
+                if 0 <= index < len(session_items):
+                    try:
+                        selected_filename = session_items[index]['name']
+                        file_path = f"{SESSION_SAVE_DIR}/{selected_filename}"
                         
-                        with self.console.status(f"[cyan]Loading session '{selected_file}'...[/cyan]"):
+                        with self.console.status(f"[cyan]Loading session '{selected_filename.replace('.json', '')}'...[/cyan]"):
                             read_result = await self.sessions['filesystem']['session'].call_tool(
                                 'read_file',
                                 {'path': file_path}
@@ -198,24 +230,61 @@ class MCPClient:
                         
                         history_json = read_result.content[0].text
                         self.chat_history = json.loads(history_json)
-                        self.actual_token_count = 0 # Reset token count
+                        self.actual_token_count = 0
 
                         self.clear_console()
-                        self.console.print(f"[green]Session '{selected_file.replace('.json', '')}' loaded successfully.[/green]")
+                        self.console.print(f"[green]Session '{selected_filename.replace('.json', '')}' loaded successfully.[/green]")
                         self.display_available_tools()
                         self.display_current_model()
                         self._display_chat_history()
                         return
-                    else:
-                        self.console.print("[red]Invalid number. Please try again.[/red]")
-                except ValueError:
-                    self.console.print("[red]Invalid input. Please enter a number or 'q'.[/red]")
+                    except Exception as e:
+                        self.console.print(f"[red]Error loading session file: {e}[/red]")
+                        return
+                else:
+                    self.console.print("[red]Invalid number. Please try again.[/red]")
 
         except Exception as e:
             if "no such file or directory" in str(e).lower():
                 self.console.print(f"[yellow]No saved sessions found (session directory does not exist: {SESSION_SAVE_DIR}).[/yellow]")
             else:
                 self.console.print(f"[red]An error occurred while loading sessions: {e}[/red]")
+
+    async def reparse_last(self):
+        """Re-run the tool parser on the last model response for debugging."""
+        if not self.chat_history:
+            self.console.print("[yellow]No chat history available to re-parse.[/yellow]")
+            return
+
+        last_entry = self.chat_history[-1]
+        last_response_text = last_entry.get("response", "")
+
+        if not last_response_text:
+            self.console.print("[yellow]The last response was empty. Nothing to parse.[/yellow]")
+            return
+
+        self.console.print(Panel(last_response_text, title="[bold cyan]Input to Parser[/bold cyan]", border_style="cyan"))
+
+        parsed_tool_calls = self.tool_parser.parse(last_response_text)
+
+        if not parsed_tool_calls:
+            self.console.print(Panel("[yellow]No tool calls were parsed from the response.[/yellow]", title="[bold yellow]Parser Result[/bold yellow]", border_style="yellow"))
+            return
+        
+        self.console.print(Panel(f"[green]Successfully parsed {len(parsed_tool_calls)} tool call(s):[/green]", title="[bold green]Parser Result[/bold green]", border_style="green"))
+
+        for i, tool_call in enumerate(parsed_tool_calls):
+            tool_name = tool_call.function.name
+            tool_args = tool_call.function.arguments
+            
+            args_str = json.dumps(tool_args, indent=2)
+            
+            self.console.print(Panel(
+                f"[bold]Name:[/bold] {tool_name}\n[bold]Arguments:[/bold]\n{args_str}",
+                title=f"Tool Call #{i+1}",
+                border_style="magenta",
+                expand=False
+            ))
 
     async def supports_thinking_mode(self) -> bool:
         """Check if the current model supports thinking mode by checking its capabilities
@@ -723,6 +792,10 @@ class MCPClient:
                         self.console.print("[red]Error: The 'filesystem' service is required to load sessions.[/red]")
                     continue
 
+                if query.lower() in ['reparse-last', 'rl']:
+                    await self.reparse_last()
+                    continue
+
                 # Check if query is too short and not a special command
                 if len(query.strip()) < 5:
                     self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
@@ -796,6 +869,9 @@ class MCPClient:
             "[bold cyan]Session Management:[/bold cyan] [dim](Requires 'filesystem' service)[/dim]\n"
             "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
             "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n\n"
+
+            "[bold cyan]Debugging:[/bold cyan]\n"
+            "• Type [bold]reparse-last[/bold] or [bold]rl[/bold] to re-run the tool parser on the last response\n\n"
 
 
             "[bold cyan]Basic Commands:[/bold cyan]\n"
