@@ -212,7 +212,7 @@ class ToolManager:
         Returns:
             Updated tool index after processing all tools
         """
-        enabled_count = sum(1 for tool in server_tools if self.enabled_tools[tool.name])
+        enabled_count = sum(1 for tool in server_tools if self.enabled_tools.get(tool.name, True))
         total_count = len(server_tools)
 
         # Determine server status indicator
@@ -234,7 +234,7 @@ class ToolManager:
             # Simple list format for when descriptions are shown
             tool_list = []
             for tool in server_tools:
-                status = self._get_status_indicator(self.enabled_tools[tool.name])
+                status = self._get_status_indicator(self.enabled_tools.get(tool.name, True))
                 tool_text = f"[magenta]{tool_index}[/magenta]. {status} {tool.name}"
 
                 # Add description if available
@@ -259,7 +259,7 @@ class ToolManager:
             # Display individual tools for this server in columns
             server_tool_texts = []
             for tool in server_tools:
-                status = self._get_status_indicator(self.enabled_tools[tool.name])
+                status = self._get_status_indicator(self.enabled_tools.get(tool.name, True))
                 tool_text = f"[magenta]{tool_index}[/magenta]. {status} {tool.name}"
 
                 # Store the mapping from display index to tool
@@ -309,7 +309,7 @@ class ToolManager:
             server_name, server_tools = sorted_servers[server_idx]
 
             # Check if all tools in this server are currently enabled
-            all_enabled = all(self.enabled_tools[tool.name] for tool in server_tools)
+            all_enabled = all(self.enabled_tools.get(tool.name, True) for tool in server_tools)
 
             # Toggle accordingly: if all are enabled, disable all; otherwise enable all
             new_state = not all_enabled
@@ -374,7 +374,7 @@ class ToolManager:
             for idx in selections:
                 if idx in index_to_tool:
                     tool = index_to_tool[idx]
-                    new_state = not self.enabled_tools[tool.name]
+                    new_state = not self.enabled_tools.get(tool.name, True)
                     self.enabled_tools[tool.name] = new_state
                     tool_updates[tool.name] = new_state
                     valid_toggle = True
