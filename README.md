@@ -33,7 +33,7 @@
   - [Command-line Arguments](#command-line-arguments)
   - [Usage Examples](#usage-examples)
   - [How Tool Calls Work](#how-tool-calls-work)
-  - ✨**NEW** [Agent Mode](#agent-mode)
+  - [Agent Mode](#agent-mode)
 - [Interactive Commands](#interactive-commands)
   - [Tool and Server Selection](#tool-and-server-selection)
   - [Model Selection](#model-selection)
@@ -43,6 +43,7 @@
   - [Performance Metrics](#performance-metrics)
 - [Autocomplete and Prompt Features](#autocomplete-and-prompt-features)
 - [Configuration Management](#configuration-management)
+- ✨**NEW** [Save and Load Session](#save-and-load-session)
 - [Server Configuration Format](#server-configuration-format)
   - [Tips: Where to Put MCP Server Configs and a Working Example](#tips-where-to-put-mcp-server-configs-and-a-working-example)
 - [Compatible Models](#compatible-models)
@@ -59,6 +60,8 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 ## Features
 
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
+- ✨**NEW** **Save and Load Session**: Save and load your chat session, including history.
+- ✨**NEW** **Reparse Last Response**: A command to re-parse the last model response, useful for debugging or when the model response is slightly malformed.
 - 🧠 **Self-Editing System Prompt**: The model can modify its own instructions and persona in real-time using built-in tools (`builtin.get_system_prompt` and `builtin.set_system_prompt`).
 - 🌐 **Multi-Server Support**: Connect to multiple MCP servers simultaneously
 - 🚀 **Multiple Transport Types**: Supports STDIO, SSE, and Streamable HTTP server connections
@@ -255,13 +258,16 @@ During chat, use these commands:
 | `help`           | `h`              | Display help and available commands                 |
 | `human-in-loop`  | `hil`            | Toggle Human-in-the-Loop confirmations for tool execution |
 | `load-config`    | `lc`             | Load tool and model configuration from a file       |
+| `load-session`   | `ls`             | Load a chat session from a file                     |
 | `loop-limit`     | `ll`             | Set maximum iterative tool-loop iterations (Agent Mode). Default: 3 |
 | `model`          | `m`              | List and select a different Ollama model            |
 | `model-config`   | `mc`             | Configure advanced model parameters and system prompt|
 | `quit`, `exit`, `bye`   | `q` or `Ctrl+D`  | Exit the client                                     |
 | `reload-servers` | `rs`             | Reload all MCP servers with current configuration   |
+| `reparse-last`   | `rl`             | Reparse the last model response                     |
 | `reset-config`   | `rc`             | Reset configuration to defaults (all tools enabled) |
 | `save-config`    | `sc`             | Save current tool and model configuration to a file |
+| `save-session`   | `ss`             | Save the current chat session to a file             |
 | `show-metrics`   | `sm`             | Toggle performance metrics display                  |
 | `show-thinking`  | `st`             | Toggle thinking text visibility                     |
 | `show-tool-execution` | `ste`       | Toggle tool execution display visibility            |
@@ -507,6 +513,15 @@ The configuration saves:
 - Tool execution display preferences
 - Performance metrics display preferences
 - Human-in-the-Loop confirmation settings
+
+### ✨**NEW** Save and Load Session
+
+You can now save and load your entire chat session, including the conversation history. This is useful for resuming a session later or for keeping a record of your conversations.
+
+- `save-session` (`ss`): Save the current chat session to a file.
+- `load-session` (`ls`): Load a chat session from a file.
+
+Sessions are saved in the `~/.config/ollmcp/sessions/` directory.
 
 ## Server Configuration Format
 
