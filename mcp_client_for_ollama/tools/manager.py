@@ -13,6 +13,8 @@ from rich.prompt import Prompt
 from rich.text import Text
 from rich.syntax import Syntax
 
+from .builtin import BuiltinToolManager
+
 class ToolManager:
     """Manages MCP tools.
 
@@ -33,42 +35,19 @@ class ToolManager:
         self.enabled_tools = {}
         self.server_connector = server_connector
         self.model_config_manager = model_config_manager
-        self._create_builtin_tools()
+        if self.model_config_manager:
+            self.builtin_tool_manager = BuiltinToolManager(self.model_config_manager)
+            self._create_builtin_tools()
 
     def _create_builtin_tools(self):
         """Create and register built-in tools."""
-        if not self.model_config_manager:
+        if not self.builtin_tool_manager:
             return
 
-        set_prompt_tool = Tool(
-            name="builtin.set_system_prompt",
-            description="Update the system prompt for the assistant. Use this to change your instructions or persona.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "The new system prompt. Use a concise and clear prompt to define the persona and instructions for the AI assistant."
-                    }
-                },
-                "required": ["prompt"]
-            }
-        )
-        
-        get_prompt_tool = Tool(
-            name="builtin.get_system_prompt",
-            description="Get the current system prompt for the assistant.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            }
-        )
-
-        self.available_tools.append(set_prompt_tool)
-        self.available_tools.append(get_prompt_tool)
-        # Enable them by default
-        self.enabled_tools[set_prompt_tool.name] = True
-        self.enabled_tools[get_prompt_tool.name] = True
+        builtin_tools = self.builtin_tool_manager.get_builtin_tools()
+        self.available_tools.extend(builtin_tools)
+        for tool in builtin_tools:
+            self.enabled_tools[tool.name] = True
 
     def set_available_tools(self, tools: List[Tool]) -> None:
         """Set the available tools from servers, preserving built-in tools.

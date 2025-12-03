@@ -23,10 +23,12 @@ from .server.connector import ServerConnector
 from .models.manager import ModelManager
 from .models.config_manager import ModelConfigManager
 from .tools.manager import ToolManager
+from .tools.builtin import BuiltinToolManager
 from .utils.streaming import StreamingManager
 from .utils.tool_display import ToolDisplayManager
 from .utils.hil_manager import HumanInTheLoopManager
 from .utils.fzf_style_completion import FZFStyleCompleter
+from .utils.tool_parser import ToolParser
 
 
 class MCPClient:
@@ -45,6 +47,8 @@ class MCPClient:
         self.model_manager = ModelManager(console=self.console, default_model=model, ollama=self.ollama)
         # Initialize the model config manager
         self.model_config_manager = ModelConfigManager(console=self.console)
+        # Initialize the built-in tool manager
+        self.builtin_tool_manager = BuiltinToolManager(model_config_manager=self.model_config_manager)
         # Initialize the tool manager with server connector reference
         self.tool_manager = ToolManager(
             console=self.console, 
@@ -56,7 +60,9 @@ class MCPClient:
         # Initialize the tool display manager
         self.tool_display_manager = ToolDisplayManager(console=self.console)
         # Initialize the HIL manager
-        self.hil_manager = HumanInTheLoopManager(console=self.console)
+        self.hil_manager = HumanInTheLoopManager(console=self.console, tool_manager=self.tool_manager)
+        # Initialize the tool parser
+        self.tool_parser = ToolParser()
         # Store server and tool data
         self.sessions = {}  # Dict to store multiple sessions
         # UI components
@@ -569,20 +575,7 @@ class MCPClient:
 
                 # Handle built-in tools
                 if server_name == "builtin":
-                    tool_response = ""
-                    if actual_tool_name == "set_system_prompt":
-                        new_prompt = tool_args.get("prompt")
-                        if new_prompt is not None:
-                            self.model_config_manager.system_prompt = new_prompt
-                            tool_response = "System prompt updated successfully."
-                        else:
-                            tool_response = "Error: 'prompt' argument is required."
-                    elif actual_tool_name == "get_system_prompt":
-                        current_prompt = self.model_config_manager.get_system_prompt()
-                        tool_response = f"The current system prompt is: '{current_prompt}'" if current_prompt else "There is no system prompt currently set."
-                    else:
-                        tool_response = f"Error: Unknown built-in tool '{actual_tool_name}'"
-                    
+                    tool_response = self.builtin_tool_manager.execute_tool(actual_tool_name, tool_args)
                     messages.append({
                         "role": "tool",
                         "content": tool_response,
@@ -839,7 +832,15 @@ class MCPClient:
                     continue
 
                 if query.lower() in ['human-in-the-loop', 'hil']:
-                    self.hil_manager.toggle()
+                    self.hil_manager.toggle_global()
+                    continue
+
+                if query.lower() in ['hil-config', 'hc']:
+                    self.hil_manager.configure_hil_interactive(self.clear_console)
+                    # After configuring, redisplay context
+                    self.display_available_tools()
+                    self.display_current_model()
+                    self._display_chat_history()
                     continue
 
                 if query.lower() in ['save-session', 'ss']:
@@ -862,6 +863,33 @@ class MCPClient:
 
                 if query.lower() in ['session-dir', 'sd']:
                     await self._change_session_save_location()
+                    continue
+
+                if query.lower() in ['execute-python-code', 'epc']:
+                    self.clear_console()
+                    self.console.print(Panel("[bold]Execute Python Code[/bold]", border_style="blue"))
+                    self.console.print("Enter the Python code to execute. Type 'EOF' on a new line to finish and execute.")
+                    self.console.print("Type 'q' or 'quit' to cancel.")
+                    
+                    code_lines = []
+                    while True:
+                        line = await self.get_user_input(">>> ")
+                        if line.lower() == 'eof':
+                            break
+                        if line.lower() in ['q', 'quit']:
+                            self.console.print("[yellow]Python code execution cancelled.[/yellow]")
+                            break
+                        code_lines.append(line)
+                    
+                    if code_lines:
+                        code_to_execute = "\n".join(code_lines)
+                        self.console.print(f"[cyan]Executing Python code...[/cyan]")
+                        result = self.builtin_tool_manager.execute_tool("execute_python_code", {"code": code_to_execute})
+                        self.console.print(Panel(result, title="[bold green]Python Execution Result[/bold green]", border_style="green", expand=False))
+                    
+                    self.display_available_tools()
+                    self.display_current_model()
+                    self._display_chat_history()
                     continue
 
                 # Check if query is too short and not a special command
@@ -921,7 +949,8 @@ class MCPClient:
             "[bold cyan]MCP Servers and Tools:[/bold cyan]\n"
             "• Type [bold]tools[/bold] or [bold]t[/bold] to configure tools\n"
             "• Type [bold]show-tool-execution[/bold] or [bold]ste[/bold] to toggle tool execution display\n"
-            "• Type [bold]human-in-the-loop[/bold] or [bold]hil[/bold] to toggle Human-in-the-Loop confirmations\n"
+            "• Type [bold]human-in-the-loop[/bold] or [bold]hil[/bold] to toggle [bold]global[/bold] Human-in-the-Loop confirmations\n"
+            "• Type [bold]hil-config[/bold] or [bold]hc[/bold] to configure granular HIL settings\n"
             "• Type [bold]reload-servers[/bold] or [bold]rs[/bold] to reload MCP servers\n\n"
 
             "[bold cyan]Context:[/bold cyan]\n"
@@ -1079,7 +1108,7 @@ class MCPClient:
             f"Tool execution display: [{'green' if self.show_tool_execution else 'red'}]{'Enabled' if self.show_tool_execution else 'Disabled'}[/{'green' if self.show_tool_execution else 'red'}]\n"
             f"Performance metrics: [{'green' if self.show_metrics else 'red'}]{'Enabled' if self.show_metrics else 'Disabled'}[/{'green' if self.show_metrics else 'red'}]\n"
             f"Agent loop limit: [cyan]{self.loop_limit}[/cyan]\n"
-            f"Human-in-the-Loop confirmations: [{'green' if self.hil_manager.is_enabled() else 'red'}]{'Enabled' if self.hil_manager.is_enabled() else 'Disabled'}[/{'green' if self.hil_manager.is_enabled() else 'red'}]\n"
+            f"Human-in-the-Loop confirmations: [{'green' if self.hil_manager.get_config()['global_enabled'] else 'red'}]{'Enabled' if self.hil_manager.get_config()['global_enabled'] else 'Disabled'}[/{'green' if self.hil_manager.get_config()['global_enabled'] else 'red'}]\n"
             f"Conversation entries: {history_count}\n"
             f"Total tokens generated: {self.actual_token_count:,}",
             title="Context Info", border_style="cyan", expand=False
@@ -1122,9 +1151,7 @@ class MCPClient:
                 "showToolExecution": self.show_tool_execution,
                 "showMetrics": self.show_metrics
             },
-            "hilSettings": {
-                "enabled": self.hil_manager.is_enabled()
-            },
+            "hilSettings": self.hil_manager.get_config(),
             "sessionSaveDirectory": self.session_save_directory
         }
 
@@ -1196,8 +1223,31 @@ class MCPClient:
 
         # Load HIL settings if specified
         if "hilSettings" in config_data:
-            if "enabled" in config_data["hilSettings"]:
-                self.hil_manager.set_enabled(config_data["hilSettings"]["enabled"])
+            # Merge loaded HIL settings with default HIL settings to ensure all keys are present
+            default_hil_config = self.hil_manager._get_default_hil_config()
+            loaded_hil_config = config_data["hilSettings"]
+            
+            # Start with a copy of the default config
+            merged_hil_config = default_hil_config.copy()
+            
+            # Update top-level keys from loaded config
+            merged_hil_config.update(loaded_hil_config)
+            
+            # Handle nested 'servers' dictionary separately to merge deeply
+            if "servers" in loaded_hil_config and isinstance(loaded_hil_config["servers"], dict):
+                for server_name, server_settings in loaded_hil_config["servers"].items():
+                    if server_name not in merged_hil_config["servers"]:
+                        merged_hil_config["servers"][server_name] = {"enabled": True, "tools": {}} # Default for new server
+                    
+                    # Update server-level 'enabled' status
+                    if "enabled" in server_settings:
+                        merged_hil_config["servers"][server_name]["enabled"] = server_settings["enabled"]
+                    
+                    # Merge tools for this server
+                    if "tools" in server_settings and isinstance(server_settings["tools"], dict):
+                        merged_hil_config["servers"][server_name]["tools"].update(server_settings["tools"])
+
+            self.hil_manager.set_config(merged_hil_config)
 
         # Load session save directory if specified
         if "sessionSaveDirectory" in config_data:
@@ -1259,11 +1309,9 @@ class MCPClient:
 
         # Reset HIL settings from the default configuration
         if "hilSettings" in config_data:
-            if "enabled" in config_data["hilSettings"]:
-                self.hil_manager.set_enabled(config_data["hilSettings"]["enabled"])
-            else:
-                # Default HIL to True if not specified
-                self.hil_manager.set_enabled(True)
+            self.hil_manager.set_config(config_data["hilSettings"])
+        else:
+            self.hil_manager.set_config(self.hil_manager._get_default_hil_config())
 
         return True
 

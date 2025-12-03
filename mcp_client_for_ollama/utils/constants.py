@@ -27,28 +27,82 @@ MCP_PROTOCOL_VERSION = "2025-06-18"
 
 # Interactive commands and their descriptions for autocomplete
 INTERACTIVE_COMMANDS = {
-    'bye': 'Exit the application',
-    'clear-screen': 'Clear terminal screen',
-    'clear': 'Clear conversation context',
-    'context-info': 'Show context information',
-    'context': 'Toggle context retention',
-    'exit': 'Exit the application',
-    'help': 'Show help information',
-    'human-in-the-loop': 'Toggle HIL confirmations',
-    'load-config': 'Load saved configuration',
-    'loop-limit': 'Set agent max loop limit',
-    'model-config': 'Configure model parameters',
-    'model': 'Select Ollama model',
-    'quit': 'Exit the application',
-    'reload-servers': 'Reload MCP servers',
-    'reset-config': 'Reset to default config',
-    'save-config': 'Save current configuration',
-    'show-metrics': 'Toggle performance metrics display',
-    'show-thinking': 'Toggle thinking visibility',
-    'show-tool-execution': 'Toggle tool execution display',
-    'thinking-mode': 'Toggle thinking mode',
-    'tools': 'Configure available tools',
-    'session-dir': 'Change session save directory'
+    'bye': ('Exit the application', False),
+    'q': ('Exit the application', False),
+    'exit': ('Exit the application', False),
+    'quit': ('Exit the application', False),
+
+    'clear-screen': ('Clear terminal screen', False),
+    'cls': ('Clear terminal screen', False),
+
+    'clear': ('Clear conversation context', False),
+    'cc': ('Clear conversation context', False),
+
+    'context-info': ('Show context information', False),
+    'ci': ('Show context information', False),
+
+    'context': ('Toggle context retention', False),
+    'c': ('Toggle context retention', False),
+
+    'help': ('Show help information', False),
+    'h': ('Show help information', False),
+
+    'human-in-the-loop': ('Toggle global HIL confirmations', False),
+    'hil': ('Toggle global HIL confirmations', False),
+
+    'hil-config': ('Configure granular HIL settings', True), # NEW
+    'hc': ('Configure granular HIL settings', True), # NEW
+
+    'load-config': ('Load saved configuration', False),
+    'lc': ('Load saved configuration', False),
+
+    'loop-limit': ('Set agent max loop limit', False),
+    'll': ('Set agent max loop limit', False),
+
+    'model-config': ('Configure model parameters', False),
+    'mc': ('Configure model parameters', False),
+
+    'model': ('Select Ollama model', False),
+    'm': ('Select Ollama model', False),
+
+    'reload-servers': ('Reload MCP servers', False),
+    'rs': ('Reload MCP servers', False),
+
+    'reparse-last': ('Re-run tool parser on last response', True), # NEW
+    'rl': ('Re-run tool parser on last response', True), # NEW
+
+    'reset-config': ('Reset to default config', False),
+    'rc': ('Reset to default config', False),
+
+    'save-config': ('Save current configuration', False),
+    'sc': ('Save current configuration', False),
+
+    'save-session': ('Save current chat session', True), # NEW
+    'ss': ('Save current chat session', True), # NEW
+
+    'load-session': ('Load previous chat session', True), # NEW
+    'ls': ('Load previous chat session', True), # NEW
+
+    'session-dir': ('Change session save directory', False),
+    'sd': ('Change session save directory', False),
+
+    'show-metrics': ('Toggle performance metrics display', False),
+    'sm': ('Toggle performance metrics display', False),
+
+    'show-thinking': ('Toggle thinking visibility', False),
+    'st': ('Toggle thinking visibility', False),
+
+    'show-tool-execution': ('Toggle tool execution display', False),
+    'ste': ('Toggle tool execution display', False),
+
+    'thinking-mode': ('Toggle thinking mode', False),
+    'tm': ('Toggle thinking mode', False),
+
+    'tools': ('Configure available tools', False),
+    't': ('Configure available tools', False),
+
+    'execute-python-code': ('Execute arbitrary Python code', True), # NEW
+    'epc': ('Execute arbitrary Python code', True), # NEW
 }
 
 # Default completion menu style (used by prompt_toolkit in interactive mode)

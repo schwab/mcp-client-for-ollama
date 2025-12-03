@@ -87,16 +87,29 @@ class FZFStyleCompleter(Completer):
             # Get fuzzy completions for regular commands
             for i, completion in enumerate(self.completer.get_completions(document, complete_event)):
                 cmd = completion.text
-                description = INTERACTIVE_COMMANDS.get(cmd, "")
+                cmd_info = INTERACTIVE_COMMANDS.get(cmd)
+                
+                description = ""
+                is_new = False
+
+                if isinstance(cmd_info, tuple):
+                    description = cmd_info[0]
+                    is_new = cmd_info[1]
+                elif isinstance(cmd_info, str):
+                    description = cmd_info
 
                 # Add arrow to first match
                 display = f"▶ {cmd}" if i == 0 else f"  {cmd}"
+                
+                display_meta = description
+                if is_new:
+                    display_meta = f"{description} [NEW]"
 
                 yield Completion(
                     cmd,
                     start_position=completion.start_position,
                     display=display,
-                    display_meta=description
+                    display_meta=display_meta
                 )
 
     async def _get_at_command_completions(self, document, complete_event):
