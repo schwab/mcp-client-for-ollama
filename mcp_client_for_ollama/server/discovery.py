@@ -6,7 +6,7 @@ like Claude's configuration files.
 
 import os
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Tuple
 from urllib.parse import urlparse
 from ..utils.constants import DEFAULT_CLAUDE_CONFIG
 
@@ -86,38 +86,41 @@ def process_server_urls(server_urls) -> List[Dict[str, Any]]:
 
     return all_servers
 
-def parse_server_configs(config_path: str) -> List[Dict[str, Any]]:
+def parse_server_configs(config_path: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Parse and validate server configurations from a file.
 
     Args:
         config_path: Path to JSON config file
 
     Returns:
-        List of valid server configurations ready to be connected to
+        Tuple of (List of valid server configurations, Optional system prompt)
     """
     all_servers = []
+    system_prompt = None
 
     if not config_path or not os.path.exists(config_path):
-        return all_servers
+        return all_servers, system_prompt
 
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
+        
+        system_prompt = config.get('systemPrompt')
         server_configs = config.get('mcpServers', {})
 
-        for name, config in server_configs.items():
+        for name, server_config_data in server_configs.items():
             # Skip disabled servers
-            if config.get('disabled', False):
+            if server_config_data.get('disabled', False):
                 continue
 
             # Determine server type
             server_type = "config"  # Default type for STDIO servers
 
             # Check for URL-based server types (sse or streamable_http)
-            if "type" in config:
+            if "type" in server_config_data:
                 # Type is explicitly specified in config
-                server_type = config["type"]
-            elif "url" in config:
+                server_type = server_config_data["type"]
+            elif "url" in server_config_data:
                 # URL exists but no type, default to streamable_http
                 server_type = "streamable_http"
 
@@ -125,30 +128,30 @@ def parse_server_configs(config_path: str) -> List[Dict[str, Any]]:
             server = {
                 "type": server_type,
                 "name": name,
-                "config": config
+                "config": server_config_data
             }
 
             # For URL-based servers, add direct access to URL and headers
             if server_type in ["sse", "streamable_http"]:
-                server["url"] = config.get("url")
-                if "headers" in config:
-                    server["headers"] = config.get("headers")
+                server["url"] = server_config_data.get("url")
+                if "headers" in server_config_data:
+                    server["headers"] = server_config_data.get("headers")
 
             all_servers.append(server)
 
-        return all_servers
+        return all_servers, system_prompt
 
     except Exception as e:
-        # Return empty list on error
-        return []
+        # Return empty list and None on error
+        return all_servers, system_prompt
 
-def auto_discover_servers() -> List[Dict[str, Any]]:
+def auto_discover_servers() -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Automatically discover available server configurations.
 
     Currently only discovers from Claude's config.
 
     Returns:
-        List of server configurations found automatically
+        Tuple of (List of server configurations found automatically, Optional system prompt)
     """
     # Use parse_server_configs to process Claude's config
     return parse_server_configs(DEFAULT_CLAUDE_CONFIG)

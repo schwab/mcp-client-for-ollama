@@ -40,8 +40,9 @@ class ServerConnector:
         self.available_tools = []  # List to store all available tools
         self.enabled_tools = {}  # Dict to store tool enabled status
         self.session_ids = {}  # Dict to store session IDs for HTTP connections
+        self.system_prompt_from_config: Optional[str] = None # Store system prompt from config file
 
-    async def connect_to_servers(self, server_paths=None, server_urls=None, config_path=None, auto_discovery=False) -> Tuple[dict, list, dict]:
+    async def connect_to_servers(self, server_paths=None, server_urls=None, config_path=None, auto_discovery=False) -> Tuple[dict, list, dict, Optional[str]]:
         """Connect to one or more MCP servers
 
         Args:
@@ -51,9 +52,10 @@ class ServerConnector:
             auto_discovery: Whether to automatically discover servers
 
         Returns:
-            Tuple of (sessions, available_tools, enabled_tools)
+            Tuple of (sessions, available_tools, enabled_tools, system_prompt)
         """
         all_servers = []
+        system_prompt_from_config = None
 
         # Process server paths
         if server_paths:
@@ -72,18 +74,18 @@ class ServerConnector:
         # Process config file
         if config_path:
             try:
-                config_servers = parse_server_configs(config_path)
-                for server in config_servers:
-                    self.console.print(f"[cyan]Found server in config: {server['name']}[/cyan]")
+                config_servers, sp = parse_server_configs(config_path)
+                if sp:
+                    system_prompt_from_config = sp
                 all_servers.extend(config_servers)
             except Exception as e:
                 self.console.print(f"[red]Error loading server configurations: {str(e)}[/red]")
 
         # Auto-discover servers if enabled
         if auto_discovery:
-            discovered_servers = auto_discover_servers()
-            for server in discovered_servers:
-                self.console.print(f"[cyan]Auto-discovered server: {server['name']}[/cyan]")
+            discovered_servers, sp = auto_discover_servers()
+            if sp:
+                system_prompt_from_config = sp
             all_servers.extend(discovered_servers)
 
         if not all_servers:
@@ -92,7 +94,7 @@ class ServerConnector:
                 "The client will continue without tool support.",
                 title="Warning", border_style="yellow", expand=False
             ))
-            return self.sessions, self.available_tools, self.enabled_tools
+            return self.sessions, self.available_tools, self.enabled_tools, system_prompt_from_config
 
         # Check all servers url connectivity
         servers_to_connect = []
@@ -123,8 +125,9 @@ class ServerConnector:
                 "Check that server paths exist and are accessible.",
                 title="Error", border_style="red", expand=False
             ))
-
-        return self.sessions, self.available_tools, self.enabled_tools
+        
+        self.system_prompt_from_config = system_prompt_from_config
+        return self.sessions, self.available_tools, self.enabled_tools, self.system_prompt_from_config
 
     async def _connect_to_server(self, server: Dict[str, Any]) -> bool:
         """Connect to a single MCP server

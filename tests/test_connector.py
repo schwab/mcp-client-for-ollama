@@ -3,6 +3,9 @@
 from mcp_client_for_ollama.server.connector import ServerConnector
 from mcp_client_for_ollama.utils.constants import MCP_PROTOCOL_VERSION
 from contextlib import AsyncExitStack
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+import json
 
 
 def test_get_headers_from_server_sse():
@@ -208,3 +211,121 @@ def test_get_url_from_server():
         "name": "test-server"
     }
     assert connector._get_url_from_server(server) is None
+
+
+@pytest.mark.asyncio
+async def test_connect_to_servers_with_system_prompt_from_config(tmp_path):
+    """Test that connect_to_servers correctly extracts and stores system_prompt from config."""
+    connector = ServerConnector(AsyncExitStack())
+
+    # Create a dummy config file
+    config_content = {
+        "systemPrompt": "You are a helpful AI from config.",
+        "mcpServers": {
+            "test_server": {
+                "type": "script",
+                "command": "python",
+                "args": ["server.py"]
+            }
+        }
+    }
+    config_path = tmp_path / "test_servers.json"
+    with open(config_path, 'w') as f:
+        json.dump(config_content, f)
+
+    # Mock parse_server_configs to return our dummy data
+    with patch('mcp_client_for_ollama.server.connector.parse_server_configs') as mock_parse_server_configs:
+        mock_parse_server_configs.return_value = (
+            [
+                {
+                    "type": "script",
+                    "name": "test_server",
+                    "config": {
+                        "command": "python",
+                        "args": ["server.py"]
+                    }
+                }
+            ],
+            "You are a helpful AI from config."
+        )
+        
+        # Mock _connect_to_server to prevent actual connection attempts and simulate session addition
+        with patch.object(connector, '_connect_to_server', new_callable=AsyncMock) as mock_connect_to_server:
+            # Configure the mock to add a dummy session to connector.sessions
+            def side_effect_connect_to_server(server_config):
+                connector.sessions[server_config["name"]] = {"session": MagicMock(), "tools": []}
+                connector.available_tools.append(MagicMock(name=f"{server_config['name']}.dummy_tool"))
+                connector.enabled_tools[f"{server_config['name']}.dummy_tool"] = True
+                return True
+            mock_connect_to_server.side_effect = side_effect_connect_to_server
+
+            sessions, available_tools, enabled_tools, system_prompt = await connector.connect_to_servers(
+                config_path=str(config_path)
+            )
+
+            assert system_prompt == "You are a helpful AI from config."
+            assert connector.system_prompt_from_config == "You are a helpful AI from config."
+            assert len(sessions) == 1
+            assert "test_server" in sessions
+            assert len(available_tools) == 1
+            assert "test_server.dummy_tool" in enabled_tools
+            mock_parse_server_configs.assert_called_once_with(str(config_path))
+            mock_connect_to_server.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_connect_to_servers_without_system_prompt_from_config(tmp_path):
+    """Test that connect_to_servers handles missing system_prompt from config."""
+    connector = ServerConnector(AsyncExitStack())
+
+    # Create a dummy config file without systemPrompt
+    config_content = {
+        "mcpServers": {
+            "test_server": {
+                "type": "script",
+                "command": "python",
+                "args": ["server.py"]
+            }
+        }
+    }
+    config_path = tmp_path / "test_servers_no_sp.json"
+    with open(config_path, 'w') as f:
+        json.dump(config_content, f)
+
+    # Mock parse_server_configs to return our dummy data without system_prompt
+    with patch('mcp_client_for_ollama.server.connector.parse_server_configs') as mock_parse_server_configs:
+        mock_parse_server_configs.return_value = (
+            [
+                {
+                    "type": "script",
+                    "name": "test_server",
+                    "config": {
+                        "command": "python",
+                        "args": ["server.py"]
+                    }
+                }
+            ],
+            None  # No system prompt
+        )
+
+        # Mock _connect_to_server to prevent actual connection attempts and simulate session addition
+        with patch.object(connector, '_connect_to_server', new_callable=AsyncMock) as mock_connect_to_server:
+            # Configure the mock to add a dummy session to connector.sessions
+            def side_effect_connect_to_server(server_config):
+                connector.sessions[server_config["name"]] = {"session": MagicMock(), "tools": []}
+                connector.available_tools.append(MagicMock(name=f"{server_config['name']}.dummy_tool"))
+                connector.enabled_tools[f"{server_config['name']}.dummy_tool"] = True
+                return True
+            mock_connect_to_server.side_effect = side_effect_connect_to_server
+
+            sessions, available_tools, enabled_tools, system_prompt = await connector.connect_to_servers(
+                config_path=str(config_path)
+            )
+
+            assert system_prompt is None
+            assert connector.system_prompt_from_config is None
+            assert len(sessions) == 1
+            assert "test_server" in sessions
+            assert len(available_tools) == 1
+            assert "test_server.dummy_tool" in enabled_tools
+            mock_parse_server_configs.assert_called_once_with(str(config_path))
+            mock_connect_to_server.assert_called_once()

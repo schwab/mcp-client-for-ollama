@@ -1,7 +1,14 @@
-"""Test server discovery functionality."""
+import os
+import json
+from mcp_client_for_ollama.server.discovery import process_server_urls, parse_server_configs, auto_discover_servers
+from mcp_client_for_ollama.utils.constants import DEFAULT_CLAUDE_CONFIG
 
-from mcp_client_for_ollama.server.discovery import process_server_urls
-
+# Helper function to create a dummy config file for testing
+def create_dummy_config(tmp_path, content, filename="servers.json"):
+    config_path = tmp_path / filename
+    with open(config_path, 'w') as f:
+        json.dump(content, f)
+    return str(config_path)
 
 def test_process_server_urls():
     """Test that server URL processing works correctly."""
@@ -110,7 +117,6 @@ def test_ip_address_name_generation():
     assert server_name == "127_0_0_1_8000"
     assert actual_tool_name == "hello_world"
 
-
 def test_server_type_detection():
     """Test that server types are detected correctly."""
     # SSE detection by path
@@ -128,3 +134,83 @@ def test_server_type_detection():
     # Default to streamable_http for generic URLs
     result = process_server_urls("https://api.example.com")
     assert result[0]["type"] == "streamable_http"
+
+def test_parse_server_configs_with_system_prompt(tmp_path):
+    """Test that parse_server_configs correctly extracts system_prompt."""
+    config_content = {
+        "systemPrompt": "You are a helpful AI assistant.",
+        "mcpServers": {
+            "test_server": {
+                "type": "script",
+                "command": "python",
+                "args": ["server.py"]
+            }
+        }
+    }
+    config_path = create_dummy_config(tmp_path, config_content)
+    
+    servers, system_prompt = parse_server_configs(config_path)
+    
+    assert system_prompt == "You are a helpful AI assistant."
+    assert len(servers) == 1
+    assert servers[0]["name"] == "test_server"
+
+def test_parse_server_configs_without_system_prompt(tmp_path):
+    """Test parse_server_configs when no system_prompt is present."""
+    config_content = {
+        "mcpServers": {
+            "test_server": {
+                "type": "script",
+                "command": "python",
+                "args": ["server.py"]
+            }
+        }
+    }
+    config_path = create_dummy_config(tmp_path, config_content)
+    
+    servers, system_prompt = parse_server_configs(config_path)
+    
+    assert system_prompt is None
+    assert len(servers) == 1
+
+def test_auto_discover_servers_with_system_prompt(tmp_path, monkeypatch):
+    """Test that auto_discover_servers correctly extracts system_prompt."""
+    config_content = {
+        "systemPrompt": "You are a witty chatbot.",
+        "mcpServers": {
+            "auto_server": {
+                "type": "script",
+                "command": "python",
+                "args": ["auto_server.py"]
+            }
+        }
+    }
+    # Create a dummy DEFAULT_CLAUDE_CONFIG
+    dummy_claude_config_path = create_dummy_config(tmp_path, config_content, filename=os.path.basename(DEFAULT_CLAUDE_CONFIG))
+    
+    # Directly call parse_server_configs with the dummy path
+    servers, system_prompt = parse_server_configs(dummy_claude_config_path)
+    
+    assert system_prompt == "You are a witty chatbot."
+    assert len(servers) == 1
+    assert servers[0]["name"] == "auto_server"
+
+def test_auto_discover_servers_without_system_prompt(tmp_path, monkeypatch):
+    """Test auto_discover_servers when no system_prompt is present."""
+    config_content = {
+        "mcpServers": {
+            "auto_server": {
+                "type": "script",
+                "command": "python",
+                "args": ["auto_server.py"]
+            }
+        }
+    }
+    dummy_claude_config_path = create_dummy_config(tmp_path, config_content, filename=os.path.basename(DEFAULT_CLAUDE_CONFIG))
+    
+    # Directly call parse_server_configs with the dummy path
+    servers, system_prompt = parse_server_configs(dummy_claude_config_path)
+    
+    assert system_prompt is None
+    assert len(servers) == 1
+    assert servers[0]["name"] == "auto_server"

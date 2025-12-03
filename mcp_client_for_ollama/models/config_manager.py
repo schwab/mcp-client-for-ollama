@@ -218,6 +218,14 @@ class ModelConfigManager:
         """
         return self.system_prompt
 
+    def set_system_prompt(self, prompt: str) -> None:
+        """Set the system prompt programmatically.
+
+        Args:
+            prompt: The new system prompt string.
+        """
+        self.system_prompt = prompt
+
     def set_config(self, config: Dict[str, Any]) -> None:
         """Set model configuration from a dictionary.
 

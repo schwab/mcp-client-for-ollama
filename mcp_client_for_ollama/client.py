@@ -393,7 +393,7 @@ class MCPClient:
         }
 
         # Connect to servers using the server connector
-        sessions, available_tools, enabled_tools = await self.server_connector.connect_to_servers(
+        sessions, available_tools, enabled_tools, system_prompt_from_config = await self.server_connector.connect_to_servers(
             server_paths=server_paths,
             server_urls=server_urls,
             config_path=config_path,
@@ -410,6 +410,10 @@ class MCPClient:
         # Update the FZFStyleCompleter with the new sessions
         if hasattr(self.prompt_session.completer, 'update_sessions'):
             self.prompt_session.completer.update_sessions(self.sessions)
+        
+        # If a system prompt was loaded from the config, set it in the ModelConfigManager
+        if system_prompt_from_config:
+            self.model_config_manager.set_system_prompt(system_prompt_from_config)
 
     def select_tools(self):
         """Let the user select which tools to enable using interactive prompts with server-based grouping"""
