@@ -86,7 +86,7 @@ class MCPClient:
         # Agent mode settings
         self.loop_limit = 3  # Maximum follow-up tool loops per query
         self.default_configuration_status = False  # Track if default configuration was loaded successfully
-        self.session_save_directory = "/projects/journal/.ollmcp_sessions" # Default, will be loaded from config
+        self.session_save_directory = "./.ollmcp_sessions" # Default to current directory, will be loaded from config
 
         # Store server connection parameters for reloading
         self.server_connection_params = {

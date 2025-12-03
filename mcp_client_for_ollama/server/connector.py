@@ -90,9 +90,9 @@ class ServerConnector:
 
         if not all_servers:
             self.console.print(Panel(
-                "[yellow]No servers specified or all servers were invalid.[/yellow]\n"
-                "The client will continue without tool support.",
-                title="Warning", border_style="yellow", expand=False
+                "[yellow]No MCP servers specified or all servers were invalid.[/yellow]\n"
+                "The client will continue with built-in tools only.",
+                title="Info", border_style="cyan", expand=False
             ))
             return self.sessions, self.available_tools, self.enabled_tools, system_prompt_from_config
 

@@ -71,8 +71,8 @@ class ToolManager:
             name: status for name, status in self.enabled_tools.items() if name.startswith('builtin.')
         }
 
-        # The new state is the server tools...
-        self.enabled_tools = server_enabled_tools
+        # The new state is the server tools (make a copy to avoid shared references)...
+        self.enabled_tools = server_enabled_tools.copy()
         # ...updated with the built-in tools.
         self.enabled_tools.update(builtin_enabled)
 
