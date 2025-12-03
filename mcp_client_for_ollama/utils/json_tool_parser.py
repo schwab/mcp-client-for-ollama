@@ -25,9 +25,6 @@ class JsonToolParser(BaseToolParser):
         potential_tool_jsons = self._parse_markdown_blocks(text)
 
         if not potential_tool_jsons:
-            potential_tool_jsons = self._parse_xml_tool_calls(text)
-
-        if not potential_tool_jsons:
             potential_tool_jsons = self._parse_embedded_json(text)
 
         if not potential_tool_jsons:
@@ -58,31 +55,6 @@ class JsonToolParser(BaseToolParser):
                     continue
         return potential_tool_calls
     
-    def _parse_xml_tool_calls(self, text: str) -> List[Dict[str, Any]]:
-        """Strategy 2: Find and parse XML-style tool calls."""
-        potential_tool_calls = []
-        
-        names = re.findall(r'<name>(.*?)</name>', text, re.DOTALL)
-        arguments_str = re.findall(r'<arguments>(.*?)</arguments>', text, re.DOTALL)
-        
-        if names and arguments_str:
-            num_pairs = min(len(names), len(arguments_str))
-            for i in range(num_pairs):
-                name = names[i].strip()
-                args_str = arguments_str[i].strip()
-                try:
-                    args_json = json.loads(args_str)
-                    tool_call = {
-                        "function": {
-                            "name": name,
-                            "arguments": args_json
-                        }
-                    }
-                    potential_tool_calls.append(tool_call)
-                except json.JSONDecodeError:
-                    continue
-        return potential_tool_calls
-
     def _parse_embedded_json(self, text: str) -> List[Dict[str, Any]]:
         """Strategy 3: Find and parse JSON objects embedded in the text."""
         potential_tool_calls = []
@@ -90,6 +62,7 @@ class JsonToolParser(BaseToolParser):
         # Clean up special tokens that might interfere with parsing
         cleaned_text = re.sub(r'<\|im_start\|>', '', text)
         cleaned_text = re.sub(r'<\|im_end\|>', '', cleaned_text)
+        cleaned_text = re.sub(r'<tool_request>.*?</tool_request>', '', cleaned_text, flags=re.DOTALL)
 
         # Find all possible start indices of a JSON object
         start_indices = [m.start() for m in re.finditer(r'\{', cleaned_text)]

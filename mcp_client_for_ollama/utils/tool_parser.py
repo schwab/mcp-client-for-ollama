@@ -4,6 +4,7 @@ from ollama._types import Message
 from .base_tool_parser import BaseToolParser
 from .json_tool_parser import JsonToolParser
 from .python_tool_parser import PythonToolParser
+from .xml_tool_parser import XmlToolParser
 
 class ToolParser:
     """
@@ -16,6 +17,7 @@ class ToolParser:
         self.sub_parsers: List[BaseToolParser] = [
             JsonToolParser(),
             PythonToolParser(),
+            XmlToolParser(),
         ]
 
     def parse(self, text: str) -> List[Message.ToolCall]:
