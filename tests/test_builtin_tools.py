@@ -20,15 +20,17 @@ def test_get_builtin_tools(builtin_tool_manager):
     """Test that get_builtin_tools returns the correct Tool objects."""
     tools = builtin_tool_manager.get_builtin_tools()
 
-    assert len(tools) == 3
+    assert len(tools) == 4
     
     set_prompt_tool = next((t for t in tools if t.name == "builtin.set_system_prompt"), None)
     get_prompt_tool = next((t for t in tools if t.name == "builtin.get_system_prompt"), None)
     execute_python_code_tool = next((t for t in tools if t.name == "builtin.execute_python_code"), None)
+    execute_bash_command_tool = next((t for t in tools if t.name == "builtin.execute_bash_command"), None)
 
     assert set_prompt_tool is not None
     assert get_prompt_tool is not None
     assert execute_python_code_tool is not None
+    assert execute_bash_command_tool is not None
 
     assert set_prompt_tool.description == "Update the system prompt for the assistant. Use this to change your instructions or persona."
     assert set_prompt_tool.inputSchema == {
@@ -58,6 +60,18 @@ def test_get_builtin_tools(builtin_tool_manager):
             }
         },
         "required": ["code"]
+    }
+
+    assert execute_bash_command_tool.description == "Executes arbitrary bash commands. Use with caution as this can perform system operations."
+    assert execute_bash_command_tool.inputSchema == {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The bash command to execute."
+            }
+        },
+        "required": ["command"]
     }
 
 def test_execute_tool_set_system_prompt_success(builtin_tool_manager, mock_model_config_manager):
@@ -115,6 +129,25 @@ def test_execute_tool_unknown_tool(builtin_tool_manager):
     result = builtin_tool_manager.execute_tool("unknown_tool", {})
 
     assert result == "Error: Unknown built-in tool 'unknown_tool'"
+
+def test_execute_tool_execute_bash_command_success(builtin_tool_manager):
+    """Test successful execution of a bash command."""
+    tool_args = {"command": "echo 'Hello from Bash!'"}
+    result = builtin_tool_manager.execute_tool("execute_bash_command", tool_args)
+    assert "Execution successful." in result
+    assert "Hello from Bash!" in result
+
+def test_execute_tool_execute_bash_command_with_error(builtin_tool_manager):
+    """Test execution of a bash command that raises an error."""
+    tool_args = {"command": "exit 1"}
+    result = builtin_tool_manager.execute_tool("execute_bash_command", tool_args)
+    assert "Execution failed." in result
+
+def test_execute_tool_execute_bash_command_missing_arg(builtin_tool_manager):
+    """Test execution of a bash command with a missing 'command' argument."""
+    tool_args = {}
+    result = builtin_tool_manager.execute_tool("execute_bash_command", tool_args)
+    assert result == "Error: 'command' argument is required for execute_bash_command."
 
 
 

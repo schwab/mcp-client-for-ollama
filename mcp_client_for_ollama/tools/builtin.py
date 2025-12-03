@@ -19,6 +19,7 @@ class BuiltinToolManager:
             "set_system_prompt": self._handle_set_system_prompt,
             "get_system_prompt": self._handle_get_system_prompt,
             "execute_python_code": self._handle_execute_python_code,
+            "execute_bash_command": self._handle_execute_bash_command,
         }
 
     def get_builtin_tools(self) -> List[Tool]:
@@ -66,7 +67,22 @@ class BuiltinToolManager:
                 "required": ["code"]
             }
         )
-        return [set_prompt_tool, get_prompt_tool, execute_python_code_tool]
+
+        execute_bash_command_tool = Tool(
+            name="builtin.execute_bash_command",
+            description="Executes arbitrary bash commands. Use with caution as this can perform system operations.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The bash command to execute."
+                    }
+                },
+                "required": ["command"]
+            }
+        )
+        return [set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool]
 
     def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
         """
@@ -175,4 +191,20 @@ class BuiltinToolManager:
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
+
+    def _handle_execute_bash_command(self, args: Dict[str, Any]) -> str:
+        """Handles the 'execute_bash_command' tool call."""
+        import subprocess
+        command = args.get("command")
+        if command is None:
+            return "Error: 'command' argument is required for execute_bash_command."
+
+        try:
+            result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
+            output = result.stdout
+            return f"Execution successful.\nOutput:\n{output}"
+        except subprocess.CalledProcessError as e:
+            return f"Execution failed.\nError: {e}\nOutput:\n{e.stdout}\nStderr:\n{e.stderr}"
+        except Exception as e:
+            return f"Execution failed.\nError: {type(e).__name__}: {e}"
 
