@@ -529,6 +529,7 @@ The JSON configuration file supports STDIO, SSE, and Streamable HTTP server type
 
 ```json
 {
+  "systemPrompt": "You are a helpful AI assistant that specializes in providing concise and accurate information.",
   "mcpServers": {
     "stdio-server": {
       "command": "command-to-run",
@@ -558,6 +559,9 @@ The JSON configuration file supports STDIO, SSE, and Streamable HTTP server type
   }
 }
 ```
+> [!NOTE]
+> **System Prompt**: You can include a `systemPrompt` field at the top level of your `servers-json` file. This prompt will be used to initialize the model's system prompt when the client starts or when servers are reloaded. If a system prompt is also configured interactively via the `model-config` command, the one from the `servers-json` file will take precedence upon loading.
+
 > [!NOTE]
 > **MCP 1.10.1 Transport Support**: The client now supports the latest Streamable HTTP transport with improved performance and reliability. If you specify a URL without a type, the client will default to using Streamable HTTP transport.
 
