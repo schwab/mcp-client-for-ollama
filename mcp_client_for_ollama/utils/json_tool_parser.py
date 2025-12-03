@@ -58,11 +58,13 @@ class JsonToolParser(BaseToolParser):
     def _parse_embedded_json(self, text: str) -> List[Dict[str, Any]]:
         """Strategy 3: Find and parse JSON objects embedded in the text."""
         potential_tool_calls = []
-        
+
         # Clean up special tokens that might interfere with parsing
         cleaned_text = re.sub(r'<\|im_start\|>', '', text)
         cleaned_text = re.sub(r'<\|im_end\|>', '', cleaned_text)
         cleaned_text = re.sub(r'<tool_request>.*?</tool_request>', '', cleaned_text, flags=re.DOTALL)
+        # Remove Cline-style tool calls (e.g., <server.tool>...</server.tool>) to avoid parsing them as embedded JSON
+        cleaned_text = re.sub(r'<[a-zA-Z0-9_.]+>.*?</[a-zA-Z0-9_.]+>', '', cleaned_text, flags=re.DOTALL)
 
         # Find all possible start indices of a JSON object
         start_indices = [m.start() for m in re.finditer(r'\{', cleaned_text)]

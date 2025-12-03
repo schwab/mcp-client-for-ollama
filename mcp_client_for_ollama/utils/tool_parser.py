@@ -5,6 +5,7 @@ from .base_tool_parser import BaseToolParser
 from .json_tool_parser import JsonToolParser
 from .python_tool_parser import PythonToolParser
 from .xml_tool_parser import XmlToolParser
+from .cline_tool_parser import ClineToolParser
 
 class ToolParser:
     """
@@ -13,11 +14,17 @@ class ToolParser:
     """
 
     def __init__(self):
-        """Initializes the ToolParser with default sub-parsers."""
+        """Initializes the ToolParser with default sub-parsers.
+
+        The order matters: more specific parsers should come first to avoid
+        conflicts. Cline syntax is specific and should be parsed before JSON
+        to prevent false positives.
+        """
         self.sub_parsers: List[BaseToolParser] = [
-            JsonToolParser(),
-            PythonToolParser(),
-            XmlToolParser(),
+            ClineToolParser(),     # Most specific format (XML with dot notation)
+            JsonToolParser(),      # Standard JSON format
+            PythonToolParser(),    # Python code execution
+            XmlToolParser(),       # Generic XML tool requests
         ]
 
     def parse(self, text: str) -> List[Message.ToolCall]:

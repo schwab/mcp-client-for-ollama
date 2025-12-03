@@ -143,8 +143,8 @@ class MCPClient:
                 )
             
             # Check the tool's response for errors
-            if write_result.status == "error":
-                error_msg = write_result.error_message if hasattr(write_result, 'error_message') else "Unknown error from filesystem tool."
+            if write_result.isError:
+                error_msg = write_result.content[0].text if write_result.content else "Unknown error from filesystem tool."
                 raise Exception(f"Filesystem tool reported an error: {error_msg}")
             
             self.console.print(f"[green]Session '{session_name}' saved successfully to {file_path}[/green]")

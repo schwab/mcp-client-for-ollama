@@ -5,6 +5,7 @@ from ollama._types import Message
 from mcp_client_for_ollama.utils.json_tool_parser import JsonToolParser
 from mcp_client_for_ollama.utils.python_tool_parser import PythonToolParser
 from mcp_client_for_ollama.utils.xml_tool_parser import XmlToolParser
+from mcp_client_for_ollama.utils.cline_tool_parser import ClineToolParser
 from mcp_client_for_ollama.utils.tool_parser import ToolParser as CompositeToolParser
 
 # --- Fixtures ---
@@ -19,6 +20,10 @@ def python_tool_parser():
 @pytest.fixture
 def xml_tool_parser():
     return XmlToolParser()
+
+@pytest.fixture
+def cline_tool_parser():
+    return ClineToolParser()
 
 @pytest.fixture
 def composite_tool_parser():
@@ -217,3 +222,146 @@ print('valid python')
     assert tool_calls[1].function.name == "builtin.execute_python_code"
     assert tool_calls[1].function.arguments["code"].strip() == "print('valid python')"
     assert tool_calls[2] == create_tool_call("valid_xml", {})
+
+
+# --- ClineToolParser Tests ---
+def test_cline_tool_parser_single_tool_call_simple(cline_tool_parser):
+    text = """<filesystem.read_file>
+  <path>/root/CLAUDE.md</path>
+</filesystem.read_file>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("filesystem.read_file", {"path": "/root/CLAUDE.md"})
+
+
+def test_cline_tool_parser_single_tool_call_multiple_args(cline_tool_parser):
+    text = """<web.search>
+  <query>Claude AI</query>
+  <max_results>10</max_results>
+</web.search>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.name == "web.search"
+    assert tool_calls[0].function.arguments["query"] == "Claude AI"
+    assert tool_calls[0].function.arguments["max_results"] == 10
+
+
+def test_cline_tool_parser_multiple_tool_calls(cline_tool_parser):
+    text = """<filesystem.read_file>
+  <path>/etc/config</path>
+</filesystem.read_file>
+Some text in between.
+<filesystem.write_file>
+  <path>/tmp/output.txt</path>
+  <content>Hello World</content>
+</filesystem.write_file>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 2
+    assert tool_calls[0] == create_tool_call("filesystem.read_file", {"path": "/etc/config"})
+    assert tool_calls[1] == create_tool_call("filesystem.write_file", {
+        "path": "/tmp/output.txt",
+        "content": "Hello World"
+    })
+
+
+def test_cline_tool_parser_with_numeric_args(cline_tool_parser):
+    text = """<math.calculate>
+  <operation>add</operation>
+  <a>5</a>
+  <b>3</b>
+  <precision>2.5</precision>
+  <enabled>true</enabled>
+</math.calculate>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.name == "math.calculate"
+    assert tool_calls[0].function.arguments["a"] == 5
+    assert tool_calls[0].function.arguments["b"] == 3
+    assert tool_calls[0].function.arguments["precision"] == 2.5
+    assert tool_calls[0].function.arguments["enabled"] is True
+
+
+def test_cline_tool_parser_with_boolean_args(cline_tool_parser):
+    text = """<config.set>
+  <key>debug_mode</key>
+  <value>true</value>
+  <force>false</force>
+  <nullable_value>null</nullable_value>
+</config.set>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    args = tool_calls[0].function.arguments
+    assert args["value"] is True
+    assert args["force"] is False
+    assert args["nullable_value"] is None
+
+
+def test_cline_tool_parser_with_json_arg(cline_tool_parser):
+    text = """<api.call>
+  <endpoint>/users</endpoint>
+  <payload>{"name": "John", "age": 30}</payload>
+</api.call>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.arguments["endpoint"] == "/users"
+    assert tool_calls[0].function.arguments["payload"] == {"name": "John", "age": 30}
+
+
+def test_cline_tool_parser_with_json_array_arg(cline_tool_parser):
+    text = """<data.process>
+  <items>[1, 2, 3, 4, 5]</items>
+</data.process>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.arguments["items"] == [1, 2, 3, 4, 5]
+
+
+def test_cline_tool_parser_no_tool_calls(cline_tool_parser):
+    text = "This is just plain text with no tool calls."
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 0
+
+
+def test_cline_tool_parser_underscore_in_name(cline_tool_parser):
+    text = """<my_server.my_tool>
+  <param>value</param>
+</my_server.my_tool>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.name == "my_server.my_tool"
+
+
+def test_cline_tool_parser_with_whitespace_variations(cline_tool_parser):
+    text = """<tool.action>
+  <arg1>value1</arg1>
+<arg2>value2</arg2>
+  <arg3>  value3  </arg3>
+</tool.action>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.arguments["arg1"] == "value1"
+    assert tool_calls[0].function.arguments["arg2"] == "value2"
+    assert tool_calls[0].function.arguments["arg3"] == "value3"
+
+
+def test_cline_tool_parser_empty_arguments(cline_tool_parser):
+    text = """<tool.action>
+</tool.action>"""
+    tool_calls = cline_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.arguments == {}
+
+
+def test_composite_tool_parser_with_cline_syntax(composite_tool_parser):
+    text = """I'll call the filesystem tool using Cline syntax:
+<filesystem.read_file>
+  <path>/root/README.md</path>
+</filesystem.read_file>
+And also JSON format:
+```json
+{"function": {"name": "web.search", "arguments": {"query": "test"}}}
+```"""
+    tool_calls = composite_tool_parser.parse(text)
+    assert len(tool_calls) == 2
+    assert tool_calls[0] == create_tool_call("filesystem.read_file", {"path": "/root/README.md"})
+    assert tool_calls[1] == create_tool_call("web.search", {"query": "test"})
