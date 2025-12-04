@@ -1049,8 +1049,11 @@ class MCPClient:
             "[bold cyan]Session Management:[/bold cyan]\n"
             "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
             "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n"
-            "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n"
-            "• Create [bold].config/CLAUDE.md[/bold] to automatically load project context on startup\n\n"
+            "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n\n"
+
+            "[bold cyan]Auto-Loading (on startup):[/bold cyan]\n"
+            "• Create [bold].config/CLAUDE.md[/bold] to automatically load project context\n"
+            "• Create [bold].config/config.json[/bold] to automatically load server configuration\n\n"
 
             "[bold cyan]Debugging:[/bold cyan]\n"
             "• Type [bold]reparse-last[/bold] or [bold]rl[/bold] to re-run the tool parser on the last response\n\n"
@@ -1540,7 +1543,7 @@ def main(
     ),
     servers_json: Optional[str] = typer.Option(
         None, "--servers-json", "-j",
-        help="Path to a JSON file with server configurations",
+        help="Path to a JSON file with server configurations. If not specified, .config/config.json will be auto-loaded if it exists.",
         rich_help_panel="MCP Server Configuration"
     ),
     auto_discovery: bool = typer.Option(
@@ -1573,9 +1576,11 @@ def main(
         typer.echo(f"mcp-client-for-ollama {__version__}")
         raise typer.Exit()
 
-    # If none of the server arguments are provided, enable auto-discovery
+    # If none of the server arguments are provided and no .config/config.json exists, enable auto-discovery
     if not (mcp_server or mcp_server_url or servers_json or auto_discovery):
-        auto_discovery = True
+        # Check if .config/config.json exists - if not, enable auto-discovery
+        if not os.path.exists(".config/config.json"):
+            auto_discovery = True
 
     # Run the async main function
     asyncio.run(async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host))
@@ -1600,8 +1605,14 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
     config_path = None
     auto_discovery_final = auto_discovery
 
+    # Check for .config/config.json and auto-load it if it exists (unless overridden by CLI options)
+    default_config_json = ".config/config.json"
+    if not servers_json and os.path.exists(default_config_json):
+        config_path = default_config_json
+        console.print(f"[green]📋 Auto-loading server configuration from {default_config_json}[/green]")
+
     if servers_json:
-        # If --servers-json is provided, use that and disable auto-discovery
+        # If --servers-json is provided, use that and disable auto-discovery (overrides .config/config.json)
         if os.path.exists(servers_json):
             config_path = servers_json
         else:

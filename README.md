@@ -43,6 +43,7 @@
   - [Performance Metrics](#performance-metrics)
 - [Autocomplete and Prompt Features](#autocomplete-and-prompt-features)
 - [Configuration Management](#configuration-management)
+- ✨**NEW** [Auto-Load Configuration](#auto-load-configuration)
 - ✨**NEW** [Save and Load Session](#save-and-load-session)
 - [Server Configuration Format](#server-configuration-format)
   - [Tips: Where to Put MCP Server Configs and a Working Example](#tips-where-to-put-mcp-server-configs-and-a-working-example)
@@ -60,6 +61,7 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 ## Features
 
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
+- ✨**NEW** **Auto-Load Configuration**: Automatically load project context from `.config/CLAUDE.md` and server configuration from `.config/config.json` on startup ([docs](misc/auto_load_configuration.md))
 - ✨**NEW** **Save and Load Session**: Save and load your chat session, including history.
 - ✨**NEW** **Reparse Last Response**: A command to re-parse the last model response, useful for debugging or when the model response is slightly malformed.
 - 🧠 **Self-Editing System Prompt**: The model can modify its own instructions and persona in real-time using built-in tools (`builtin.get_system_prompt` and `builtin.set_system_prompt`).
@@ -513,6 +515,67 @@ The configuration saves:
 - Tool execution display preferences
 - Performance metrics display preferences
 - Human-in-the-Loop confirmation settings
+
+## ✨**NEW** Auto-Load Configuration
+
+The client now supports automatic loading of project-specific configuration files from the `.config/` directory in your project root. This feature makes it easy to maintain project-specific settings without manually specifying them each time.
+
+### Automatic Loading on Startup
+
+**Two files are automatically loaded if they exist:**
+
+1. **`.config/CLAUDE.md`** - Project context and documentation
+   - Automatically loaded and prepended to the system prompt
+   - Provides the AI with immediate project context
+   - Perfect for project conventions, architecture, and guidelines
+   - **Tracked in git by default** (share with your team)
+
+2. **`.config/config.json`** - Server configuration
+   - Automatically loaded as MCP server configuration (like `--servers-json`)
+   - No need to specify `--servers-json` every time
+   - **Ignored by git by default** (local configurations)
+   - Can be explicitly tracked if you want to share server configs
+
+### Quick Setup
+
+```bash
+# Create .config directory
+mkdir -p .config
+
+# Add project context (tracked in git)
+cat > .config/CLAUDE.md << 'EOF'
+# My Project
+- Tech stack: Python, FastAPI, PostgreSQL
+- Code style: PEP 8, type hints required
+- Testing: pytest
+EOF
+
+# Add server config (local, not tracked)
+cat > .config/config.json << 'EOF'
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./"]
+    }
+  }
+}
+EOF
+
+# Start ollmcp - configuration loads automatically!
+$ ollmcp
+📋 Auto-loading server configuration from .config/config.json
+📋 Loaded project context from .config/CLAUDE.md
+```
+
+### Benefits
+
+✅ **Zero configuration** - Just create the files, they work automatically
+✅ **Project-scoped** - Each project has its own settings
+✅ **Team-friendly** - Share project context via git
+✅ **Override-able** - CLI flags still work when needed
+
+**📚 Full documentation:** [Auto-Load Configuration Guide](misc/auto_load_configuration.md)
 
 ### ✨**NEW** Save and Load Session
 
