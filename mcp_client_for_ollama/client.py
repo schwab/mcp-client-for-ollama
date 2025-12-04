@@ -176,6 +176,41 @@ class MCPClient:
         except Exception as e:
             self.console.print(f"[red]An error occurred while saving the session: {e}[/red]")
 
+    async def load_project_context(self):
+        """Load project context from .config/CLAUDE.md if it exists."""
+        try:
+            claude_md_path = f"{self.session_save_directory}/CLAUDE.md"
+
+            # Check if the file exists
+            exists_result = self.builtin_tool_manager.execute_tool('file_exists', {
+                'path': claude_md_path
+            })
+
+            # If file doesn't exist, return silently
+            if "does not exist" in exists_result or "Error:" in exists_result:
+                return None
+
+            # Read the CLAUDE.md file
+            read_result = self.builtin_tool_manager.execute_tool('read_file', {
+                'path': claude_md_path
+            })
+
+            # Check for errors
+            if "Error:" in read_result:
+                return None
+
+            # Extract content
+            if "Content:" in read_result:
+                content = read_result.split("Content:")[1].strip()
+            else:
+                content = read_result
+
+            return content
+
+        except Exception as e:
+            # Silently fail - this is optional functionality
+            return None
+
     async def load_session(self):
         """Load a chat history from a named session file using builtin file operations."""
         try:
@@ -428,10 +463,28 @@ class MCPClient:
         # Update the FZFStyleCompleter with the new sessions
         if hasattr(self.prompt_session.completer, 'update_sessions'):
             self.prompt_session.completer.update_sessions(self.sessions)
-        
+
         # If a system prompt was loaded from the config, set it in the ModelConfigManager
         if system_prompt_from_config:
             self.model_config_manager.set_system_prompt(system_prompt_from_config)
+
+        # Load project context from .config/CLAUDE.md if it exists
+        project_context = await self.load_project_context()
+        if project_context:
+            # Get current system prompt (if any)
+            current_prompt = self.model_config_manager.get_system_prompt()
+
+            # Prepend the project context to the system prompt
+            # This gives project-specific context priority
+            if current_prompt:
+                combined_prompt = f"{project_context}\n\n{current_prompt}"
+            else:
+                combined_prompt = project_context
+
+            self.model_config_manager.set_system_prompt(combined_prompt)
+
+            # Notify user that project context was loaded
+            self.console.print(f"[green]📋 Loaded project context from {self.session_save_directory}/CLAUDE.md[/green]")
 
     def select_tools(self):
         """Let the user select which tools to enable using interactive prompts with server-based grouping"""
@@ -996,7 +1049,8 @@ class MCPClient:
             "[bold cyan]Session Management:[/bold cyan]\n"
             "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
             "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n"
-            "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n\n"
+            "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n"
+            "• Create [bold].config/CLAUDE.md[/bold] to automatically load project context on startup\n\n"
 
             "[bold cyan]Debugging:[/bold cyan]\n"
             "• Type [bold]reparse-last[/bold] or [bold]rl[/bold] to re-run the tool parser on the last response\n\n"
