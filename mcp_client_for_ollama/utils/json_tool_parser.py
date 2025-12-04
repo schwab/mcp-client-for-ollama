@@ -68,30 +68,44 @@ class JsonToolParser(BaseToolParser):
 
         # Find all possible start indices of a JSON object
         start_indices = [m.start() for m in re.finditer(r'\{', cleaned_text)]
-        
+
+        # Track ranges that have already been parsed to avoid duplicates
+        parsed_ranges = []
+
         for start_index in start_indices:
+            # Skip if this start_index is within an already-parsed range
+            if any(start <= start_index <= end for start, end in parsed_ranges):
+                continue
+
             balance = 1
             for i in range(start_index + 1, len(cleaned_text)):
                 if cleaned_text[i] == '{':
                     balance += 1
                 elif cleaned_text[i] == '}':
                     balance -= 1
-                
+
                 if balance == 0:
-                    potential_json_str = cleaned_text[start_index : i + 1]
+                    end_index = i
+                    potential_json_str = cleaned_text[start_index : end_index + 1]
                     try:
                         parsed = json.loads(potential_json_str)
                         if isinstance(parsed, dict):
                             # Basic validation to see if it looks like a tool call
+                            # Check for tool_request format
+                            has_tool_request = 'tool_request' in parsed and isinstance(parsed['tool_request'], dict)
+                            # Check for standard formats
                             has_name = 'name' in parsed or 'function_name' in parsed or 'function' in parsed
-                            has_args = 'arguments' in parsed or 'function_args' in parsed
-                            if has_name and has_args:
+                            has_args = 'arguments' in parsed or 'function_args' in parsed or 'parameters' in parsed
+
+                            if has_tool_request or (has_name and has_args):
                                 potential_tool_calls.append(parsed)
+                                # Mark this range as parsed
+                                parsed_ranges.append((start_index, end_index))
                     except json.JSONDecodeError:
                         pass  # Not a valid JSON object, ignore
                     # Break from inner loop to continue searching from the next start index
                     break
-        
+
         return potential_tool_calls
 
     def _parse_full_text(self, text: str) -> List[Dict[str, Any]]:
@@ -125,8 +139,20 @@ class JsonToolParser(BaseToolParser):
         name = None
         args = None
 
+        # Check for tool_request format {'tool_request': {'name': ..., 'parameters': ...}}
+        if 'tool_request' in tc_json and isinstance(tc_json['tool_request'], dict):
+            tool_req = tc_json['tool_request']
+            name = tool_req.get('name') or tool_req.get('function_name')
+            # Check for parameters or arguments
+            if 'parameters' in tool_req:
+                args = tool_req['parameters']
+            elif 'arguments' in tool_req:
+                args = tool_req['arguments']
+            elif 'function_args' in tool_req:
+                args = tool_req['function_args']
+
         # Check for standard format {'function': {...}}
-        if 'function' in tc_json and isinstance(tc_json['function'], dict):
+        if name is None and 'function' in tc_json and isinstance(tc_json['function'], dict):
             func_dict = tc_json['function']
             name = func_dict.get('name') or func_dict.get('function_name')
             # Use a more careful check for arguments to handle cases where it's present but None
@@ -134,7 +160,9 @@ class JsonToolParser(BaseToolParser):
                 args = func_dict['arguments']
             elif 'function_args' in func_dict:
                 args = func_dict['function_args']
-        
+            elif 'parameters' in func_dict:
+                args = func_dict['parameters']
+
         # If not found, check for flattened format
         if name is None:
             name = tc_json.get('name') or tc_json.get('function_name')
@@ -143,11 +171,13 @@ class JsonToolParser(BaseToolParser):
                 args = tc_json['arguments']
             elif 'function_args' in tc_json:
                 args = tc_json['function_args']
+            elif 'parameters' in tc_json:
+                args = tc_json['parameters']
 
         # We must have a name and args (even if args is an empty dict)
         if name is not None and args is not None:
             return Message.ToolCall(
                 function=Message.ToolCall.Function(name=name, arguments=args)
             )
-            
+
         return None

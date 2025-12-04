@@ -429,4 +429,165 @@ def test_path_validation_complex_traversal(builtin_tool_manager, temp_dir):
     assert "Path traversal outside working directory is not allowed" in result
 
 
+# Gitignore Filtering Tests
+
+def test_list_files_with_gitignore_filtering(builtin_tool_manager, temp_dir):
+    """Test that .gitignore patterns are respected by default."""
+    # Create .gitignore file
+    gitignore_path = os.path.join(temp_dir, ".gitignore")
+    with open(gitignore_path, 'w') as f:
+        f.write("*.log\n")
+        f.write("temp/\n")
+        f.write("node_modules/\n")
+
+    # Create some files
+    with open(os.path.join(temp_dir, "file1.txt"), 'w') as f:
+        f.write("content")
+    with open(os.path.join(temp_dir, "file2.log"), 'w') as f:
+        f.write("log content")
+    with open(os.path.join(temp_dir, "file3.txt"), 'w') as f:
+        f.write("content")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": "."})
+
+    # Should include .txt files but not .log files
+    assert "file1.txt" in result
+    assert "file3.txt" in result
+    assert "file2.log" not in result
+    assert ".gitignore" in result  # .gitignore itself should be listed
+
+def test_list_files_without_gitignore_filtering(builtin_tool_manager, temp_dir):
+    """Test that gitignore filtering can be disabled."""
+    # Create .gitignore file
+    gitignore_path = os.path.join(temp_dir, ".gitignore")
+    with open(gitignore_path, 'w') as f:
+        f.write("*.log\n")
+
+    # Create some files
+    with open(os.path.join(temp_dir, "file1.txt"), 'w') as f:
+        f.write("content")
+    with open(os.path.join(temp_dir, "file2.log"), 'w') as f:
+        f.write("log content")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": ".", "respect_gitignore": False})
+
+    # Should include both .txt and .log files
+    assert "file1.txt" in result
+    assert "file2.log" in result
+
+def test_list_files_gitignore_wildcard_patterns(builtin_tool_manager, temp_dir):
+    """Test that wildcard patterns in .gitignore work correctly."""
+    # Create .gitignore with wildcard patterns
+    gitignore_path = os.path.join(temp_dir, ".gitignore")
+    with open(gitignore_path, 'w') as f:
+        f.write("*.pyc\n")
+        f.write("__pycache__/\n")
+        f.write("*.egg-info/\n")
+
+    # Create files
+    with open(os.path.join(temp_dir, "module.py"), 'w') as f:
+        f.write("python code")
+    with open(os.path.join(temp_dir, "module.pyc"), 'w') as f:
+        f.write("compiled")
+    with open(os.path.join(temp_dir, "script.py"), 'w') as f:
+        f.write("python code")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": "."})
+
+    # Should include .py files but not .pyc files
+    assert "module.py" in result
+    assert "script.py" in result
+    assert "module.pyc" not in result
+
+def test_list_files_gitignore_recursive_filtering(builtin_tool_manager, temp_dir):
+    """Test that gitignore filtering works with recursive file listing."""
+    # Create .gitignore
+    gitignore_path = os.path.join(temp_dir, ".gitignore")
+    with open(gitignore_path, 'w') as f:
+        f.write("*.log\n")
+        f.write("build/\n")
+
+    # Create directory structure
+    os.makedirs(os.path.join(temp_dir, "src"))
+    os.makedirs(os.path.join(temp_dir, "build"))
+
+    with open(os.path.join(temp_dir, "src", "main.py"), 'w') as f:
+        f.write("code")
+    with open(os.path.join(temp_dir, "src", "debug.log"), 'w') as f:
+        f.write("log")
+    with open(os.path.join(temp_dir, "build", "output.txt"), 'w') as f:
+        f.write("output")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": ".", "recursive": True})
+
+    # Should include src/main.py but not src/debug.log or build/output.txt
+    assert "main.py" in result or "src/main.py" in result or "src\\main.py" in result
+    assert "debug.log" not in result
+    assert "output.txt" not in result
+
+def test_list_files_gitignore_negation_pattern(builtin_tool_manager, temp_dir):
+    """Test that negation patterns in .gitignore work correctly."""
+    # Create .gitignore with negation pattern
+    gitignore_path = os.path.join(temp_dir, ".gitignore")
+    with open(gitignore_path, 'w') as f:
+        f.write("*.log\n")
+        f.write("!important.log\n")
+
+    # Create files
+    with open(os.path.join(temp_dir, "debug.log"), 'w') as f:
+        f.write("debug")
+    with open(os.path.join(temp_dir, "important.log"), 'w') as f:
+        f.write("important")
+    with open(os.path.join(temp_dir, "app.txt"), 'w') as f:
+        f.write("text")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": "."})
+
+    # Should exclude debug.log but include important.log (negation pattern)
+    assert "debug.log" not in result
+    assert "important.log" in result
+    assert "app.txt" in result
+
+def test_list_files_no_gitignore_file(builtin_tool_manager, temp_dir):
+    """Test that list_files works normally when there's no .gitignore file."""
+    # Create files without .gitignore
+    with open(os.path.join(temp_dir, "file1.txt"), 'w') as f:
+        f.write("content")
+    with open(os.path.join(temp_dir, "file2.log"), 'w') as f:
+        f.write("log")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": "."})
+
+    # Should include all files when no .gitignore exists
+    assert "file1.txt" in result
+    assert "file2.log" in result
+
+def test_list_files_gitignore_directory_pattern(builtin_tool_manager, temp_dir):
+    """Test that directory patterns with trailing slash work correctly."""
+    # Create .gitignore with directory pattern
+    gitignore_path = os.path.join(temp_dir, ".gitignore")
+    with open(gitignore_path, 'w') as f:
+        f.write("node_modules/\n")
+        f.write("dist/\n")
+
+    # Create files
+    os.makedirs(os.path.join(temp_dir, "node_modules"))
+    os.makedirs(os.path.join(temp_dir, "dist"))
+    os.makedirs(os.path.join(temp_dir, "src"))
+
+    with open(os.path.join(temp_dir, "node_modules", "package.json"), 'w') as f:
+        f.write("package")
+    with open(os.path.join(temp_dir, "dist", "bundle.js"), 'w') as f:
+        f.write("bundle")
+    with open(os.path.join(temp_dir, "src", "index.js"), 'w') as f:
+        f.write("code")
+
+    result = builtin_tool_manager.execute_tool("list_files", {"path": ".", "recursive": True})
+
+    # Should not include files in ignored directories
+    assert "package.json" not in result
+    assert "bundle.js" not in result
+    assert "index.js" in result or "src/index.js" in result or "src\\index.js" in result
+
+
 

@@ -1,8 +1,8 @@
 """Built-in tools for MCP Client for Ollama."""
 
-import io, sys, os, shutil
+import io, sys, os, shutil, fnmatch
 from pathlib import Path
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Set
 from mcp import Tool
 from datetime import datetime
 
@@ -130,7 +130,7 @@ class BuiltinToolManager:
 
         list_files_tool = Tool(
             name="builtin.list_files",
-            description="List all files in a directory. Path must be relative to the current working directory. If no path is provided, lists files in the current directory.",
+            description="List all files in a directory. Path must be relative to the current working directory. If no path is provided, lists files in the current directory. By default, respects .gitignore patterns to show only relevant files.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -141,6 +141,10 @@ class BuiltinToolManager:
                     "recursive": {
                         "type": "boolean",
                         "description": "Whether to list files recursively in subdirectories. Defaults to false."
+                    },
+                    "respect_gitignore": {
+                        "type": "boolean",
+                        "description": "Whether to filter out files matching .gitignore patterns. Defaults to true."
                     }
                 }
             }
@@ -350,12 +354,13 @@ class BuiltinToolManager:
         except Exception as e:
             return f"Execution failed.\nError: {type(e).__name__}: {e}"
 
-    def _validate_path(self, path: str) -> tuple[bool, str]:
+    def _validate_path(self, path: str, allow_absolute: bool = False) -> tuple[bool, str]:
         """
         Validates that a path is safe to use (within working directory).
 
         Args:
             path: The path to validate
+            allow_absolute: If True, allows absolute paths (for internal use only)
 
         Returns:
             Tuple of (is_valid, resolved_path or error_message)
@@ -363,18 +368,145 @@ class BuiltinToolManager:
         try:
             # Convert to absolute path and resolve any .. or . components
             if os.path.isabs(path):
-                return False, "Error: Absolute paths are not allowed. Use relative paths only."
+                if not allow_absolute:
+                    return False, "Error: Absolute paths are not allowed. Use relative paths only."
+                # For absolute paths, just expand ~ and return
+                resolved_path = os.path.abspath(os.path.expanduser(path))
+            else:
+                # Resolve the path relative to working directory
+                resolved_path = os.path.abspath(os.path.join(self.working_directory, path))
 
-            # Resolve the path relative to working directory
-            resolved_path = os.path.abspath(os.path.join(self.working_directory, path))
-
-            # Ensure the resolved path is within the working directory
-            if not resolved_path.startswith(os.path.abspath(self.working_directory)):
+            # For relative paths, ensure they're within the working directory
+            if not allow_absolute and not resolved_path.startswith(os.path.abspath(self.working_directory)):
                 return False, "Error: Path traversal outside working directory is not allowed."
 
             return True, resolved_path
         except Exception as e:
             return False, f"Error: Invalid path. {type(e).__name__}: {e}"
+
+    def _parse_gitignore(self, gitignore_path: str) -> List[str]:
+        """
+        Parse a .gitignore file and return a list of patterns.
+
+        Args:
+            gitignore_path: Path to the .gitignore file
+
+        Returns:
+            List of gitignore patterns
+        """
+        patterns = []
+        try:
+            with open(gitignore_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith('#'):
+                        patterns.append(line)
+        except FileNotFoundError:
+            pass  # No .gitignore file
+        except Exception:
+            pass  # Ignore errors reading .gitignore
+
+        return patterns
+
+    def _matches_gitignore_pattern(self, file_path: str, pattern: str, is_dir: bool = False) -> bool:
+        """
+        Check if a file path matches a gitignore pattern.
+
+        Args:
+            file_path: Relative file path to check
+            pattern: Gitignore pattern
+            is_dir: Whether the path is a directory
+
+        Returns:
+            True if the path matches the pattern
+        """
+        # Handle negation patterns
+        if pattern.startswith('!'):
+            return False  # Negation patterns are handled separately
+
+        # Normalize path separators
+        file_path = file_path.replace(os.sep, '/')
+        pattern = pattern.replace(os.sep, '/')
+
+        # Handle directory-only patterns (ending with /)
+        directory_only = pattern.endswith('/')
+        if directory_only:
+            pattern = pattern.rstrip('/')
+
+        # Handle root-relative patterns (starting with /)
+        if pattern.startswith('/'):
+            pattern = pattern.lstrip('/')
+            # Match from root only
+            if fnmatch.fnmatch(file_path, pattern):
+                return True
+            # For directory patterns, also check if file is inside the directory
+            if directory_only and file_path.startswith(pattern + '/'):
+                return True
+            return False
+
+        # Handle ** patterns for directory matching
+        if '**' in pattern:
+            # Convert ** to match any path segment
+            pattern = pattern.replace('**/', '*/')
+            pattern = pattern.replace('/**', '/*')
+
+        # Check if the file is inside a directory that matches the pattern
+        if directory_only:
+            parts = file_path.split('/')
+            for i in range(len(parts)):
+                # Check if this directory name matches
+                if fnmatch.fnmatch(parts[i], pattern):
+                    return True
+                # Check if the path up to this point matches
+                subpath = '/'.join(parts[:i+1])
+                if fnmatch.fnmatch(subpath, pattern):
+                    return True
+
+        # Check if pattern matches the file or any parent directory
+        parts = file_path.split('/')
+        for i in range(len(parts)):
+            # Check full path from this point
+            subpath = '/'.join(parts[i:])
+            if fnmatch.fnmatch(subpath, pattern):
+                return True
+            # Check just the name at this level
+            if fnmatch.fnmatch(parts[i], pattern):
+                return True
+
+        return False
+
+    def _is_ignored_by_gitignore(self, file_path: str, base_path: str, is_dir: bool = False) -> bool:
+        """
+        Check if a file should be ignored based on .gitignore rules.
+
+        Args:
+            file_path: Relative path to the file from base_path
+            base_path: Base directory path
+            is_dir: Whether the path is a directory
+
+        Returns:
+            True if the file should be ignored
+        """
+        gitignore_path = os.path.join(base_path, '.gitignore')
+        patterns = self._parse_gitignore(gitignore_path)
+
+        if not patterns:
+            return False
+
+        ignored = False
+        for pattern in patterns:
+            if pattern.startswith('!'):
+                # Negation pattern - if it matches, un-ignore
+                neg_pattern = pattern[1:]
+                if self._matches_gitignore_pattern(file_path, neg_pattern, is_dir):
+                    ignored = False
+            else:
+                # Normal pattern - if it matches, ignore
+                if self._matches_gitignore_pattern(file_path, pattern, is_dir):
+                    ignored = True
+
+        return ignored
 
     def _handle_read_file(self, args: Dict[str, Any]) -> str:
         """Handles the 'read_file' tool call."""
@@ -382,7 +514,9 @@ class BuiltinToolManager:
         if not path:
             return "Error: 'path' argument is required for read_file."
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -414,7 +548,9 @@ class BuiltinToolManager:
         if content is None:
             return "Error: 'content' argument is required for write_file."
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -438,8 +574,11 @@ class BuiltinToolManager:
         """Handles the 'list_files' tool call."""
         path = args.get("path", ".")
         recursive = args.get("recursive", False)
+        respect_gitignore = args.get("respect_gitignore", True)
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -459,11 +598,20 @@ class BuiltinToolManager:
                         full_path = os.path.join(root, filename)
                         # Make path relative to the requested directory
                         rel_path = os.path.relpath(full_path, resolved_path)
+
+                        # Apply gitignore filtering if enabled
+                        if respect_gitignore and self._is_ignored_by_gitignore(rel_path, resolved_path, False):
+                            continue
+
                         files.append(rel_path)
             else:
                 for item in os.listdir(resolved_path):
                     item_path = os.path.join(resolved_path, item)
                     if os.path.isfile(item_path):
+                        # Apply gitignore filtering if enabled
+                        if respect_gitignore and self._is_ignored_by_gitignore(item, resolved_path, False):
+                            continue
+
                         files.append(item)
 
             files.sort()
@@ -480,7 +628,9 @@ class BuiltinToolManager:
         """Handles the 'list_directories' tool call."""
         path = args.get("path", ".")
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -516,7 +666,9 @@ class BuiltinToolManager:
         if not path:
             return "Error: 'path' argument is required for create_directory."
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -541,7 +693,9 @@ class BuiltinToolManager:
         if not path:
             return "Error: 'path' argument is required for delete_file."
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -566,7 +720,9 @@ class BuiltinToolManager:
         if not path:
             return "Error: 'path' argument is required for file_exists."
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 
@@ -593,7 +749,9 @@ class BuiltinToolManager:
         if not path:
             return "Error: 'path' argument is required for get_file_info."
 
-        is_valid, result = self._validate_path(path)
+        # Check for internal-only parameter to allow absolute paths
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
 

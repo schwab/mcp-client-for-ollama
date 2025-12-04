@@ -6,6 +6,7 @@ from .json_tool_parser import JsonToolParser
 from .python_tool_parser import PythonToolParser
 from .xml_tool_parser import XmlToolParser
 from .cline_tool_parser import ClineToolParser
+from .simple_xml_tool_parser import SimpleXmlToolParser
 
 class ToolParser:
     """
@@ -21,10 +22,11 @@ class ToolParser:
         to prevent false positives.
         """
         self.sub_parsers: List[BaseToolParser] = [
-            ClineToolParser(),     # Most specific format (XML with dot notation)
-            JsonToolParser(),      # Standard JSON format
-            PythonToolParser(),    # Python code execution
-            XmlToolParser(),       # Generic XML tool requests
+            ClineToolParser(),        # Most specific format (XML with dot notation)
+            JsonToolParser(),         # Standard JSON format
+            PythonToolParser(),       # Python code execution
+            SimpleXmlToolParser(),    # Simple XML with <tool_name>/<arguments>
+            XmlToolParser(),          # Generic XML tool requests
         ]
 
     def parse(self, text: str) -> List[Message.ToolCall]:

@@ -6,6 +6,7 @@ from mcp_client_for_ollama.utils.json_tool_parser import JsonToolParser
 from mcp_client_for_ollama.utils.python_tool_parser import PythonToolParser
 from mcp_client_for_ollama.utils.xml_tool_parser import XmlToolParser
 from mcp_client_for_ollama.utils.cline_tool_parser import ClineToolParser
+from mcp_client_for_ollama.utils.simple_xml_tool_parser import SimpleXmlToolParser
 from mcp_client_for_ollama.utils.tool_parser import ToolParser as CompositeToolParser
 
 # --- Fixtures ---
@@ -24,6 +25,10 @@ def xml_tool_parser():
 @pytest.fixture
 def cline_tool_parser():
     return ClineToolParser()
+
+@pytest.fixture
+def simple_xml_tool_parser():
+    return SimpleXmlToolParser()
 
 @pytest.fixture
 def composite_tool_parser():
@@ -70,6 +75,57 @@ def test_json_tool_parser_no_tool_calls(json_tool_parser):
     text = "Just a regular sentence with no tool calls."
     tool_calls = json_tool_parser.parse(text)
     assert len(tool_calls) == 0
+
+def test_json_tool_parser_tool_request_format(json_tool_parser):
+    """Test parsing tool_request format with thoughts and parameters."""
+    text = """```json
+{
+  "thoughts": "To load the Writing Style Guide and apply it as my instructions, I need to follow these steps.",
+  "tool_request": {
+    "name": "builtin.list_files",
+    "parameters": {
+      "path": "/root"
+    }
+  }
+}
+```"""
+    tool_calls = json_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.list_files", {"path": "/root"})
+
+def test_json_tool_parser_tool_request_embedded(json_tool_parser):
+    """Test parsing embedded tool_request format in text."""
+    text = """I need to read a file. Here's my request:
+{
+  "thoughts": "Reading the configuration file",
+  "tool_request": {
+    "name": "builtin.read_file",
+    "parameters": {
+      "path": "config.json"
+    }
+  }
+}
+Let me know what you find."""
+    tool_calls = json_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.read_file", {"path": "config.json"})
+
+def test_json_tool_parser_tool_request_with_arguments(json_tool_parser):
+    """Test tool_request format also works with 'arguments' key."""
+    text = """```json
+{
+  "tool_request": {
+    "name": "builtin.write_file",
+    "arguments": {
+      "path": "output.txt",
+      "content": "Hello"
+    }
+  }
+}
+```"""
+    tool_calls = json_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.write_file", {"path": "output.txt", "content": "Hello"})
 
 # --- PythonToolParser Tests ---
 def test_python_tool_parser_single_block(python_tool_parser):
@@ -365,3 +421,129 @@ And also JSON format:
     assert len(tool_calls) == 2
     assert tool_calls[0] == create_tool_call("filesystem.read_file", {"path": "/root/README.md"})
     assert tool_calls[1] == create_tool_call("web.search", {"query": "test"})
+
+
+# --- SimpleXmlToolParser Tests ---
+def test_simple_xml_tool_parser_tool_name_only(simple_xml_tool_parser):
+    """Test tool call with only a tool name, no arguments."""
+    text = """<tool_name>builtin.list_files</tool_name>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.list_files", {})
+
+
+def test_simple_xml_tool_parser_with_json_arguments(simple_xml_tool_parser):
+    """Test tool call with JSON arguments."""
+    text = """<tool_name>builtin.read_file</tool_name>
+<arguments>{"path": "/root/config.json", "encoding": "utf-8"}</arguments>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.read_file", {"path": "/root/config.json", "encoding": "utf-8"})
+
+
+def test_simple_xml_tool_parser_with_xml_arguments(simple_xml_tool_parser):
+    """Test tool call with nested XML arguments."""
+    text = """<tool_name>filesystem.write_file</tool_name>
+<arguments>
+  <path>/tmp/output.txt</path>
+  <content>Hello World</content>
+</arguments>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("filesystem.write_file", {
+        "path": "/tmp/output.txt",
+        "content": "Hello World"
+    })
+
+
+def test_simple_xml_tool_parser_multiple_calls(simple_xml_tool_parser):
+    """Test multiple tool calls in the same text."""
+    text = """First call:
+<tool_name>builtin.list_files</tool_name>
+<arguments>{"path": "/root"}</arguments>
+
+Then another call:
+<tool_name>builtin.read_file</tool_name>
+<arguments>
+  <path>/root/README.md</path>
+</arguments>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 2
+    assert tool_calls[0] == create_tool_call("builtin.list_files", {"path": "/root"})
+    assert tool_calls[1] == create_tool_call("builtin.read_file", {"path": "/root/README.md"})
+
+
+def test_simple_xml_tool_parser_with_numeric_xml_args(simple_xml_tool_parser):
+    """Test XML arguments with numeric values."""
+    text = """<tool_name>math.calculate</tool_name>
+<arguments>
+  <a>5</a>
+  <b>10</b>
+  <precision>2.5</precision>
+</arguments>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0].function.arguments["a"] == 5
+    assert tool_calls[0].function.arguments["b"] == 10
+    assert tool_calls[0].function.arguments["precision"] == 2.5
+
+
+def test_simple_xml_tool_parser_with_boolean_xml_args(simple_xml_tool_parser):
+    """Test XML arguments with boolean values."""
+    text = """<tool_name>config.set</tool_name>
+<arguments>
+  <enabled>true</enabled>
+  <debug>false</debug>
+  <optional>null</optional>
+</arguments>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    args = tool_calls[0].function.arguments
+    assert args["enabled"] is True
+    assert args["debug"] is False
+    assert args["optional"] is None
+
+
+def test_simple_xml_tool_parser_no_tool_calls(simple_xml_tool_parser):
+    """Test text with no tool calls."""
+    text = "This is just regular text without any tool calls."
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 0
+
+
+def test_simple_xml_tool_parser_with_surrounding_text(simple_xml_tool_parser):
+    """Test tool call embedded in regular text."""
+    text = """I need to list files in the directory.
+
+<tool_name>builtin.list_files</tool_name>
+<arguments>{"path": "/"}</arguments>
+
+Let me know what files you find."""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.list_files", {"path": "/"})
+
+
+def test_simple_xml_tool_parser_empty_arguments_tag(simple_xml_tool_parser):
+    """Test tool call with empty arguments tag."""
+    text = """<tool_name>builtin.get_system_prompt</tool_name>
+<arguments></arguments>"""
+    tool_calls = simple_xml_tool_parser.parse(text)
+    assert len(tool_calls) == 1
+    assert tool_calls[0] == create_tool_call("builtin.get_system_prompt", {})
+
+
+def test_composite_tool_parser_with_simple_xml_syntax(composite_tool_parser):
+    """Test that composite parser can handle simple XML format."""
+    text = """I'll use the simple XML format:
+<tool_name>builtin.list_files</tool_name>
+<arguments>{"path": "/root"}</arguments>
+
+And also JSON:
+```json
+{"function": {"name": "web.search", "arguments": {"query": "test"}}}
+```"""
+    tool_calls = composite_tool_parser.parse(text)
+    assert len(tool_calls) == 2
+    assert tool_calls[0] == create_tool_call("web.search", {"query": "test"})
+    assert tool_calls[1] == create_tool_call("builtin.list_files", {"path": "/root"})

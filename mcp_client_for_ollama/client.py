@@ -99,12 +99,8 @@ class MCPClient:
         """Display the currently selected model"""
         self.model_manager.display_current_model()
 
-    def _has_filesystem_tool(self) -> bool:
-        """Check if the filesystem tool is available."""
-        return 'filesystem' in self.sessions
-
     async def save_session(self):
-        """Save the current chat history to a named session file."""
+        """Save the current chat history to a named session file using builtin file operations."""
         try:
             if not self.chat_history:
                 self.console.print("[yellow]Chat history is empty. Nothing to save.[/yellow]")
@@ -120,78 +116,61 @@ class MCPClient:
             if not filename:
                 self.console.print("[red]Invalid session name. Use letters, numbers, hyphens, or underscores.[/red]")
                 return
-            
+
             file_path = f"{self.session_save_directory}/{filename}.json"
 
-            # Ensure directory exists
-            try:
-                await self.sessions['filesystem']['session'].call_tool('create_directory', {'path': self.session_save_directory})
-            except Exception as e:
-                # It's okay if the directory already exists.
-                if "file exists" not in str(e).lower():
-                    self.console.print(f"[yellow]Warning: Could not create session directory (it may already exist): {e}[/yellow]")
-                    pass
+            # Ensure directory exists using builtin tool
+            dir_result = self.builtin_tool_manager.execute_tool('create_directory', {
+                'path': self.session_save_directory,
+                '__internal_allow_absolute': True
+            })
+            if "Error:" in dir_result and "already exists" not in dir_result:
+                self.console.print(f"[yellow]Warning: {dir_result}[/yellow]")
 
             # Serialize chat history
             history_json = json.dumps(self.chat_history, indent=2)
 
-            # Write file using filesystem tool
+            # Write file using builtin tool
             with self.console.status(f"[cyan]Saving session '{session_name}'...[/cyan]"):
-                write_result = await self.sessions['filesystem']['session'].call_tool(
-                    'write_file', 
-                    {'path': file_path, 'content': history_json}
+                write_result = self.builtin_tool_manager.execute_tool(
+                    'write_file',
+                    {'path': file_path, 'content': history_json, '__internal_allow_absolute': True}
                 )
-            
-            # Check the tool's response for errors
-            if write_result.isError:
-                error_msg = write_result.content[0].text if write_result.content else "Unknown error from filesystem tool."
-                raise Exception(f"Filesystem tool reported an error: {error_msg}")
-            
+
+            # Check for errors in the result
+            if "Error:" in write_result:
+                raise Exception(f"Failed to write session file: {write_result}")
+
             self.console.print(f"[green]Session '{session_name}' saved successfully to {file_path}[/green]")
 
         except Exception as e:
             self.console.print(f"[red]An error occurred while saving the session: {e}[/red]")
 
     async def load_session(self):
-        """Load a chat history from a named session file."""
+        """Load a chat history from a named session file using builtin file operations."""
         try:
             with self.console.status("[cyan]Fetching saved sessions...[/cyan]"):
-                list_result = await self.sessions['filesystem']['session'].call_tool(
-                    'list_directory',
-                    {'path': self.session_save_directory}
+                list_result = self.builtin_tool_manager.execute_tool(
+                    'list_files',
+                    {'path': self.session_save_directory, '__internal_allow_absolute': True}
                 )
-            
-            session_items = []
-            raw_filenames = []
-            if list_result.content and isinstance(list_result.content[0].text, str):
-                content_text = list_result.content[0].text.strip()
-                
-                # Try to parse as JSON first
-                try:
-                    list_data = json.loads(content_text)
-                    # Handle complex JSON object with 'items' from advanced servers
-                    if isinstance(list_data, dict) and 'items' in list_data:
-                        raw_filenames = [
-                            item['name'] for item in list_data['items']
-                            if item.get('type', '') == 'file' and item.get('name', '').endswith('.json')
-                        ]
-                    # Handle simple JSON list of strings
-                    elif isinstance(list_data, list):
-                        raw_filenames = [s for s in list_data if isinstance(s, str) and s.endswith('.json')]
-                    else:
-                        # If it's JSON but not a dict with 'items' or a list, it's unexpected.
-                        self.console.print(f"[yellow]Warning: Unexpected JSON format from list_directory tool: {content_text[:100]}...[/yellow]")
-                        raw_filenames = [] # Clear to prevent processing unexpected format
-                except json.JSONDecodeError:
-                    # If it's not JSON, treat as simple newline-separated string
-                    raw_filenames = [line.strip() for line in content_text.split('\n') if line.strip()]
 
-            # Clean the raw filenames and create the session_items
-            for filename in raw_filenames:
-                # Strip any decorative tags like [FILE], [DIR], etc. and ensure it's a json file
-                clean_name = re.sub(r'\[.*?\]\s*', '', filename).strip()
-                if clean_name.endswith('.json'):
-                    session_items.append({'name': clean_name, 'type': 'file'})
+            session_items = []
+
+            # Check if there was an error
+            if "Error:" in list_result or "No files found" in list_result:
+                # Directory might not exist or be empty
+                if not session_items:
+                    self.console.print(f"[yellow]No saved sessions found in {self.session_save_directory}[/yellow]")
+                    return
+            else:
+                # Parse the list of files from the builtin tool result
+                # The format is "Files in '...' (N files):\n  - file1.json\n  - file2.json"
+                for line in list_result.split('\n'):
+                    line = line.strip()
+                    if line.startswith('- ') and line.endswith('.json'):
+                        filename = line[2:].strip()  # Remove "- " prefix
+                        session_items.append({'name': filename, 'type': 'file'})
 
             if not session_items:
                 self.console.print(f"[yellow]No saved sessions found in {self.session_save_directory}[/yellow]")
@@ -226,14 +205,24 @@ class MCPClient:
                     try:
                         selected_filename = session_items[index]['name']
                         file_path = f"{self.session_save_directory}/{selected_filename}"
-                        
+
                         with self.console.status(f"[cyan]Loading session '{selected_filename.replace('.json', '')}'...[/cyan]"):
-                            read_result = await self.sessions['filesystem']['session'].call_tool(
+                            read_result = self.builtin_tool_manager.execute_tool(
                                 'read_file',
-                                {'path': file_path}
+                                {'path': file_path, '__internal_allow_absolute': True}
                             )
-                        
-                        history_json = read_result.content[0].text
+
+                        # Check for errors
+                        if "Error:" in read_result:
+                            raise Exception(f"Failed to read session file: {read_result}")
+
+                        # Extract the JSON content from the result
+                        # The format is "File '...' read successfully.\n\nContent:\n<json>"
+                        if "Content:" in read_result:
+                            history_json = read_result.split("Content:")[1].strip()
+                        else:
+                            history_json = read_result
+
                         self.chat_history = json.loads(history_json)
                         self.actual_token_count = 0
 
@@ -293,10 +282,6 @@ class MCPClient:
 
     async def _change_session_save_location(self):
         """Allow the user to change the directory where sessions are saved."""
-        if not self._has_filesystem_tool():
-            self.console.print("[red]Error: The 'filesystem' service is required to change the session save location.[/red]")
-            return
-
         self.clear_console()
         self.console.print(Panel("[bold]Change Session Save Location[/bold]", border_style="blue"))
         self.console.print(f"Current session save directory: [cyan]{self.session_save_directory}[/cyan]\n")
@@ -848,17 +833,11 @@ class MCPClient:
                     continue
 
                 if query.lower() in ['save-session', 'ss']:
-                    if self._has_filesystem_tool():
-                        await self.save_session()
-                    else:
-                        self.console.print("[red]Error: The 'filesystem' service is required to save sessions.[/red]")
+                    await self.save_session()
                     continue
 
                 if query.lower() in ['load-session', 'ls']:
-                    if self._has_filesystem_tool():
-                        await self.load_session()
-                    else:
-                        self.console.print("[red]Error: The 'filesystem' service is required to load sessions.[/red]")
+                    await self.load_session()
                     continue
 
                 if query.lower() in ['reparse-last', 'rl']:
@@ -967,7 +946,7 @@ class MCPClient:
             "• Type [bold]load-config[/bold] or [bold]lc[/bold] to load a configuration\n"
             "• Type [bold]reset-config[/bold] or [bold]rc[/bold] to reset configuration to defaults\n\n"
 
-            "[bold cyan]Session Management:[/bold cyan] [dim](Requires 'filesystem' service)[/dim]\n"
+            "[bold cyan]Session Management:[/bold cyan]\n"
             "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
             "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n"
             "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n\n"
