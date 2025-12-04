@@ -59,6 +59,9 @@ INTERACTIVE_COMMANDS = {
     'loop-limit': ('Set agent max loop limit', False),
     'll': ('Set agent max loop limit', False),
 
+    'plan-mode': ('Toggle PLAN/ACT mode (Shift+Tab)', True), # NEW
+    'pm': ('Toggle PLAN/ACT mode (Shift+Tab)', True), # NEW
+
     'model-config': ('Configure model parameters', False),
     'mc': ('Configure model parameters', False),
 

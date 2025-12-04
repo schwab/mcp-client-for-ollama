@@ -9,6 +9,7 @@ from typing import List, Optional
 import typer
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
+from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -68,10 +69,13 @@ class MCPClient:
         # UI components
         self.chat_history = []  # Add chat history list to store interactions
         self.status_messages = [] # List to store temporary status/error messages for display in toolbar
+        # Create keyboard bindings
+        self.kb = self._create_key_bindings()
         # Command completer for interactive prompts
         self.prompt_session = PromptSession(
             completer=FZFStyleCompleter(sessions=self.sessions, console=self.console, status_messages=self.status_messages),
-            style=Style.from_dict(DEFAULT_COMPLETION_STYLE)
+            style=Style.from_dict(DEFAULT_COMPLETION_STYLE),
+            key_bindings=self.kb
         )
         # Context retention settings
         self.retain_context = True  # By default, retain conversation context
@@ -86,7 +90,20 @@ class MCPClient:
         # Agent mode settings
         self.loop_limit = 3  # Maximum follow-up tool loops per query
         self.default_configuration_status = False  # Track if default configuration was loaded successfully
-        self.session_save_directory = "./.ollmcp_sessions" # Default to current directory, will be loaded from config
+        self.session_save_directory = ".config" # Session storage in .config subfolder of current directory
+
+        # Plan/Act mode settings
+        self.plan_mode = False  # By default, start in ACT mode
+        self.act_mode_system_prompt = None  # Backup of the ACT mode system prompt
+        # Tools that should be disabled in plan mode (write operations)
+        self.plan_mode_disabled_tools = {
+            "builtin.write_file",
+            "builtin.execute_python_code",
+            "builtin.execute_bash_command",
+            "builtin.create_directory",
+            "builtin.delete_file",
+            "builtin.set_system_prompt"  # Disable system prompt changes in plan mode
+        }
 
         # Store server connection parameters for reloading
         self.server_connection_params = {
@@ -94,6 +111,20 @@ class MCPClient:
             'config_path': None,
             'auto_discovery': False
         }
+
+    def _create_key_bindings(self) -> KeyBindings:
+        """Create keyboard bindings for the application"""
+        kb = KeyBindings()
+
+        @kb.add('s-tab')  # Shift+Tab
+        def _(event):
+            """Toggle between PLAN and ACT modes"""
+            # Clear current input and insert the toggle command
+            event.app.current_buffer.text = '#TOGGLE_PLAN_MODE#'
+            # Submit the command
+            event.app.current_buffer.validate_and_handle()
+
+        return kb
 
     def display_current_model(self):
         """Display the currently selected model"""
@@ -121,8 +152,7 @@ class MCPClient:
 
             # Ensure directory exists using builtin tool
             dir_result = self.builtin_tool_manager.execute_tool('create_directory', {
-                'path': self.session_save_directory,
-                '__internal_allow_absolute': True
+                'path': self.session_save_directory
             })
             if "Error:" in dir_result and "already exists" not in dir_result:
                 self.console.print(f"[yellow]Warning: {dir_result}[/yellow]")
@@ -134,7 +164,7 @@ class MCPClient:
             with self.console.status(f"[cyan]Saving session '{session_name}'...[/cyan]"):
                 write_result = self.builtin_tool_manager.execute_tool(
                     'write_file',
-                    {'path': file_path, 'content': history_json, '__internal_allow_absolute': True}
+                    {'path': file_path, 'content': history_json}
                 )
 
             # Check for errors in the result
@@ -152,7 +182,7 @@ class MCPClient:
             with self.console.status("[cyan]Fetching saved sessions...[/cyan]"):
                 list_result = self.builtin_tool_manager.execute_tool(
                     'list_files',
-                    {'path': self.session_save_directory, '__internal_allow_absolute': True}
+                    {'path': self.session_save_directory}
                 )
 
             session_items = []
@@ -209,7 +239,7 @@ class MCPClient:
                         with self.console.status(f"[cyan]Loading session '{selected_filename.replace('.json', '')}'...[/cyan]"):
                             read_result = self.builtin_tool_manager.execute_tool(
                                 'read_file',
-                                {'path': file_path, '__internal_allow_absolute': True}
+                                {'path': file_path}
                             )
 
                         # Check for errors
@@ -285,39 +315,42 @@ class MCPClient:
         self.clear_console()
         self.console.print(Panel("[bold]Change Session Save Location[/bold]", border_style="blue"))
         self.console.print(f"Current session save directory: [cyan]{self.session_save_directory}[/cyan]\n")
-        self.console.print("Please enter the absolute path to the new directory where you want to save sessions.")
-        self.console.print("The '.ollmcp_sessions' folder will be created inside this directory.")
+        self.console.print("Enter a relative path for session storage (e.g., '.config', '.sessions', 'my_sessions').")
+        self.console.print("The directory will be created in the current working directory if it doesn't exist.")
         self.console.print("Type 'q' or 'quit' to cancel.")
 
         while True:
-            new_base_path = await self.get_user_input("New base directory")
-            if not new_base_path or new_base_path.lower() in ['q', 'quit']:
+            new_dir = await self.get_user_input("Session directory name")
+            if not new_dir or new_dir.lower() in ['q', 'quit']:
                 self.console.print("[yellow]Session save location change cancelled.[/yellow]")
                 break
 
-            new_base_path = new_base_path.strip()
-            if not os.path.isabs(new_base_path):
-                self.console.print("[red]Error: Path must be absolute. Please try again.[/red]")
+            new_dir = new_dir.strip()
+
+            # Validate that it's a relative path (no absolute paths or path traversal)
+            if os.path.isabs(new_dir) or '..' in new_dir:
+                self.console.print("[red]Error: Please use a relative directory name without '..' (e.g., '.config', 'sessions')[/red]")
                 continue
 
-            # Construct the full new session save directory
-            proposed_session_dir = os.path.join(new_base_path, ".ollmcp_sessions")
-
-            # Check if the proposed directory exists or can be created
+            # Check if the directory can be created using built-in tools
             try:
-                # Use the filesystem tool to check if the directory exists or can be created
-                # We'll try to create it, if it exists, it won't raise an error
-                await self.sessions['filesystem']['session'].call_tool('create_directory', {'path': proposed_session_dir})
-                
-                self.session_save_directory = proposed_session_dir
+                # Try to create the directory using built-in tool
+                dir_result = self.builtin_tool_manager.execute_tool('create_directory', {
+                    'path': new_dir
+                })
+
+                # Check for errors (but "already exists" is OK)
+                if "Error:" in dir_result and "already exists" not in dir_result:
+                    raise Exception(dir_result)
+
+                self.session_save_directory = new_dir
                 self.save_configuration() # Save the updated configuration
                 self.console.print(f"[green]Session save directory updated to: {self.session_save_directory}[/green]")
                 break
             except Exception as e:
-                self.console.print(f"[red]Error: Could not set session save directory to '{proposed_session_dir}'. Reason: {e}[/red]")
-                self.console.print("[yellow]Please ensure the path is valid and accessible by the 'filesystem' tool.[/yellow]")
+                self.console.print(f"[red]Error: Could not set session save directory to '{new_dir}'. Reason: {e}[/red]")
                 continue
-        
+
         self.display_available_tools()
         self.display_current_model()
         self._display_chat_history()
@@ -477,11 +510,14 @@ class MCPClient:
                 "content": system_prompt
             })
 
-        # Get enabled tools from the tool manager
-        enabled_tool_objects = self.tool_manager.get_enabled_tool_objects()
+        # Get enabled tools based on current mode (PLAN or ACT)
+        enabled_tool_objects = self.get_filtered_tools_for_current_mode()
 
         if not enabled_tool_objects:
-            self.console.print("[yellow]Warning: No tools are enabled. Model will respond without tool access.[/yellow]")
+            if self.plan_mode:
+                self.console.print("[yellow]Note: Running in PLAN mode with read-only tools. Use Shift+Tab to switch to ACT mode for write operations.[/yellow]")
+            else:
+                self.console.print("[yellow]Warning: No tools are enabled. Model will respond without tool access.[/yellow]")
 
         available_tools = [{
             "type": "function",
@@ -537,7 +573,7 @@ class MCPClient:
         if metrics and metrics.get('eval_count'):
             self.actual_token_count += metrics['eval_count']
 
-        enabled_tools = self.tool_manager.get_enabled_tool_objects()
+        enabled_tools = self.get_filtered_tools_for_current_mode()
 
         loop_count = 0
         pending_tool_calls = tool_calls
@@ -670,13 +706,18 @@ class MCPClient:
                 # Simple and readable
                 prompt_text = f"{model_name}"
 
+                # Add mode indicator (PLAN or ACT)
+                mode_indicator = "[PLAN]" if self.plan_mode else "[ACT]"
+                prompt_text += f"/{mode_indicator}"
+
                 # Add thinking indicator
                 if self.thinking_mode and await self.supports_thinking_mode():
                     prompt_text += "/show-thinking" if self.show_thinking else "/thinking"
 
-                # Add tool count
-                if tool_count > 0:
-                    prompt_text += f"/{tool_count}-tool" if tool_count == 1 else f"/{tool_count}-tools"
+                # Add tool count (show filtered count in PLAN mode)
+                filtered_tool_count = len(self.get_filtered_tools_for_current_mode())
+                if filtered_tool_count > 0:
+                    prompt_text += f"/{filtered_tool_count}-tool" if filtered_tool_count == 1 else f"/{filtered_tool_count}-tools"
 
             user_input = await self.prompt_session.prompt_async(
                 f"{prompt_text}❯ ",
@@ -766,6 +807,10 @@ class MCPClient:
 
                 if query.lower() in ['loop-limit', 'll']:
                     await self.set_loop_limit()
+                    continue
+
+                if query in ['#TOGGLE_PLAN_MODE#'] or query.lower() in ['plan-mode', 'pm']:
+                    self.toggle_plan_mode()
                     continue
 
                 if query.lower() in ['show-tool-execution', 'ste']:
@@ -927,7 +972,9 @@ class MCPClient:
             "• Type [bold]show-metrics[/bold] or [bold]sm[/bold] to toggle performance metrics display\n\n"
 
             "[bold cyan]Agent Mode:[/bold cyan] [bold magenta](New!)[/bold magenta]\n"
-            "• Type [bold]loop-limit[/bold] or [bold]ll[/bold] to set the maximum tool loop iterations\n\n"
+            "• Type [bold]loop-limit[/bold] or [bold]ll[/bold] to set the maximum tool loop iterations\n"
+            "• Type [bold]plan-mode[/bold] or [bold]pm[/bold] to toggle between PLAN (read-only) and ACT (full access) modes\n"
+            "• Press [bold]Shift+Tab[/bold] to quickly toggle between PLAN and ACT modes\n\n"
 
             "[bold cyan]MCP Servers and Tools:[/bold cyan]\n"
             "• Type [bold]tools[/bold] or [bold]t[/bold] to configure tools\n"
@@ -1065,6 +1112,81 @@ class MCPClient:
             self.console.print(f"[green]🤖 Agent loop limit set to {self.loop_limit}![/green]")
         except ValueError:
             self.console.print("[red]Invalid loop limit. Please enter a positive integer.[/red]")
+
+    def toggle_plan_mode(self):
+        """Toggle between PLAN and ACT modes"""
+        # Get current system prompt before toggling
+        current_prompt = self.model_config_manager.get_system_prompt()
+
+        if not self.plan_mode:
+            # Switching to PLAN mode
+            self.plan_mode = True
+            # Backup the ACT mode system prompt
+            self.act_mode_system_prompt = current_prompt
+
+            # Create plan mode system prompt
+            plan_mode_prompt = """You are in PLAN mode. Your role is to help the user think through problems and plan solutions WITHOUT making any changes.
+
+IMPORTANT RESTRICTIONS IN PLAN MODE:
+- DO NOT write files
+- DO NOT execute code or bash commands
+- DO NOT create or delete directories
+- DO NOT make any modifications to the system
+- You can ONLY read files, list directories, and analyze information
+
+Your purpose in PLAN mode is to:
+1. Help analyze the current state by reading files and exploring the codebase
+2. Think through the problem and potential solutions
+3. Create detailed plans and strategies
+4. Discuss trade-offs and approaches
+
+If the user asks you to make changes, remind them to switch to ACT mode (Shift+Tab) first.
+"""
+            # Append to existing prompt if one exists
+            if current_prompt:
+                plan_mode_prompt = current_prompt + "\n\n" + plan_mode_prompt
+
+            self.model_config_manager.set_system_prompt(plan_mode_prompt)
+            self.console.print("[bold yellow]📋 PLAN MODE activated![/bold yellow]")
+            self.console.print("[cyan]Write operations are disabled. Use Shift+Tab to switch to ACT mode.[/cyan]")
+        else:
+            # Switching to ACT mode
+            self.plan_mode = False
+            # Restore the ACT mode system prompt
+            if self.act_mode_system_prompt is not None:
+                self.model_config_manager.set_system_prompt(self.act_mode_system_prompt)
+            else:
+                # If no backup exists, clear the plan mode prompt
+                if current_prompt and "PLAN mode" in current_prompt:
+                    # Try to extract original prompt before plan mode text
+                    parts = current_prompt.split("\n\nYou are in PLAN mode.")
+                    if len(parts) > 1:
+                        self.model_config_manager.set_system_prompt(parts[0] if parts[0] else None)
+                    else:
+                        self.model_config_manager.set_system_prompt(None)
+
+            self.console.print("[bold green]✅ ACT MODE activated![/bold green]")
+            self.console.print("[cyan]All tools are now available. Use Shift+Tab to switch to PLAN mode.[/cyan]")
+
+    def get_filtered_tools_for_current_mode(self) -> List:
+        """Get tools filtered based on current mode (PLAN vs ACT)
+
+        Returns:
+            List of enabled tools appropriate for the current mode
+        """
+        enabled_tools = self.tool_manager.get_enabled_tool_objects()
+
+        if not self.plan_mode:
+            # ACT mode: return all enabled tools
+            return enabled_tools
+
+        # PLAN mode: filter out write operations
+        filtered_tools = [
+            tool for tool in enabled_tools
+            if tool.name not in self.plan_mode_disabled_tools
+        ]
+
+        return filtered_tools
 
     def clear_context(self):
         """Clear conversation history and token count"""
