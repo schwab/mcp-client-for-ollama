@@ -20,7 +20,7 @@
     "builtin.execute_python_code",
     "builtin.delete_file"
   ],
-  "max_context_tokens": 16384,
+  "max_context_tokens": 32768,
   "loop_limit": 3,
   "temperature": 0.5,
   "planning_hints": "Assign CODER tasks when you need to: create new files, modify existing code, refactor code, add features, fix bugs in code (not runtime errors). CODER can read and write files but cannot execute them."

@@ -1,0 +1,4 @@
+## Features
+- [ ] Hide the help panel by default (should just have one line of text in the startup message that says how to show it)
+- [  ] Monitor progress Agent - this agent should be tasked with deciding if an agent's output appearst to match it's expected output. If an agent fails this information needs to be re-submitted to the planner where it can used to try another approach. The planner will need to have the ability to retry another agent to solve the problem or modify the prompt etc.
+- [ ] Create the Scribe Agent - this agent takes the output of another agent and writes it to a tmp folder. The idea here is that for planners, these files can serve as staging grounds for the agent output so they do not attempt to overwrite existing files. When changes are needed to existing files, the scribe should write git hub style diff or patch file.
