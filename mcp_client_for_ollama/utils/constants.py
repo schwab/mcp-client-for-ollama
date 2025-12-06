@@ -6,7 +6,7 @@ import os
 DEFAULT_CLAUDE_CONFIG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 
 # Default config directory and filename for MCP client for Ollama
-DEFAULT_CONFIG_DIR = os.path.expanduser("~/.config/ollmcp")
+DEFAULT_CONFIG_DIR = ".config"
 if not os.path.exists(DEFAULT_CONFIG_DIR):
     os.makedirs(DEFAULT_CONFIG_DIR)
 

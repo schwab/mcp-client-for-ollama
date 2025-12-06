@@ -30,6 +30,7 @@ from .utils.tool_display import ToolDisplayManager
 from .utils.hil_manager import HumanInTheLoopManager
 from .utils.fzf_style_completion import FZFStyleCompleter
 from .utils.tool_parser import ToolParser
+from .agents.delegation_client import DelegationClient
 
 
 class MCPClient:
@@ -105,12 +106,19 @@ class MCPClient:
             "builtin.set_system_prompt"  # Disable system prompt changes in plan mode
         }
 
+        # Track auto-loaded files for startup message
+        self.auto_loaded_files = []
+
         # Store server connection parameters for reloading
         self.server_connection_params = {
             'server_paths': None,
             'config_path': None,
             'auto_discovery': False
         }
+
+        # Agent delegation settings
+        self.delegation_client = None  # Lazy initialization
+        self.delegation_enabled = False
 
     def _create_key_bindings(self) -> KeyBindings:
         """Create keyboard bindings for the application"""
@@ -210,6 +218,32 @@ class MCPClient:
         except Exception as e:
             # Silently fail - this is optional functionality
             return None
+
+    async def apply_project_context(self):
+        """Load and apply project context from .config/CLAUDE.md to the system prompt.
+
+        This should be called after other configuration is loaded so that the project
+        context is prepended to any existing system prompt.
+        """
+        project_context = await self.load_project_context()
+        if project_context:
+            # Get current system prompt (if any)
+            current_prompt = self.model_config_manager.get_system_prompt()
+
+            # Prepend the project context to the system prompt
+            # This gives project-specific context priority
+            if current_prompt:
+                combined_prompt = f"{project_context}\n\n{current_prompt}"
+            else:
+                combined_prompt = project_context
+
+            self.model_config_manager.set_system_prompt(combined_prompt)
+
+            # Track auto-loaded file
+            self.auto_loaded_files.append(f"{self.session_save_directory}/CLAUDE.md")
+
+            # Notify user that project context was loaded
+            self.console.print(f"[green]📋 Loaded project context from {self.session_save_directory}/CLAUDE.md[/green]")
 
     async def load_session(self):
         """Load a chat history from a named session file using builtin file operations."""
@@ -467,24 +501,6 @@ class MCPClient:
         # If a system prompt was loaded from the config, set it in the ModelConfigManager
         if system_prompt_from_config:
             self.model_config_manager.set_system_prompt(system_prompt_from_config)
-
-        # Load project context from .config/CLAUDE.md if it exists
-        project_context = await self.load_project_context()
-        if project_context:
-            # Get current system prompt (if any)
-            current_prompt = self.model_config_manager.get_system_prompt()
-
-            # Prepend the project context to the system prompt
-            # This gives project-specific context priority
-            if current_prompt:
-                combined_prompt = f"{project_context}\n\n{current_prompt}"
-            else:
-                combined_prompt = project_context
-
-            self.model_config_manager.set_system_prompt(combined_prompt)
-
-            # Notify user that project context was loaded
-            self.console.print(f"[green]📋 Loaded project context from {self.session_save_directory}/CLAUDE.md[/green]")
 
     def select_tools(self):
         """Let the user select which tools to enable using interactive prompts with server-based grouping"""
@@ -973,6 +989,41 @@ class MCPClient:
                     self._display_chat_history()
                     continue
 
+                # Handle delegation command
+                if query.lower().startswith('delegate ') or query.lower().startswith('d '):
+                    # Extract the actual query after the command
+                    if query.lower().startswith('delegate '):
+                        actual_query = query[9:].strip()
+                    else:  # 'd '
+                        actual_query = query[2:].strip()
+
+                    if len(actual_query) < 5:
+                        self.console.print("[yellow]Delegation query must be at least 5 characters long.[/yellow]")
+                        continue
+
+                    try:
+                        # Get or create delegation client
+                        delegation_client = self.get_delegation_client()
+
+                        # Process with delegation
+                        response = await delegation_client.process_with_delegation(actual_query)
+
+                        # Display response
+                        self.console.print("\n[bold green]📋 Final Response:[/bold green]")
+                        self.console.print(Panel(Markdown(response), border_style="green", expand=False))
+
+                        # Add to chat history
+                        self.chat_history.append({
+                            "query": f"[DELEGATED] {actual_query}",
+                            "response": response
+                        })
+
+                    except Exception as e:
+                        self.console.print(f"[bold red]Delegation error:[/bold red] {str(e)}")
+                        self.console.print_exception()
+
+                    continue
+
                 # Check if query is too short and not a special command
                 if len(query.strip()) < 5:
                     self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
@@ -1028,6 +1079,11 @@ class MCPClient:
             "• Type [bold]loop-limit[/bold] or [bold]ll[/bold] to set the maximum tool loop iterations\n"
             "• Type [bold]plan-mode[/bold] or [bold]pm[/bold] to toggle between PLAN (read-only) and ACT (full access) modes\n"
             "• Press [bold]Shift+Tab[/bold] to quickly toggle between PLAN and ACT modes\n\n"
+
+            "[bold cyan]Agent Delegation:[/bold cyan] [bold magenta](MVP)[/bold magenta]\n"
+            "• Type [bold]delegate <query>[/bold] or [bold]d <query>[/bold] to use multi-agent delegation\n"
+            "• Agent delegation breaks down complex tasks into focused subtasks for specialized agents\n"
+            "• Best for: multi-file edits, complex refactoring, or tasks requiring multiple steps\n\n"
 
             "[bold cyan]MCP Servers and Tools:[/bold cyan]\n"
             "• Type [bold]tools[/bold] or [bold]t[/bold] to configure tools\n"
@@ -1225,6 +1281,33 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             self.console.print("[bold green]✅ ACT MODE activated![/bold green]")
             self.console.print("[cyan]All tools are now available. Use Shift+Tab to switch to PLAN mode.[/cyan]")
 
+    def get_delegation_client(self):
+        """
+        Get or create the delegation client.
+
+        For MVP, we recreate the delegation client each time to ensure
+        it uses the current model selection. This will be optimized in
+        future phases to update the model pool dynamically.
+
+        Returns:
+            DelegationClient instance
+        """
+        # Always use the current model (don't cache for MVP)
+        # This ensures model changes are reflected in delegation
+        config = {
+            'planner_model': None,  # Will fall back to current model
+            'model_pool': [{
+                'url': DEFAULT_OLLAMA_HOST,  # Use the default host from constants
+                'model': self.model_manager.get_current_model(),
+                'max_concurrent': 1
+            }],
+            'execution_mode': 'sequential',  # MVP: sequential only
+            'max_parallel_tasks': 1,
+            'task_timeout': 300
+        }
+
+        return DelegationClient(self, config)
+
     def get_filtered_tools_for_current_mode(self) -> List:
         """Get tools filtered based on current mode (PLAN vs ACT)
 
@@ -1281,11 +1364,25 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         if self.config_manager.config_exists("default"):
             # self.console.print("[cyan]Default configuration found, loading...[/cyan]")
             self.default_configuration_status = self.load_configuration("default")
+            if self.default_configuration_status:
+                self.auto_loaded_files.append("~/.config/ollmcp/config.json")
 
     def print_auto_load_default_config_status(self):
-        """Print the status of the auto-load default configuration."""
-        if self.default_configuration_status:
-            self.console.print("[green] ✓ Default configuration loaded successfully![/green]")
+        """Print the status of the auto-load default configuration and any auto-loaded files."""
+        if self.default_configuration_status or self.auto_loaded_files:
+            # Build the status message
+            if self.default_configuration_status:
+                message = "[green] ✓ Default configuration loaded successfully!"
+            else:
+                message = "[green] ✓ Auto-loaded configuration"
+
+            # Add list of auto-loaded files if any
+            if self.auto_loaded_files:
+                files_list = ", ".join(self.auto_loaded_files)
+                message += f" ({files_list})"
+
+            message += "[/green]"
+            self.console.print(message)
             self.console.print()
 
     def save_configuration(self, config_name=None):
@@ -1609,6 +1706,7 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
     default_config_json = ".config/config.json"
     if not servers_json and os.path.exists(default_config_json):
         config_path = default_config_json
+        client.auto_loaded_files.append(default_config_json)
         console.print(f"[green]📋 Auto-loading server configuration from {default_config_json}[/green]")
 
     if servers_json:
@@ -1643,6 +1741,9 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
     try:
         await client.connect_to_servers(mcp_server, mcp_server_url, config_path, auto_discovery_final)
         client.auto_load_default_config()
+
+        # Load project context after configuration to ensure it's not overwritten
+        await client.apply_project_context()
 
         # If model was explicitly provided via CLI flag (not default), override any loaded config
         if model != DEFAULT_MODEL:

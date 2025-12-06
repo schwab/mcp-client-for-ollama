@@ -60,6 +60,7 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 
 ## Features
 
+- 🎯 **Agent Delegation System**: Break down complex multi-file tasks into focused subtasks executed by specialized agents (READER, CODER, EXECUTOR, RESEARCHER, DEBUGGER). Perfect for small models with limited context windows! ([docs](misc/agent-delegation-user-guide.md))
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
 - ✨**NEW** **Auto-Load Configuration**: Automatically load project context from `.config/CLAUDE.md` and server configuration from `.config/config.json` on startup ([docs](misc/auto_load_configuration.md))
 - ✨**NEW** **Save and Load Session**: Save and load your chat session, including history.
@@ -751,6 +752,38 @@ Some models may request multiple tool calls in a single conversation. The client
 #### Agent Mode Quick Demo:
 
 [![asciicast](https://asciinema.org/a/476qpEamCX9TFQt4jNEXIgHxS.svg)](https://asciinema.org/a/476qpEamCX9TFQt4jNEXIgHxS)
+
+### Agent Delegation System
+
+For complex multi-file tasks, the **Agent Delegation System** breaks down your query into focused subtasks executed by specialized agents. This is particularly powerful for **small models (7B-14B)** with limited context windows.
+
+**How it works:**
+1. A **PLANNER** agent analyzes your query and creates a task breakdown
+2. Specialized agents execute each task with minimal context requirements
+3. Results are aggregated into a final comprehensive response
+
+**Available agent types:**
+- **PLANNER** - Decomposes complex queries into subtasks
+- **READER** - Reads and analyzes code (read-only)
+- **CODER** - Writes and modifies code files
+- **EXECUTOR** - Runs bash commands and Python scripts
+- **RESEARCHER** - Analyzes and summarizes information
+- **DEBUGGER** - Fixes errors and debugs code
+
+**Usage:**
+```bash
+delegate scan all md files in misc, read and summarize each, create executive summary
+# or use the short form:
+d refactor authentication across multiple files
+```
+
+**Benefits:**
+- ✅ Small models (qwen2.5:7b, qwen2.5-coder:14b) handle complex tasks efficiently
+- ✅ Faster execution - parallel-capable task breakdown
+- ✅ Better success rate - focused agents avoid context overflow
+- ✅ Extensible - add new agent types via JSON definition files
+
+**📚 [Read the full documentation](misc/agent-delegation-user-guide.md)** for detailed usage, configuration, and examples.
 
 ## Where Can I Find More MCP Servers?
 

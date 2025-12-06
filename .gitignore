@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Config directory - track CLAUDE.md, ignore JSON files
+.config/*.json          # Ignores session files and config.json (local configs)
+!.config/CLAUDE.md      # But track CLAUDE.md (project documentation)
