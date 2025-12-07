@@ -29,17 +29,11 @@ Homepage = "https://github.com/jonigl/mcp-client-for-ollama"
 Issues = "https://github.com/jonigl/mcp-client-for-ollama/issues"
 
 [tool.setuptools]
-packages = [
-    "mcp_client_for_ollama",
-    "mcp_client_for_ollama.agents",
-    "mcp_client_for_ollama.config",
-    "mcp_client_for_ollama.models",
-    "mcp_client_for_ollama.server",
-    "mcp_client_for_ollama.tools",
-    "mcp_client_for_ollama.utils"
-]
+# Use find to automatically discover all Python packages
+packages = {find = {}}
 
 [tool.setuptools.package-data]
+# Include JSON files from agents subdirectories
 "mcp_client_for_ollama.agents" = ["definitions/*.json", "examples/*.json"]
 
 [dependency-groups]
