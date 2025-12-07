@@ -136,6 +136,36 @@ Testing Planner Improvements
 
 ---
 
+## Bug Fixes
+
+### 🔧 Fixed Missing Agents Module in Package Distribution
+
+**Issue:** When installing via `pip install` or `uv pip install`, the application would fail with:
+```
+ModuleNotFoundError: No module named 'mcp_client_for_ollama.agents'
+```
+
+**Root Cause:** The `agents` subpackage and its JSON configuration files were not included in the wheel/sdist packages because `pyproject.toml` was missing the package declaration.
+
+**Fix:**
+1. Added `mcp_client_for_ollama.agents` to the `[tool.setuptools] packages` list
+2. Added package data configuration to include JSON files:
+   ```toml
+   [tool.setuptools.package-data]
+   "mcp_client_for_ollama.agents" = ["definitions/*.json", "examples/*.json"]
+   ```
+
+**Impact:** System-wide installations now work correctly. All 10 agent definitions and 15 planning examples are included in the distribution.
+
+**Verification:** After installation, the following command should succeed:
+```bash
+python -c "from mcp_client_for_ollama.agents import DelegationClient; print('✅ OK')"
+```
+
+See [`INSTALLATION_FIX.md`](../INSTALLATION_FIX.md) for detailed installation instructions.
+
+---
+
 ## Breaking Changes
 
 None. All changes are backward compatible.
