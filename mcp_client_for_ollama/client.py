@@ -830,7 +830,15 @@ class MCPClient:
     async def chat_loop(self):
         """Run an interactive chat loop"""
         self.clear_console()
-        self.console.print(Panel(Text.from_markup("[bold green]Welcome to the MCP Client for Ollama 🦙[/bold green]", justify="center"), expand=True, border_style="green"))
+        self.console.print(Panel(
+            Text.from_markup(
+                f"[bold green]Welcome to the MCP Client for Ollama 🦙[/bold green]\n"
+                f"[dim]Version {__version__}[/dim]",
+                justify="center"
+            ),
+            expand=True,
+            border_style="green"
+        ))
         self.display_available_tools()
         self.display_current_model()
         # Show minimal help hint instead of full help dialog
