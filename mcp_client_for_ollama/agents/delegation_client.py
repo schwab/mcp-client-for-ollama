@@ -8,7 +8,8 @@ the delegation workflow: planning, task execution, and result aggregation.
 import asyncio
 import json
 import re
-from typing import Dict, List, Optional, Any, Set
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Set, Tuple
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -73,6 +74,102 @@ class DelegationClient:
         # Task tracking
         self.tasks: Dict[str, Task] = {}
         self.task_counter = 0
+
+        # Load planning examples for few-shot learning
+        self.planner_examples = self._load_planner_examples()
+
+    def _load_planner_examples(self) -> List[Dict[str, Any]]:
+        """
+        Load planning examples from the examples directory for few-shot learning.
+
+        Returns:
+            List of example planning scenarios, or empty list if file not found
+        """
+        try:
+            examples_path = Path(__file__).parent / "examples" / "planner_examples.json"
+            if not examples_path.exists():
+                return []
+
+            with open(examples_path, 'r') as f:
+                data = json.load(f)
+                return data.get('examples', [])
+        except Exception as e:
+            # Don't fail if examples can't be loaded, just log and continue
+            self.console.print(f"[dim yellow]Note: Could not load planner examples: {e}[/dim yellow]")
+            return []
+
+    def _select_relevant_examples(self, query: str, max_examples: int = 2) -> List[Dict[str, Any]]:
+        """
+        Select the most relevant planning examples for the given query.
+
+        Uses keyword matching to find examples from similar task categories.
+
+        Args:
+            query: The user's query
+            max_examples: Maximum number of examples to return
+
+        Returns:
+            List of relevant example dictionaries
+        """
+        if not self.planner_examples:
+            return []
+
+        # Category keywords for matching
+        category_keywords = {
+            'multi-file-read': ['read', 'scan', 'list', 'show', 'summarize', 'files', 'all'],
+            'code-modification': ['add', 'modify', 'update', 'change', 'implement', 'create'],
+            'debugging': ['fix', 'bug', 'error', 'issue', 'broken', 'debug', 'investigate'],
+            'refactoring': ['refactor', 'restructure', 'reorganize', 'clean', 'improve'],
+            'testing': ['test', 'verify', 'check', 'validate', 'coverage'],
+            'research': ['understand', 'how does', 'explain', 'analyze', 'find', 'search'],
+            'documentation': ['document', 'doc', 'readme', 'api doc', 'write doc'],
+            'feature-implementation': ['add feature', 'implement', 'new feature'],
+            'music-creation': ['song', 'lyrics', 'music', 'suno', 'write song'],
+            'note-taking': ['obsidian', 'note', 'markdown note', 'create note'],
+            'analysis-with-execution': ['profile', 'benchmark', 'performance', 'analyze'],
+            'simple-read': ['what does', 'what is', 'show me', 'read'],
+            'simple-execute': ['run', 'execute', 'test suite'],
+            'bug-investigation': ['investigate', 'debug', 'error', '500', 'failure'],
+            'parallel-independent': ['and', 'both', 'generate and', 'write and']
+        }
+
+        # Score each example by keyword relevance
+        query_lower = query.lower()
+        query_words = set(query_lower.split())
+        scored_examples = []
+
+        for example in self.planner_examples:
+            score = 0
+            category = example.get('category', '')
+
+            # Exact category match bonus
+            if category in query_lower:
+                score += 10
+
+            # Keyword matching
+            keywords = category_keywords.get(category, [])
+            for keyword in keywords:
+                if keyword in query_lower:
+                    score += 2
+                # Partial word match
+                if any(keyword in word for word in query_words):
+                    score += 1
+
+            scored_examples.append((score, example))
+
+        # Sort by score (highest first) and take top examples
+        scored_examples.sort(reverse=True, key=lambda x: x[0])
+
+        # Filter to only examples with score > 0, or take simple examples as fallback
+        relevant = [ex for score, ex in scored_examples if score > 0][:max_examples]
+
+        # If no relevant examples found, provide simple examples as fallback
+        if not relevant and self.planner_examples:
+            simple_categories = ['simple-read', 'simple-execute']
+            relevant = [ex for ex in self.planner_examples
+                       if ex.get('category') in simple_categories][:max_examples]
+
+        return relevant
 
     async def process_with_delegation(self, user_query: str) -> str:
         """
@@ -142,23 +239,43 @@ class DelegationClient:
         if not planner_config:
             raise Exception("PLANNER agent configuration not found")
 
-        # Build planning context
-        available_agents = [
-            f"- {agent_type}: {config.description}"
-            for agent_type, config in self.agent_configs.items()
-            if agent_type != 'PLANNER'
-        ]
+        # Build planning context with descriptions and hints
+        available_agents = []
+        for agent_type, config in self.agent_configs.items():
+            if agent_type == 'PLANNER':
+                continue
+
+            agent_info = f"- {agent_type}: {config.description}"
+
+            # Add planning hints if available (helps planner know when to use this agent)
+            if config.planning_hints:
+                agent_info += f"\n  Usage: {config.planning_hints}"
+
+            available_agents.append(agent_info)
+
+        # Select relevant examples for few-shot learning
+        relevant_examples = self._select_relevant_examples(query, max_examples=2)
+
+        # Build few-shot examples section
+        examples_section = ""
+        if relevant_examples:
+            examples_section = "\n\nHERE ARE EXAMPLE TASK PLANS TO GUIDE YOU:\n"
+            for i, example in enumerate(relevant_examples, 1):
+                examples_section += f"\nExample {i}:\n"
+                examples_section += f"Query: \"{example['query']}\"\n"
+                examples_section += f"Plan:\n{json.dumps(example['plan'], indent=2)}\n"
 
         planning_prompt = f"""
 {planner_config.system_prompt}
 
 Available agents:
 {chr(10).join(available_agents)}
+{examples_section}
 
-User request:
+Now create a plan for this user request:
 {query}
 
-Please break this down into focused subtasks. Output valid JSON only.
+Remember: Output ONLY valid JSON following the format shown above. No markdown, no additional text.
 """
 
         # Get planner model (configurable or fallback to current)
@@ -198,10 +315,103 @@ Please break this down into focused subtasks. Output valid JSON only.
         if not isinstance(task_plan, dict) or 'tasks' not in task_plan:
             raise Exception(f"Invalid plan structure. Expected dict with 'tasks' key, got: {type(task_plan)}")
 
+        # Validate plan quality
+        is_valid, error_msg = self._validate_plan_quality(task_plan)
+        if not is_valid:
+            self.console.print(f"[yellow]⚠️  Plan quality warning: {error_msg}[/yellow]")
+            # Don't fail, just warn - let execution attempt to proceed
+
         # Display plan
         self._display_plan(task_plan)
 
         return task_plan
+
+    def _validate_plan_quality(self, plan: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Validate that the plan meets quality standards.
+
+        Args:
+            plan: The task plan dictionary
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        tasks = plan.get('tasks', [])
+
+        # Check 1: Reasonable task count (should have at least 1, max 12 tasks)
+        if len(tasks) == 0:
+            return False, "Plan has no tasks"
+        if len(tasks) > 12:
+            return False, f"Plan too complex - has {len(tasks)} tasks (recommend max 8)"
+
+        # Check 2: All tasks have required fields
+        required_fields = ['id', 'description', 'agent_type']
+        for i, task in enumerate(tasks):
+            for field in required_fields:
+                if field not in task or not task[field]:
+                    return False, f"Task {i+1} missing required field: {field}"
+
+        # Check 3: Valid agent types
+        valid_agents = set(self.agent_configs.keys())
+        valid_agents.discard('PLANNER')  # PLANNER shouldn't be used in execution
+        for i, task in enumerate(tasks):
+            agent_type = task.get('agent_type', '')
+            if agent_type not in valid_agents:
+                return False, f"Task {i+1} has invalid agent_type: {agent_type} (valid: {', '.join(sorted(valid_agents))})"
+
+        # Check 4: No circular dependencies
+        if self._has_circular_dependencies(tasks):
+            return False, "Plan has circular dependencies"
+
+        # Check 5: Dependencies reference valid task IDs
+        task_ids = {task['id'] for task in tasks}
+        for i, task in enumerate(tasks):
+            deps = task.get('dependencies', [])
+            for dep_id in deps:
+                if dep_id not in task_ids:
+                    return False, f"Task {i+1} depends on non-existent task: {dep_id}"
+
+        return True, ""
+
+    def _has_circular_dependencies(self, tasks: List[Dict[str, Any]]) -> bool:
+        """
+        Check if the task plan has circular dependencies.
+
+        Args:
+            tasks: List of task dictionaries
+
+        Returns:
+            True if circular dependencies exist, False otherwise
+        """
+        # Build dependency graph
+        graph = {task['id']: task.get('dependencies', []) for task in tasks}
+
+        # DFS to detect cycles
+        visited = set()
+        rec_stack = set()
+
+        def has_cycle(node: str) -> bool:
+            visited.add(node)
+            rec_stack.add(node)
+
+            # Check all dependencies
+            for dep in graph.get(node, []):
+                if dep not in visited:
+                    if has_cycle(dep):
+                        return True
+                elif dep in rec_stack:
+                    return True
+
+            rec_stack.remove(node)
+            return False
+
+        # Check each task
+        for task_id in graph.keys():
+            if task_id not in visited:
+                if has_cycle(task_id):
+                    return True
+
+        return False
 
     def create_tasks_from_plan(self, task_plan: Dict[str, Any]) -> List[Task]:
         """

@@ -1,0 +1,441 @@
+{
+  "description": "High-quality example task plans for few-shot learning. These examples teach the PLANNER how to decompose different types of queries effectively.",
+  "version": "1.0",
+  "examples": [
+    {
+      "category": "multi-file-read",
+      "query": "Read all markdown files in misc/ and summarize their content",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "List all .md files in misc/ directory",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "List of markdown file paths in misc/"
+          },
+          {
+            "id": "task_2",
+            "description": "Read each markdown file in misc/ and extract key points",
+            "agent_type": "READER",
+            "dependencies": ["task_1"],
+            "expected_output": "Summary of content from each markdown file"
+          },
+          {
+            "id": "task_3",
+            "description": "Create consolidated summary of all markdown files",
+            "agent_type": "RESEARCHER",
+            "dependencies": ["task_2"],
+            "expected_output": "Executive summary combining insights from all files"
+          }
+        ]
+      }
+    },
+    {
+      "category": "code-modification",
+      "query": "Add error handling to API endpoints in src/api/ and write tests",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Identify all API endpoint files in src/api/",
+            "agent_type": "RESEARCHER",
+            "dependencies": [],
+            "expected_output": "List of API endpoint file paths with brief descriptions"
+          },
+          {
+            "id": "task_2",
+            "description": "Add try-catch error handling to each API endpoint",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Updated endpoint files with comprehensive error handling"
+          },
+          {
+            "id": "task_3",
+            "description": "Write unit tests for error scenarios in each endpoint",
+            "agent_type": "CODER",
+            "dependencies": ["task_2"],
+            "expected_output": "Test files covering error cases for all endpoints"
+          },
+          {
+            "id": "task_4",
+            "description": "Run test suite and verify all tests pass",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_3"],
+            "expected_output": "Test results showing all error handling tests passing"
+          }
+        ]
+      }
+    },
+    {
+      "category": "debugging",
+      "query": "Fix the authentication bug in src/auth.py and verify the fix works",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Analyze src/auth.py to identify the authentication bug",
+            "agent_type": "DEBUGGER",
+            "dependencies": [],
+            "expected_output": "Root cause analysis with specific line numbers and fix strategy"
+          },
+          {
+            "id": "task_2",
+            "description": "Apply fix to authentication logic in src/auth.py",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Fixed authentication code with bug resolved"
+          },
+          {
+            "id": "task_3",
+            "description": "Run authentication tests to verify fix",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_2"],
+            "expected_output": "Test results confirming authentication bug is fixed"
+          }
+        ]
+      }
+    },
+    {
+      "category": "research",
+      "query": "Understand how the caching system works across the codebase",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Search codebase for cache-related files and patterns",
+            "agent_type": "RESEARCHER",
+            "dependencies": [],
+            "expected_output": "List of files implementing caching with brief descriptions"
+          },
+          {
+            "id": "task_2",
+            "description": "Read and analyze main caching implementation files",
+            "agent_type": "READER",
+            "dependencies": ["task_1"],
+            "expected_output": "Detailed explanation of caching architecture and mechanisms"
+          },
+          {
+            "id": "task_3",
+            "description": "Document cache usage patterns and data flow",
+            "agent_type": "RESEARCHER",
+            "dependencies": ["task_2"],
+            "expected_output": "Comprehensive documentation of how caching works in the system"
+          }
+        ]
+      }
+    },
+    {
+      "category": "refactoring",
+      "query": "Refactor the user service module to use async/await throughout",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Read user service files to understand current implementation",
+            "agent_type": "READER",
+            "dependencies": [],
+            "expected_output": "Analysis of current sync code structure and dependencies"
+          },
+          {
+            "id": "task_2",
+            "description": "Convert user service functions to async/await",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Refactored user service with async/await pattern"
+          },
+          {
+            "id": "task_3",
+            "description": "Update all callers of user service to use await",
+            "agent_type": "CODER",
+            "dependencies": ["task_2"],
+            "expected_output": "Updated calling code compatible with async user service"
+          },
+          {
+            "id": "task_4",
+            "description": "Run tests to verify refactoring didn't break functionality",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_3"],
+            "expected_output": "Test results confirming all functionality still works"
+          }
+        ]
+      }
+    },
+    {
+      "category": "testing",
+      "query": "Write comprehensive tests for the database layer and run them",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Read database layer code to understand what needs testing",
+            "agent_type": "READER",
+            "dependencies": [],
+            "expected_output": "List of database functions, edge cases, and test scenarios"
+          },
+          {
+            "id": "task_2",
+            "description": "Write unit tests covering all database operations",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Comprehensive test suite for database layer"
+          },
+          {
+            "id": "task_3",
+            "description": "Run database tests and report results",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_2"],
+            "expected_output": "Test execution results with coverage metrics"
+          }
+        ]
+      }
+    },
+    {
+      "category": "documentation",
+      "query": "Create documentation for the REST API endpoints",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Search for all API endpoint definitions in the codebase",
+            "agent_type": "RESEARCHER",
+            "dependencies": [],
+            "expected_output": "Complete list of API endpoints with routes and methods"
+          },
+          {
+            "id": "task_2",
+            "description": "Read endpoint implementations to extract parameters and responses",
+            "agent_type": "READER",
+            "dependencies": ["task_1"],
+            "expected_output": "Detailed specification of each endpoint's behavior"
+          },
+          {
+            "id": "task_3",
+            "description": "Write API documentation in markdown format",
+            "agent_type": "CODER",
+            "dependencies": ["task_2"],
+            "expected_output": "Complete API documentation file with examples"
+          }
+        ]
+      }
+    },
+    {
+      "category": "feature-implementation",
+      "query": "Add logging to all database operations with proper error handling",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Identify all database operation files and functions",
+            "agent_type": "RESEARCHER",
+            "dependencies": [],
+            "expected_output": "List of files containing database operations"
+          },
+          {
+            "id": "task_2",
+            "description": "Add logging statements to database operations with appropriate levels",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Database files updated with logging at entry, exit, and error points"
+          },
+          {
+            "id": "task_3",
+            "description": "Add error handling around database calls to log failures",
+            "agent_type": "CODER",
+            "dependencies": ["task_2"],
+            "expected_output": "Enhanced error handling with detailed error logging"
+          },
+          {
+            "id": "task_4",
+            "description": "Test database operations and verify logging output",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_3"],
+            "expected_output": "Test results showing proper logging for both success and error cases"
+          }
+        ]
+      }
+    },
+    {
+      "category": "music-creation",
+      "query": "Write a sad indie breakup song about lost love and create a Suno-ready file",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Write song lyrics for a sad indie breakup song about lost love",
+            "agent_type": "LYRICIST",
+            "dependencies": [],
+            "expected_output": "Complete song lyrics with verses, chorus, bridge in indie style"
+          },
+          {
+            "id": "task_2",
+            "description": "Design style prompt for sad indie acoustic sound",
+            "agent_type": "STYLE_DESIGNER",
+            "dependencies": [],
+            "expected_output": "120-character style prompt describing sad indie acoustic genre"
+          },
+          {
+            "id": "task_3",
+            "description": "Combine lyrics and style into Suno-ready formatted file",
+            "agent_type": "SUNO_COMPOSER",
+            "dependencies": ["task_1", "task_2"],
+            "expected_output": "Complete Suno AI music file with metatags and formatting"
+          }
+        ]
+      }
+    },
+    {
+      "category": "note-taking",
+      "query": "Summarize the design documents in misc/ and create an Obsidian note",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Read all design documents in misc/ directory",
+            "agent_type": "READER",
+            "dependencies": [],
+            "expected_output": "Summary of key points from each design document"
+          },
+          {
+            "id": "task_2",
+            "description": "Create Obsidian note with summaries, properties, and tags",
+            "agent_type": "OBSIDIAN",
+            "dependencies": ["task_1"],
+            "expected_output": "Formatted Obsidian markdown file with metadata and linked content"
+          }
+        ]
+      }
+    },
+    {
+      "category": "analysis-with-execution",
+      "query": "Profile the application performance and identify bottlenecks",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Run performance profiling tools on the application",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Raw profiling data showing execution times and resource usage"
+          },
+          {
+            "id": "task_2",
+            "description": "Analyze profiling results to identify performance bottlenecks",
+            "agent_type": "RESEARCHER",
+            "dependencies": ["task_1"],
+            "expected_output": "Analysis report highlighting slow functions and optimization opportunities"
+          },
+          {
+            "id": "task_3",
+            "description": "Read bottleneck code to understand why it's slow",
+            "agent_type": "READER",
+            "dependencies": ["task_2"],
+            "expected_output": "Detailed explanation of performance issues with root causes"
+          }
+        ]
+      }
+    },
+    {
+      "category": "simple-read",
+      "query": "What does the config.json file contain?",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Read config.json and explain its contents",
+            "agent_type": "READER",
+            "dependencies": [],
+            "expected_output": "Explanation of all configuration options in config.json"
+          }
+        ]
+      }
+    },
+    {
+      "category": "simple-execute",
+      "query": "Run the test suite and show me the results",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Execute the test suite and capture results",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Test execution results with pass/fail counts and any errors"
+          }
+        ]
+      }
+    },
+    {
+      "category": "bug-investigation",
+      "query": "The login endpoint is returning 500 errors, investigate and fix it",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Reproduce the login endpoint 500 error and capture logs",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Error logs and stack trace from failed login attempts"
+          },
+          {
+            "id": "task_2",
+            "description": "Debug login endpoint code to find root cause of 500 errors",
+            "agent_type": "DEBUGGER",
+            "dependencies": ["task_1"],
+            "expected_output": "Root cause analysis with specific code location causing errors"
+          },
+          {
+            "id": "task_3",
+            "description": "Fix the bug in login endpoint code",
+            "agent_type": "CODER",
+            "dependencies": ["task_2"],
+            "expected_output": "Fixed login endpoint code"
+          },
+          {
+            "id": "task_4",
+            "description": "Test login endpoint to verify 500 error is resolved",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_3"],
+            "expected_output": "Successful login endpoint responses with no errors"
+          }
+        ]
+      }
+    },
+    {
+      "category": "parallel-independent",
+      "query": "Generate API documentation and write unit tests for the auth module",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Read auth module code to understand API surface",
+            "agent_type": "READER",
+            "dependencies": [],
+            "expected_output": "Documentation of auth module's public API and behavior"
+          },
+          {
+            "id": "task_2",
+            "description": "Write API documentation for auth module",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Complete API documentation file"
+          },
+          {
+            "id": "task_3",
+            "description": "Write comprehensive unit tests for auth module",
+            "agent_type": "CODER",
+            "dependencies": ["task_1"],
+            "expected_output": "Test suite covering all auth module functions"
+          },
+          {
+            "id": "task_4",
+            "description": "Run auth module tests",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_3"],
+            "expected_output": "Test results showing coverage and pass/fail status"
+          }
+        ]
+      }
+    }
+  ]
+}
