@@ -596,11 +596,12 @@ class BuiltinToolManager:
                 for root, _, filenames in os.walk(resolved_path):
                     for filename in filenames:
                         full_path = os.path.join(root, filename)
-                        # Make path relative to the requested directory
-                        rel_path = os.path.relpath(full_path, resolved_path)
+                        # Make path relative to working directory (not the requested directory)
+                        rel_path = os.path.relpath(full_path, self.working_directory)
 
-                        # Apply gitignore filtering if enabled
-                        if respect_gitignore and self._is_ignored_by_gitignore(rel_path, resolved_path, False):
+                        # For gitignore check, we need path relative to resolved_path
+                        gitignore_rel_path = os.path.relpath(full_path, resolved_path)
+                        if respect_gitignore and self._is_ignored_by_gitignore(gitignore_rel_path, resolved_path, False):
                             continue
 
                         files.append(rel_path)
@@ -612,7 +613,9 @@ class BuiltinToolManager:
                         if respect_gitignore and self._is_ignored_by_gitignore(item, resolved_path, False):
                             continue
 
-                        files.append(item)
+                        # Make path relative to working directory
+                        rel_path = os.path.relpath(item_path, self.working_directory)
+                        files.append(rel_path)
 
             files.sort()
 

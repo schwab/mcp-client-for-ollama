@@ -34,4 +34,5 @@ packages = ["mcp_client_for_ollama", "mcp_client_for_ollama.config", "mcp_client
 [dependency-groups]
 dev = [
     "pytest~=8.4.2",
+    "pytest-asyncio~=0.24.0",
 ]

@@ -376,13 +376,34 @@ mcp_client_for_ollama/
 
 ## Future Enhancements (Post-MVP)
 
-1. **Agent Memory:** Persistent knowledge base per agent type
-2. **Agent Learning:** Track successful patterns, improve over time
-3. **Human-in-the-loop for Planning:** User approval before task execution
-4. **Task Templates:** Pre-defined task patterns for common operations
-5. **Streaming Results:** Show task progress in real-time
-6. **Multi-turn Delegation:** Planner can revise plan based on results
-7. **Agent Specialization:** Fine-tune small models for specific agent roles
+### High Priority
+1. **Unit Test Coverage:** Comprehensive tests for delegation system components (DelegationClient, Task, AgentConfig, ModelPool)
+2. **Parallel Task Execution:** Execute independent tasks concurrently using model pool
+3. **Error Recovery & Retry:** Automatic retry logic for failed tasks, partial recovery mechanisms
+
+### Medium Priority
+4. **Multi-modal Agent Support (VISION):** Add image handling capabilities
+   - Load images from folders with base64 encoding
+   - New VISION agent type for image analysis
+   - Support for vision models (llama3.2-vision, llava, bakllava)
+   - Builtin tools: `load_image`, `load_images_from_folder`
+   - Proper image payload packaging in Ollama API messages
+5. **Recursive Agent Delegation:** Allow agents to call other agents during execution
+   - New `builtin.delegate` tool for spawning sub-agents
+   - Recursion depth limits and safety controls
+   - Enables dynamic task discovery and agent collaboration
+6. **Better Result Aggregation:** Use dedicated AGGREGATOR agent instead of simple concatenation
+7. **Context Window Enforcement:** Validate and truncate large dependency results
+
+### Low Priority
+8. **Agent Memory:** Persistent knowledge base per agent type
+9. **Agent Learning:** Track successful patterns, improve over time
+10. **Human-in-the-loop for Planning:** User approval before task execution
+11. **Task Templates:** Pre-defined task patterns for common operations
+12. **Streaming Results:** Show task progress in real-time
+13. **Multi-turn Delegation:** Planner can revise plan based on results
+14. **Agent Specialization:** Fine-tune small models for specific agent roles
+15. **Auto-Detection:** Complexity heuristics to automatically trigger delegation
 
 ---
 
