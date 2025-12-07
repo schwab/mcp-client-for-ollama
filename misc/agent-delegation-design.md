@@ -290,7 +290,8 @@ mcp_client_for_ollama/
 ### Phase 3: Polish
 **Goal:** Production-ready delegation system
 
-- [ ] Add executor, debugger, researcher agent types
+- [x] Add executor, debugger, researcher agent types (DONE - 9 types total)
+- [x] Clean up startup UI - hide full help dialog (DONE - shows minimal hint)
 - [ ] Improve planner prompts (few-shot examples)
 - [ ] Implement result aggregation with summarization
 - [ ] Add delegation settings to config UI
@@ -298,9 +299,10 @@ mcp_client_for_ollama/
 - [ ] Add task cancellation support
 
 **Success Criteria:**
-- All 6 agent types working
+- All 6 agent types working ✅
 - Handles errors gracefully
 - User can configure delegation settings
+- Clean, minimal startup interface ✅
 
 ---
 

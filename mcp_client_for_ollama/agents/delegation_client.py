@@ -5,9 +5,10 @@ This module provides the main DelegationClient class that orchestrates
 the delegation workflow: planning, task execution, and result aggregation.
 """
 
+import asyncio
 import json
 import re
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Set
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -43,9 +44,9 @@ class DelegationClient:
             config: Delegation configuration containing:
                 - planner_model: Optional model name for planning (falls back to current)
                 - model_pool: List of model endpoint configurations
-                - execution_mode: "sequential" or "parallel" (MVP: sequential only)
-                - max_parallel_tasks: Maximum concurrent tasks (future)
-                - task_timeout: Task execution timeout in seconds
+                - execution_mode: "sequential" or "parallel" (default: "parallel")
+                - max_parallel_tasks: Maximum concurrent LLM calls (default: 3)
+                - task_timeout: Task execution timeout in seconds (default: 300)
         """
         self.mcp_client = mcp_client
         self.config = config
@@ -64,6 +65,10 @@ class DelegationClient:
                 'max_concurrent': 1
             }]
         self.model_pool = ModelPool(model_pool_config)
+
+        # Parallelism control
+        max_parallel = config.get('max_parallel_tasks', 3)
+        self._parallelism_semaphore = asyncio.Semaphore(max_parallel)
 
         # Task tracking
         self.tasks: Dict[str, Task] = {}
@@ -100,9 +105,14 @@ class DelegationClient:
             tasks = self.create_tasks_from_plan(task_plan)
             self.console.print(f"[green]✓[/green] Created {len(tasks)} tasks\n")
 
-            # Phase 3: Execute tasks (sequential for MVP)
+            # Phase 3: Execute tasks (parallel by default, fallback to sequential)
             self.console.print("[bold yellow]⚙️  Execution Phase[/bold yellow]")
-            results = await self.execute_tasks_sequential(tasks)
+            execution_mode = self.config.get('execution_mode', 'parallel')
+
+            if execution_mode == 'parallel':
+                results = await self.execute_tasks_parallel(tasks)
+            else:
+                results = await self.execute_tasks_sequential(tasks)
 
             # Phase 4: Aggregate results
             self.console.print("\n[bold yellow]📊 Aggregation Phase[/bold yellow]")
@@ -261,6 +271,103 @@ Please break this down into focused subtasks. Output valid JSON only.
                 self.console.print(f"[red]✗[/red] {task.id} failed: {e}")
 
         return sorted_tasks
+
+    async def execute_tasks_parallel(self, tasks: List[Task]) -> List[Task]:
+        """
+        Execute tasks in parallel, respecting dependencies and concurrency limits.
+
+        Tasks are executed in "waves" where each wave contains independent tasks
+        that can run concurrently. The max_parallel_tasks config limits how many
+        LLM calls can run simultaneously.
+
+        Args:
+            tasks: List of tasks to execute
+
+        Returns:
+            List of completed tasks (some may have failed)
+        """
+        completed_ids: Set[str] = set()
+        failed_ids: Set[str] = set()
+        pending_tasks = list(tasks)  # Use list, not set (Tasks aren't hashable)
+
+        # Sort tasks by dependencies for efficient wave detection
+        sorted_tasks = self._topological_sort(tasks)
+
+        wave_number = 1
+
+        while pending_tasks:
+            # Find tasks that can execute in this wave
+            ready_tasks = [
+                t for t in pending_tasks
+                if t.can_execute(completed_ids)
+            ]
+
+            if not ready_tasks:
+                # No tasks can execute - remaining tasks are blocked
+                for task in pending_tasks:
+                    task.mark_blocked()
+                    self.console.print(
+                        f"[yellow]⏸️  Task {task.id} blocked by failed dependencies[/yellow]"
+                    )
+                break
+
+            # Display wave info
+            if len(ready_tasks) > 1:
+                self.console.print(
+                    f"\n[bold magenta]🌊 Wave {wave_number}: Executing {len(ready_tasks)} tasks in parallel[/bold magenta]"
+                )
+            else:
+                self.console.print(f"\n[bold magenta]🌊 Wave {wave_number}[/bold magenta]")
+
+            # Execute ready tasks in parallel with semaphore limiting concurrency
+            wave_results = await self._execute_wave(ready_tasks)
+
+            # Process results
+            for task, success in wave_results:
+                pending_tasks.remove(task)
+
+                if success:
+                    completed_ids.add(task.id)
+                    self.console.print(f"[green]✓[/green] {task.id} completed")
+                else:
+                    failed_ids.add(task.id)
+                    self.console.print(f"[red]✗[/red] {task.id} failed")
+
+            wave_number += 1
+
+        return sorted_tasks
+
+    async def _execute_wave(self, ready_tasks: List[Task]) -> List[tuple[Task, bool]]:
+        """
+        Execute a wave of independent tasks in parallel with concurrency control.
+
+        Args:
+            ready_tasks: Tasks that are ready to execute (dependencies satisfied)
+
+        Returns:
+            List of (task, success) tuples
+        """
+        async def execute_with_semaphore(task: Task) -> tuple[Task, bool]:
+            """Execute a single task with semaphore-controlled concurrency."""
+            async with self._parallelism_semaphore:
+                self.console.print(f"\n[cyan]▶️  Executing {task.id} ({task.agent_type})[/cyan]")
+                self.console.print(f"[dim]   {task.description}[/dim]")
+
+                try:
+                    await self.execute_single_task(task)
+                    return (task, True)
+                except Exception as e:
+                    task.mark_failed(str(e))
+                    self.console.print(f"[red]   Error: {e}[/red]")
+                    return (task, False)
+
+        # Execute all tasks in this wave concurrently (semaphore limits actual parallelism)
+        results = await asyncio.gather(
+            *[execute_with_semaphore(task) for task in ready_tasks],
+            return_exceptions=False
+        )
+
+        return results
 
     async def execute_single_task(self, task: Task):
         """

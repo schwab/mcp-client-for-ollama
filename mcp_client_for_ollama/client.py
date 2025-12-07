@@ -833,7 +833,8 @@ class MCPClient:
         self.console.print(Panel(Text.from_markup("[bold green]Welcome to the MCP Client for Ollama 🦙[/bold green]", justify="center"), expand=True, border_style="green"))
         self.display_available_tools()
         self.display_current_model()
-        self.print_help()
+        # Show minimal help hint instead of full help dialog
+        self.console.print("[green]💡 Type [bold]help[/bold] or [bold]h[/bold] for available commands[/green]\n")
         self.print_auto_load_default_config_status()
         await self.display_check_for_updates()
 
@@ -1299,10 +1300,10 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             'model_pool': [{
                 'url': DEFAULT_OLLAMA_HOST,  # Use the default host from constants
                 'model': self.model_manager.get_current_model(),
-                'max_concurrent': 1
+                'max_concurrent': 3  # Allow up to 3 concurrent tasks per endpoint
             }],
-            'execution_mode': 'sequential',  # MVP: sequential only
-            'max_parallel_tasks': 1,
+            'execution_mode': 'parallel',  # Phase 2: parallel execution enabled
+            'max_parallel_tasks': 3,  # Limit concurrent LLM calls to prevent overload
             'task_timeout': 300
         }
 
