@@ -8,6 +8,7 @@ the delegation workflow: planning, task execution, and result aggregation.
 import asyncio
 import json
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set, Tuple
 from rich.console import Console
@@ -17,6 +18,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from .task import Task, TaskStatus
 from .agent_config import AgentConfig
 from .model_pool import ModelPool
+from ..utils.collapsible_output import CollapsibleOutput, TaskOutputCollector
+from ..utils.trace_logger import TraceLogger, TraceLoggerFactory, TraceLevel
 
 
 class DelegationClient:
@@ -77,6 +80,19 @@ class DelegationClient:
 
         # Load planning examples for few-shot learning
         self.planner_examples = self._load_planner_examples()
+
+        # Initialize trace logger
+        self.trace_logger = TraceLoggerFactory.from_config(config)
+
+        # Initialize collapsible output
+        collapsible_config = config.get('collapsible_output', {})
+        self.collapsible = CollapsibleOutput(
+            console=self.console,
+            line_threshold=collapsible_config.get('line_threshold', 20),
+            char_threshold=collapsible_config.get('char_threshold', 1000),
+            auto_collapse=collapsible_config.get('auto_collapse', True)
+        )
+        self.task_output = TaskOutputCollector(self.console, self.collapsible)
 
     def _load_planner_examples(self) -> List[Dict[str, Any]]:
         """
@@ -215,11 +231,20 @@ class DelegationClient:
             self.console.print("\n[bold yellow]📊 Aggregation Phase[/bold yellow]")
             final_answer = await self.aggregate_results(user_query, results)
 
+            # Print trace summary if tracing is enabled
+            if self.trace_logger.is_enabled():
+                self.trace_logger.print_summary(self.console)
+
             return final_answer
 
         except Exception as e:
             self.console.print(f"[bold red]❌ Delegation failed: {e}[/bold red]")
             self.console.print("[yellow]Falling back to direct execution...[/yellow]")
+
+            # Still print trace summary on failure
+            if self.trace_logger.is_enabled():
+                self.trace_logger.print_summary(self.console)
+
             return await self._fallback_direct_execution(user_query)
 
     async def create_plan(self, query: str) -> Dict[str, Any]:
@@ -303,7 +328,9 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
                 model=planner_model,
                 temperature=planner_config.temperature,
                 tools=planner_tool_objects,
-                loop_limit=planner_config.loop_limit
+                loop_limit=planner_config.loop_limit,
+                task_id=None,  # Planning phase
+                agent_type=None  # Will be logged as PLANNER
             )
 
             progress.update(task, completed=True)
@@ -314,6 +341,15 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
         # Validate plan structure
         if not isinstance(task_plan, dict) or 'tasks' not in task_plan:
             raise Exception(f"Invalid plan structure. Expected dict with 'tasks' key, got: {type(task_plan)}")
+
+        # Log planning phase
+        example_categories = [ex.get('category', '') for ex in relevant_examples]
+        self.trace_logger.log_planning_phase(
+            query=query,
+            plan=task_plan,
+            available_agents=list(self.agent_configs.keys()),
+            examples_used=example_categories
+        )
 
         # Validate plan quality
         is_valid, error_msg = self._validate_plan_quality(task_plan)
@@ -600,6 +636,15 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
         )
 
         task.mark_started(endpoint.url)
+        start_time = time.time()
+
+        # Log task start
+        self.trace_logger.log_task_start(
+            task_id=task.id,
+            agent_type=task.agent_type,
+            description=task.description,
+            dependencies=task.dependencies
+        )
 
         try:
             # Build task context
@@ -618,14 +663,46 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
                 model=endpoint.model,
                 temperature=agent_config.temperature,
                 tools=agent_tools,
-                loop_limit=agent_config.loop_limit
+                loop_limit=agent_config.loop_limit,
+                task_id=task.id,
+                agent_type=task.agent_type
             )
 
             # Store result
             task.mark_completed(response_text)
 
+            # Log task completion
+            duration_ms = (time.time() - start_time) * 1000
+            self.trace_logger.log_task_end(
+                task_id=task.id,
+                agent_type=task.agent_type,
+                status="completed",
+                result=response_text,
+                duration_ms=duration_ms
+            )
+
+            # Display result with collapsing
+            self.task_output.print_task_result(
+                task_id=task.id,
+                agent_type=task.agent_type,
+                description=task.description,
+                result=response_text,
+                status="completed"
+            )
+
         except Exception as e:
             task.mark_failed(str(e))
+
+            # Log task failure
+            duration_ms = (time.time() - start_time) * 1000
+            self.trace_logger.log_task_end(
+                task_id=task.id,
+                agent_type=task.agent_type,
+                status="failed",
+                error=str(e),
+                duration_ms=duration_ms
+            )
+
             raise
 
         finally:
@@ -715,7 +792,9 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         model: str,
         temperature: float,
         tools: List,
-        loop_limit: int
+        loop_limit: int,
+        task_id: str = None,
+        agent_type: str = None
     ) -> str:
         """
         Execute a query with tool support (full agent capabilities).
@@ -726,6 +805,8 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             temperature: Sampling temperature
             tools: List of tool objects available to this agent
             loop_limit: Maximum tool call iterations
+            task_id: Optional task ID for trace logging
+            agent_type: Optional agent type for trace logging
 
         Returns:
             Final response text from the model
@@ -756,11 +837,25 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         )
 
         # Process streaming response
-        response_text, tool_calls, metrics = await self.mcp_client.streaming_manager.process_streaming_response(
+        response_text, tool_calls, _metrics = await self.mcp_client.streaming_manager.process_streaming_response(
             stream,
             thinking_mode=False,
             show_thinking=False,
             show_metrics=False
+        )
+
+        # Log the LLM call
+        prompt_text = "\n".join([msg.get("content", "") for msg in messages])
+        tool_names = [tc.function.name for tc in (tool_calls or [])]
+        self.trace_logger.log_llm_call(
+            task_id=task_id,
+            agent_type=agent_type,
+            prompt=prompt_text,
+            response=response_text,
+            model=model,
+            temperature=temperature,
+            loop_iteration=0,
+            tools_used=tool_names
         )
 
         # Debug: Check if tool calls were detected
@@ -789,7 +884,22 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
                 tool_args = tool_call.function.arguments
 
                 # Execute tool
-                tool_response = await self._execute_tool(tool_name, tool_args)
+                try:
+                    tool_response = await self._execute_tool(tool_name, tool_args)
+                    tool_success = True
+                except Exception as e:
+                    tool_response = f"Error: {str(e)}"
+                    tool_success = False
+
+                # Log tool call
+                self.trace_logger.log_tool_call(
+                    task_id=task_id,
+                    agent_type=agent_type,
+                    tool_name=tool_name,
+                    arguments=tool_args,
+                    result=tool_response,
+                    success=tool_success
+                )
 
                 # Add tool response to messages
                 messages.append({
@@ -808,11 +918,25 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             )
 
             # Process response
-            response_text, tool_calls, metrics = await self.mcp_client.streaming_manager.process_streaming_response(
+            response_text, tool_calls, _metrics = await self.mcp_client.streaming_manager.process_streaming_response(
                 stream,
                 thinking_mode=False,
                 show_thinking=False,
                 show_metrics=False
+            )
+
+            # Log subsequent LLM call
+            prompt_text = "\n".join([msg.get("content", "") for msg in messages])
+            tool_names = [tc.function.name for tc in (tool_calls or [])]
+            self.trace_logger.log_llm_call(
+                task_id=task_id,
+                agent_type=agent_type,
+                prompt=prompt_text,
+                response=response_text,
+                model=model,
+                temperature=temperature,
+                loop_iteration=loop_count,
+                tools_used=tool_names
             )
 
             # Add to messages
