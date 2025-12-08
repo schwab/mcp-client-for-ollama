@@ -439,7 +439,7 @@
     },
     {
       "category": "mcp-tool-usage-geocoding",
-      "query": "Find the distance between San Antonio TX and Enid OK",
+      "query": "Find the distance between San Antonio TX and Enid OK write the resuls to a json file",
       "plan": {
         "tasks": [
           {
@@ -458,10 +458,10 @@
           },
           {
             "id": "task_3",
-            "description": "Use osm-mcp-server.get_route_directions to calculate distance between the two locations",
-            "agent_type": "EXECUTOR",
+            "description": "Save the complete json from the previous task in a file called route_1.json",
+            "agent_type": "CODER",
             "dependencies": ["task_1", "task_2"],
-            "expected_output": "Distance in miles/kilometers and route information"
+            "expected_output": "New file written to the file system with the route details"
           }
         ]
       }
