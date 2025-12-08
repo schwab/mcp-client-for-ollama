@@ -269,4 +269,60 @@ class ConfigManager:
         if "sessionSaveDirectory" in config_data:
             validated["sessionSaveDirectory"] = str(config_data["sessionSaveDirectory"])
 
+        # Delegation settings
+        if "delegation" in config_data and isinstance(config_data["delegation"], dict):
+            validated["delegation"] = {}
+            delegation = config_data["delegation"]
+
+            if "enabled" in delegation:
+                validated["delegation"]["enabled"] = bool(delegation["enabled"])
+
+            if "execution_mode" in delegation:
+                validated["delegation"]["execution_mode"] = str(delegation["execution_mode"])
+
+            if "max_parallel_tasks" in delegation:
+                try:
+                    validated["delegation"]["max_parallel_tasks"] = int(delegation["max_parallel_tasks"])
+                except (TypeError, ValueError):
+                    pass
+
+            # Collapsible output settings
+            if "collapsible_output" in delegation and isinstance(delegation["collapsible_output"], dict):
+                validated["delegation"]["collapsible_output"] = {}
+                co = delegation["collapsible_output"]
+
+                if "auto_collapse" in co:
+                    validated["delegation"]["collapsible_output"]["auto_collapse"] = bool(co["auto_collapse"])
+                if "line_threshold" in co:
+                    try:
+                        validated["delegation"]["collapsible_output"]["line_threshold"] = int(co["line_threshold"])
+                    except (TypeError, ValueError):
+                        pass
+                if "char_threshold" in co:
+                    try:
+                        validated["delegation"]["collapsible_output"]["char_threshold"] = int(co["char_threshold"])
+                    except (TypeError, ValueError):
+                        pass
+
+            # Trace logging settings
+            if "trace_enabled" in delegation:
+                validated["delegation"]["trace_enabled"] = bool(delegation["trace_enabled"])
+
+            if "trace_level" in delegation:
+                level = str(delegation["trace_level"]).lower()
+                if level in ["off", "summary", "basic", "full", "debug"]:
+                    validated["delegation"]["trace_level"] = level
+
+            if "trace_dir" in delegation:
+                validated["delegation"]["trace_dir"] = str(delegation["trace_dir"])
+
+            if "trace_console" in delegation:
+                validated["delegation"]["trace_console"] = bool(delegation["trace_console"])
+
+            if "trace_truncate" in delegation:
+                try:
+                    validated["delegation"]["trace_truncate"] = int(delegation["trace_truncate"])
+                except (TypeError, ValueError):
+                    pass
+
         return validated

@@ -947,6 +947,10 @@ class MCPClient:
                     self.hil_manager.toggle_global()
                     continue
 
+                if query.lower() in ['delegation-trace', 'dt', 'trace-config', 'tc']:
+                    await self.configure_delegation_trace()
+                    continue
+
                 if query.lower() in ['hil-config', 'hc']:
                     self.hil_manager.configure_hil_interactive(self.clear_console)
                     # After configuring, redisplay context
@@ -1091,6 +1095,7 @@ class MCPClient:
 
             "[bold cyan]Agent Delegation:[/bold cyan] [bold magenta](MVP)[/bold magenta]\n"
             "• Type [bold]delegate <query>[/bold] or [bold]d <query>[/bold] to use multi-agent delegation\n"
+            "• Type [bold]delegation-trace[/bold] or [bold]dt[/bold] to configure trace logging for delegation debugging\n"
             "• Agent delegation breaks down complex tasks into focused subtasks for specialized agents\n"
             "• Best for: multi-file edits, complex refactoring, or tasks requiring multiple steps\n\n"
 
@@ -1290,6 +1295,151 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             self.console.print("[bold green]✅ ACT MODE activated![/bold green]")
             self.console.print("[cyan]All tools are now available. Use Shift+Tab to switch to PLAN mode.[/cyan]")
 
+    async def configure_delegation_trace(self):
+        """Configure trace logging for delegation mode"""
+        from prompt_toolkit.shortcuts import radiolist_dialog, yes_no_dialog
+        from rich.table import Table
+
+        # Load current config
+        current_config = self.config
+        if "delegation" not in current_config:
+            current_config["delegation"] = {}
+
+        delegation = current_config["delegation"]
+
+        # Show current settings
+        table = Table(title="Current Delegation Trace Settings", show_header=True, header_style="bold cyan")
+        table.add_column("Setting", style="yellow", width=20)
+        table.add_column("Value", style="green")
+
+        table.add_row("Delegation Enabled", str(delegation.get("enabled", False)))
+        table.add_row("Trace Enabled", str(delegation.get("trace_enabled", False)))
+        table.add_row("Trace Level", delegation.get("trace_level", "basic"))
+        table.add_row("Trace Directory", delegation.get("trace_dir", ".trace"))
+        table.add_row("Trace to Console", str(delegation.get("trace_console", False)))
+
+        self.console.print()
+        self.console.print(table)
+        self.console.print()
+
+        # Ask if user wants to enable delegation
+        self.console.print("[cyan]Enable delegation? (required for trace logging)[/cyan]")
+        enable_delegation = await self.get_user_input("Enable delegation? (yes/no, default: yes)")
+        if enable_delegation.lower() in ['no', 'n']:
+            delegation["enabled"] = False
+            self.console.print("[yellow]Delegation disabled. Trace logging requires delegation to be enabled.[/yellow]")
+            return
+        else:
+            delegation["enabled"] = True
+
+        # Ask if user wants to enable trace logging
+        self.console.print("[cyan]Enable trace logging?[/cyan]")
+        enable_trace = await self.get_user_input("Enable trace logging? (yes/no, default: yes)")
+        if enable_trace.lower() in ['no', 'n']:
+            delegation["trace_enabled"] = False
+            self.console.print("[yellow]Trace logging disabled.[/yellow]")
+        else:
+            delegation["trace_enabled"] = True
+
+            # Select trace level
+            self.console.print()
+            self.console.print("[bold cyan]Select Trace Level:[/bold cyan]")
+            self.console.print("  [yellow]1[/yellow] - OFF (no tracing)")
+            self.console.print("  [yellow]2[/yellow] - SUMMARY (task start/end only)")
+            self.console.print("  [yellow]3[/yellow] - BASIC (truncated prompts/responses) [recommended]")
+            self.console.print("  [yellow]4[/yellow] - FULL (complete prompts/responses)")
+            self.console.print("  [yellow]5[/yellow] - DEBUG (everything including tool calls)")
+            self.console.print()
+
+            level_choice = await self.get_user_input("Select trace level (1-5, default: 3)")
+            level_map = {
+                "1": "off",
+                "2": "summary",
+                "3": "basic",
+                "4": "full",
+                "5": "debug",
+                "": "basic"  # default
+            }
+            delegation["trace_level"] = level_map.get(level_choice, "basic")
+
+            # Ask for trace directory
+            trace_dir = await self.get_user_input("Trace directory (default: .trace)")
+            delegation["trace_dir"] = trace_dir if trace_dir.strip() else ".trace"
+
+            # Ask if they want console output (only useful for DEBUG level)
+            if delegation["trace_level"] == "debug":
+                console_output = await self.get_user_input("Also print traces to console? (yes/no, default: no)")
+                delegation["trace_console"] = console_output.lower() in ['yes', 'y']
+            else:
+                delegation["trace_console"] = False
+
+            # Set default collapsible output settings if not present
+            if "collapsible_output" not in delegation:
+                delegation["collapsible_output"] = {
+                    "auto_collapse": True,
+                    "line_threshold": 20,
+                    "char_threshold": 1000
+                }
+
+            # Set truncate length for BASIC level
+            if delegation["trace_level"] == "basic":
+                delegation["trace_truncate"] = 500
+
+        # Save to config
+        current_config["delegation"] = delegation
+
+        # Show new settings
+        self.console.print()
+        table = Table(title="New Delegation Trace Settings", show_header=True, header_style="bold green")
+        table.add_column("Setting", style="yellow", width=20)
+        table.add_column("Value", style="green")
+
+        table.add_row("Delegation Enabled", str(delegation.get("enabled", False)))
+        table.add_row("Trace Enabled", str(delegation.get("trace_enabled", False)))
+        table.add_row("Trace Level", delegation.get("trace_level", "basic"))
+        table.add_row("Trace Directory", delegation.get("trace_dir", ".trace"))
+        table.add_row("Trace to Console", str(delegation.get("trace_console", False)))
+
+        self.console.print(table)
+        self.console.print()
+
+        # Ask if they want to save
+        save_config = await self.get_user_input("Save configuration? (yes/no, default: yes)")
+        if save_config.lower() not in ['no', 'n']:
+            config_name = await self.get_user_input("Config name (default: default)")
+            if not config_name or config_name.strip() == "":
+                config_name = "default"
+
+            self.save_configuration(config_name)
+
+            # Add reminder to add .trace/ to .gitignore
+            if delegation.get("trace_enabled", False):
+                self.console.print()
+                self.console.print(Panel(
+                    "[yellow]⚠️  Important Reminder:[/yellow]\n\n"
+                    "Don't forget to add the trace directory to your .gitignore:\n\n"
+                    f"[cyan]echo '{delegation.get('trace_dir', '.trace')}/' >> .gitignore[/cyan]\n\n"
+                    "[dim]Trace files can contain sensitive information and should not be committed.[/dim]",
+                    title="Reminder",
+                    border_style="yellow",
+                    expand=False
+                ))
+
+                self.console.print()
+                self.console.print(Panel(
+                    "[bold green]✅ Trace logging configured![/bold green]\n\n"
+                    "[cyan]To use trace logging:[/cyan]\n"
+                    "  1. Use delegation: [bold]delegate <your query>[/bold] or [bold]d <your query>[/bold]\n"
+                    "  2. Check trace summary at end of delegation\n"
+                    f"  3. Analyze trace file: [bold]cat {delegation.get('trace_dir', '.trace')}/trace_*.jsonl | jq .[/bold]\n\n"
+                    "[dim]See TRACE_LOGGING_QUICK_REFERENCE.md for analysis commands[/dim]",
+                    title="Usage",
+                    border_style="green",
+                    expand=False
+                ))
+        else:
+            self.console.print("[yellow]Configuration not saved.[/yellow]")
+
     def get_delegation_client(self):
         """
         Get or create the delegation client.
@@ -1314,6 +1464,37 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             'max_parallel_tasks': 3,  # Limit concurrent LLM calls to prevent overload
             'task_timeout': 300
         }
+
+        # Merge in delegation settings from user config if present
+        if "delegation" in self.config and isinstance(self.config["delegation"], dict):
+            user_delegation = self.config["delegation"]
+
+            # Override with user settings if present
+            if "execution_mode" in user_delegation:
+                config["execution_mode"] = user_delegation["execution_mode"]
+
+            if "max_parallel_tasks" in user_delegation:
+                config["max_parallel_tasks"] = user_delegation["max_parallel_tasks"]
+
+            # Pass through trace logging settings
+            if "trace_enabled" in user_delegation:
+                config["trace_enabled"] = user_delegation["trace_enabled"]
+
+            if "trace_level" in user_delegation:
+                config["trace_level"] = user_delegation["trace_level"]
+
+            if "trace_dir" in user_delegation:
+                config["trace_dir"] = user_delegation["trace_dir"]
+
+            if "trace_console" in user_delegation:
+                config["trace_console"] = user_delegation["trace_console"]
+
+            if "trace_truncate" in user_delegation:
+                config["trace_truncate"] = user_delegation["trace_truncate"]
+
+            # Pass through collapsible output settings
+            if "collapsible_output" in user_delegation:
+                config["collapsible_output"] = user_delegation["collapsible_output"]
 
         return DelegationClient(self, config)
 
