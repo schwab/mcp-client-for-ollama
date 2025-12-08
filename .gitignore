@@ -14,3 +14,4 @@ wheels/
 !.config/CLAUDE.md      # But track CLAUDE.md (project documentation)
 .vscode/
 .trace/
+.config/
