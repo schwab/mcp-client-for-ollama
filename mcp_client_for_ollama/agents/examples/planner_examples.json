@@ -436,6 +436,108 @@
           }
         ]
       }
+    },
+    {
+      "category": "mcp-tool-usage-geocoding",
+      "query": "Find the distance between San Antonio TX and Enid OK",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Use osm-mcp-server.geocode_address to get coordinates for San Antonio TX",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Latitude and longitude coordinates for San Antonio TX"
+          },
+          {
+            "id": "task_2",
+            "description": "Use osm-mcp-server.geocode_address to get coordinates for Enid OK",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Latitude and longitude coordinates for Enid OK"
+          },
+          {
+            "id": "task_3",
+            "description": "Use osm-mcp-server.get_route_directions to calculate distance between the two locations",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_1", "task_2"],
+            "expected_output": "Distance in miles/kilometers and route information"
+          }
+        ]
+      }
+    },
+    {
+      "category": "mcp-tool-usage-filesystem",
+      "query": "List all Python files in the project directory and count their lines",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Use filesystem.list_directory to get all Python files in the project",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "List of .py file paths in the project directory"
+          },
+          {
+            "id": "task_2",
+            "description": "Use filesystem.read_file to read each Python file and count lines",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_1"],
+            "expected_output": "Line count for each Python file"
+          },
+          {
+            "id": "task_3",
+            "description": "Calculate total lines of Python code across all files",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_2"],
+            "expected_output": "Total line count and breakdown by file"
+          }
+        ]
+      }
+    },
+    {
+      "category": "mcp-tool-usage-web-search",
+      "query": "Search for recent news about AI developments and summarize findings",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Use brave-search.web_search to find recent AI development news",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Search results with URLs and snippets about recent AI news"
+          },
+          {
+            "id": "task_2",
+            "description": "Analyze and summarize the most important AI developments from search results",
+            "agent_type": "RESEARCHER",
+            "dependencies": ["task_1"],
+            "expected_output": "Concise summary of key AI developments with sources"
+          }
+        ]
+      }
+    },
+    {
+      "category": "mcp-tool-usage-database",
+      "query": "Find all users created in the last week from the database",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Use database.query to execute SQL query for users created in last 7 days",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "List of users with creation timestamps from the past week"
+          },
+          {
+            "id": "task_2",
+            "description": "Analyze user data and generate summary statistics",
+            "agent_type": "RESEARCHER",
+            "dependencies": ["task_1"],
+            "expected_output": "Summary of new users including counts, patterns, and insights"
+          }
+        ]
+      }
     }
   ]
 }

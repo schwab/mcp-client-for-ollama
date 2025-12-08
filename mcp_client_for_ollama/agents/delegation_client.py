@@ -290,12 +290,46 @@ class DelegationClient:
                 examples_section += f"Query: \"{example['query']}\"\n"
                 examples_section += f"Plan:\n{json.dumps(example['plan'], indent=2)}\n"
 
+        # Get available MCP tools and build tools section
+        available_tools = self._get_available_tool_descriptions()
+        tools_section = ""
+        if available_tools:
+            tools_section = "\n\nAvailable MCP Tools (agents can use these):\n"
+
+            # Categorize by server if more than 20 tools to avoid prompt bloat
+            if len(available_tools) > 20:
+                # Group by server prefix
+                tools_by_server = {}
+                for tool in available_tools:
+                    server = tool['name'].split('.')[0] if '.' in tool['name'] else 'other'
+                    if server not in tools_by_server:
+                        tools_by_server[server] = []
+                    tools_by_server[server].append(tool)
+
+                for server, tools in tools_by_server.items():
+                    tools_section += f"\n{server} server:\n"
+                    for tool in tools[:5]:  # Limit per server
+                        tools_section += f"  - {tool['name']}: {tool['description']}\n"
+                    if len(tools) > 5:
+                        tools_section += f"  ... and {len(tools)-5} more tools\n"
+            else:
+                # List all tools if under 20
+                for tool in available_tools:
+                    tools_section += f"- {tool['name']}: {tool['description']}\n"
+
         planning_prompt = f"""
 {planner_config.system_prompt}
 
 Available agents:
 {chr(10).join(available_agents)}
+{tools_section}
 {examples_section}
+
+When planning tasks, consider:
+1. What MCP tools are available that could solve this task directly
+2. Which agent type is best suited to use those tools (usually EXECUTOR)
+3. Prefer using MCP tools over writing custom Python code when available
+4. MCP tools are called by name (e.g., osm-mcp-server.geocode_address)
 
 Now create a plan for this user request:
 {query}
@@ -1020,6 +1054,26 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
                     tool_objects.append(tool)
 
         return tool_objects
+
+    def _get_available_tool_descriptions(self) -> List[Dict[str, str]]:
+        """
+        Get descriptions of all available MCP tools for the planner.
+
+        Returns:
+            List of dicts with 'name' and 'description' keys
+        """
+        tool_descriptions = []
+
+        # Get MCP server tools (not builtin tools - those are agent capabilities)
+        if self.mcp_client.tool_manager:
+            enabled_tool_objects = self.mcp_client.tool_manager.get_enabled_tool_objects()
+            for tool in enabled_tool_objects:
+                tool_descriptions.append({
+                    "name": tool.name,
+                    "description": tool.description or "No description available"
+                })
+
+        return tool_descriptions
 
     def _extract_json_from_response(self, text: str) -> Dict[str, Any]:
         """

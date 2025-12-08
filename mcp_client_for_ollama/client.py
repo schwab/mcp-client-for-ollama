@@ -1300,8 +1300,12 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         from prompt_toolkit.shortcuts import radiolist_dialog, yes_no_dialog
         from rich.table import Table
 
-        # Load current config
-        current_config = self.config
+        # Load current config from file or create new one
+        current_config = self.config_manager.load_configuration("default")
+        if not current_config:
+            # If no config exists, start with empty config
+            current_config = {}
+
         if "delegation" not in current_config:
             current_config["delegation"] = {}
 
@@ -1410,7 +1414,11 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             if not config_name or config_name.strip() == "":
                 config_name = "default"
 
-            self.save_configuration(config_name)
+            # Update the current_config with delegation settings
+            current_config["delegation"] = delegation
+
+            # Save the updated config (preserving other keys like mcpServers)
+            self.config_manager.save_configuration(current_config, config_name)
 
             # Add reminder to add .trace/ to .gitignore
             if delegation.get("trace_enabled", False):
@@ -1466,8 +1474,10 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         }
 
         # Merge in delegation settings from user config if present
-        if "delegation" in self.config and isinstance(self.config["delegation"], dict):
-            user_delegation = self.config["delegation"]
+        # Load config from file to get delegation settings
+        user_config = self.config_manager.load_configuration("default")
+        if user_config and "delegation" in user_config and isinstance(user_config["delegation"], dict):
+            user_delegation = user_config["delegation"]
 
             # Override with user settings if present
             if "execution_mode" in user_delegation:
@@ -1581,8 +1591,13 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         Args:
             config_name: Optional name for the config (defaults to 'default')
         """
-        # Build config data
-        config_data = {
+        # Load existing config to preserve keys we don't manage (like mcpServers)
+        existing_config = self.config_manager.load_configuration(config_name or "default")
+        if not existing_config:
+            existing_config = {}
+
+        # Update with current client state (only overwrites keys we manage)
+        existing_config.update({
             "model": self.model_manager.get_current_model(),
             "enabledTools": self.tool_manager.get_enabled_tools(),
             "contextSettings": {
@@ -1602,10 +1617,10 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             },
             "hilSettings": self.hil_manager.get_config(),
             "sessionSaveDirectory": self.session_save_directory
-        }
+        })
 
-        # Use the ConfigManager to save the configuration
-        return self.config_manager.save_configuration(config_data, config_name)
+        # Use the ConfigManager to save the merged configuration
+        return self.config_manager.save_configuration(existing_config, config_name)
 
     def load_configuration(self, config_name=None):
         """Load tool configuration and model settings from a file
