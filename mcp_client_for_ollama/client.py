@@ -1,6 +1,7 @@
 """MCP Client for Ollama - A TUI client for interacting with Ollama models and MCP servers"""
 import asyncio
 import os
+import sys
 import json
 import re
 from contextlib import AsyncExitStack
@@ -108,6 +109,9 @@ class MCPClient:
 
         # Track auto-loaded files for startup message
         self.auto_loaded_files = []
+
+        # Quiet mode for non-interactive execution
+        self.quiet_mode = False
 
         # Store server connection parameters for reloading
         self.server_connection_params = {
@@ -826,6 +830,91 @@ class MCPClient:
             # Join messages with a newline, or format them as needed
             return Text("\n".join(self.status_messages), style="bold red")
         return None
+
+    async def handle_user_input(self, query: str):
+        """
+        Handle a single user query non-interactively.
+
+        This method processes a query without entering the interactive chat loop,
+        making it suitable for command-line script execution.
+
+        Args:
+            query: The user's query to process
+        """
+        # Handle delegation command
+        if query.lower().startswith('delegate ') or query.lower().startswith('d '):
+            # Extract the actual query after the command
+            if query.lower().startswith('delegate '):
+                actual_query = query[9:].strip()
+            else:  # 'd '
+                actual_query = query[2:].strip()
+
+            if len(actual_query) < 5:
+                if not self.quiet_mode:
+                    self.console.print("[yellow]Delegation query must be at least 5 characters long.[/yellow]")
+                return
+
+            try:
+                # Get or create delegation client
+                delegation_client = self.get_delegation_client()
+
+                # Process with delegation
+                response = await delegation_client.process_with_delegation(actual_query)
+
+                # Display response
+                if not self.quiet_mode:
+                    self.console.print("\n[bold green]📋 Final Response:[/bold green]")
+                    self.console.print(Panel(Markdown(response), border_style="green", expand=False))
+                else:
+                    # In quiet mode, print just the response text
+                    print(response)
+
+                # Add to chat history
+                self.chat_history.append({
+                    "query": f"[DELEGATED] {actual_query}",
+                    "response": response
+                })
+
+            except Exception as e:
+                if not self.quiet_mode:
+                    self.console.print(f"[bold red]Delegation error:[/bold red] {str(e)}")
+                    self.console.print_exception()
+                else:
+                    print(f"Error: {str(e)}", file=sys.stderr)
+
+            return
+
+        # Check if query is too short
+        if len(query.strip()) < 5:
+            if not self.quiet_mode:
+                self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
+            return
+
+        try:
+            # Process the query
+            await self.process_query(query)
+        except ollama.ResponseError as e:
+            error_msg = str(e)
+            if not self.quiet_mode:
+                if "does not support tools" in error_msg.lower():
+                    model_name = self.model_manager.get_current_model()
+                    self.console.print(Panel(
+                        f"[bold red]Model Error:[/bold red] The model [bold blue]{model_name}[/bold blue] does not support tools.\n\n"
+                        "To use tools, switch to a model that supports them.",
+                        title="Tools Not Supported",
+                        border_style="red", expand=False
+                    ))
+                else:
+                    self.console.print(Panel(f"[bold red]Ollama Error:[/bold red] {error_msg}",
+                                             border_style="red", expand=False))
+            else:
+                print(f"Error: {error_msg}", file=sys.stderr)
+        except Exception as e:
+            if not self.quiet_mode:
+                self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
+                self.console.print_exception()
+            else:
+                print(f"Error: {str(e)}", file=sys.stderr)
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
@@ -1870,6 +1959,35 @@ def main(
     version: Optional[bool] = typer.Option(
         None, "--version", "-v",
         help="Show version and exit",
+    ),
+
+    # Non-interactive Query Mode
+    query: Optional[str] = typer.Option(
+        None, "--query", "-q",
+        help="Execute a single query non-interactively and exit (useful for scripts)",
+        rich_help_panel="General Options"
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-Q",
+        help="Minimal output mode (use with --query for scripting)",
+        rich_help_panel="General Options"
+    ),
+
+    # Delegation Trace Options
+    trace_enabled: Optional[bool] = typer.Option(
+        None, "--trace-enabled", "--trace",
+        help="Enable delegation trace logging (use with delegation queries)",
+        rich_help_panel="Delegation Options"
+    ),
+    trace_level: Optional[str] = typer.Option(
+        None, "--trace-level",
+        help="Trace detail level: off, summary, basic, full, debug (default: basic)",
+        rich_help_panel="Delegation Options"
+    ),
+    trace_dir: Optional[str] = typer.Option(
+        None, "--trace-dir",
+        help="Directory for trace files (default: .trace)",
+        rich_help_panel="Delegation Options"
     )
 ):
     """Run the MCP Client for Ollama with specified options."""
@@ -1885,12 +2003,66 @@ def main(
             auto_discovery = True
 
     # Run the async main function
-    asyncio.run(async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host))
+    asyncio.run(async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host, query, quiet, trace_enabled, trace_level, trace_dir))
 
-async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host):
+async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host, query=None, quiet=False, trace_enabled=None, trace_level=None, trace_dir=None):
     """Asynchronous main function to run the MCP Client for Ollama"""
 
-    console = Console()
+    # Create console with minimal output if in quiet mode
+    console = Console(quiet=quiet)
+
+    # Handle trace options from command line
+    if trace_enabled is not None or trace_level is not None or trace_dir is not None:
+        # Load or create config
+        from .config.manager import ConfigManager
+        config_mgr = ConfigManager(console)
+        current_config = config_mgr.load_configuration("default")
+        if not current_config:
+            current_config = {}
+
+        if "delegation" not in current_config:
+            current_config["delegation"] = {}
+
+        delegation = current_config["delegation"]
+
+        # Apply command-line trace options
+        if trace_enabled is not None:
+            delegation["enabled"] = True  # Auto-enable delegation if trace options provided
+            delegation["trace_enabled"] = trace_enabled
+            if not quiet:
+                console.print(f"[green]Trace logging {'enabled' if trace_enabled else 'disabled'}[/green]")
+
+        if trace_level is not None:
+            valid_levels = ["off", "summary", "basic", "full", "debug"]
+            if trace_level.lower() in valid_levels:
+                delegation["trace_level"] = trace_level.lower()
+                if trace_level.lower() == "basic":
+                    delegation["trace_truncate"] = 500
+                if not quiet:
+                    console.print(f"[green]Trace level set to: {trace_level.lower()}[/green]")
+            else:
+                console.print(f"[yellow]Warning: Invalid trace level '{trace_level}'. Using 'basic'.[/yellow]")
+                delegation["trace_level"] = "basic"
+
+        if trace_dir is not None:
+            delegation["trace_dir"] = trace_dir
+            if not quiet:
+                console.print(f"[green]Trace directory set to: {trace_dir}[/green]")
+
+        # Set default collapsible output settings if not present
+        if "collapsible_output" not in delegation:
+            delegation["collapsible_output"] = {
+                "auto_collapse": True,
+                "line_threshold": 20,
+                "char_threshold": 1000
+            }
+
+        # Save updated config
+        current_config["delegation"] = delegation
+        config_mgr.save_configuration(current_config, "default")
+
+        if not quiet:
+            console.print("[dim]Trace configuration saved to .config/config.json[/dim]\n")
 
     # Create a temporary client to check if Ollama is running
     client = MCPClient(model=model, host=host)
@@ -1954,7 +2126,22 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
         if model != DEFAULT_MODEL:
             client.model_manager.set_model(model)
 
-        await client.chat_loop()
+        # Handle non-interactive query mode
+        if query:
+            # Set quiet mode on client for minimal output
+            client.quiet_mode = quiet
+
+            # Execute single query and exit
+            if not quiet:
+                console.print(f"[cyan]Executing query: {query}[/cyan]\n")
+
+            await client.handle_user_input(query)
+
+            if not quiet:
+                console.print("\n[green]Query completed successfully.[/green]")
+        else:
+            # Interactive mode - enter chat loop
+            await client.chat_loop()
     finally:
         await client.cleanup()
 

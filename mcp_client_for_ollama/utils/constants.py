@@ -106,6 +106,14 @@ INTERACTIVE_COMMANDS = {
 
     'execute-python-code': ('Execute arbitrary Python code', True), # NEW
     'epc': ('Execute arbitrary Python code', True), # NEW
+
+    'delegate': ('Use multi-agent delegation (delegate <query>)', True), # NEW
+    'd': ('Use multi-agent delegation (d <query>)', True), # NEW
+
+    'delegation-trace': ('Configure delegation trace logging', True), # NEW
+    'dt': ('Configure delegation trace logging', True), # NEW
+    'trace-config': ('Configure delegation trace logging', True), # NEW
+    'tc': ('Configure delegation trace logging', True), # NEW
 }
 
 # Default completion menu style (used by prompt_toolkit in interactive mode)
