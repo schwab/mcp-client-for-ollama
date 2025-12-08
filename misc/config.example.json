@@ -1,0 +1,38 @@
+{
+  "model": "qwen2.5:7b",
+  "enabledTools": {},
+  "contextSettings": {
+    "retainContext": true
+  },
+  "modelSettings": {
+    "thinkingMode": true,
+    "showThinking": false
+  },
+  "agentSettings": {
+    "loopLimit": 3
+  },
+  "displaySettings": {
+    "showToolExecution": true,
+    "showMetrics": false
+  },
+  "hilSettings": {
+    "enabled": true
+  },
+  "delegation": {
+    "enabled": true,
+    "execution_mode": "parallel",
+    "max_parallel_tasks": 3,
+
+    "collapsible_output": {
+      "auto_collapse": true,
+      "line_threshold": 20,
+      "char_threshold": 1000
+    },
+
+    "trace_enabled": true,
+    "trace_level": "basic",
+    "trace_dir": ".trace",
+    "trace_console": false,
+    "trace_truncate": 500
+  }
+}

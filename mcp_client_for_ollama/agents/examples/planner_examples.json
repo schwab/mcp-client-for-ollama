@@ -538,6 +538,28 @@
           }
         ]
       }
+    },
+    {
+      "category": "mcp-tool-with-specific-data",
+      "query": "Get note 46277 and append these bullet points: - Armstrong transport, - Fifth wheel freight, - Molo load board, - Pinnacle freight",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Retrieve note with ID 46277 using nextcloud-api.nc_notes_get_note tool",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "Content of the note with ID 46277"
+          },
+          {
+            "id": "task_2",
+            "description": "Append the following bullet points to note 46277 using nextcloud-api.nc_notes_append_content tool:\n- Armstrong transport\n- Fifth wheel freight\n- Molo load board\n- Pinnacle freight",
+            "agent_type": "EXECUTOR",
+            "dependencies": ["task_1"],
+            "expected_output": "Note 46277 updated with appended bullet points"
+          }
+        ]
+      }
     }
   ]
 }

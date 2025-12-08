@@ -146,7 +146,8 @@ class DelegationClient:
             'simple-read': ['what does', 'what is', 'show me', 'read'],
             'simple-execute': ['run', 'execute', 'test suite'],
             'bug-investigation': ['investigate', 'debug', 'error', '500', 'failure'],
-            'parallel-independent': ['and', 'both', 'generate and', 'write and']
+            'parallel-independent': ['and', 'both', 'generate and', 'write and'],
+            'mcp-tool-with-specific-data': ['append', 'add to', 'update with', 'insert', 'get note', 'modify note']
         }
 
         # Score each example by keyword relevance
