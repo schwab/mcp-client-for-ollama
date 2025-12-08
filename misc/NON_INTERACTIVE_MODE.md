@@ -115,7 +115,7 @@ Executing query: delegate Scan all Python files and create summary
 Query completed successfully.
 
 # Check trace file
-cat .trace/trace_20251208_*.jsonl
+cat .trace/trace_20251208_*.json
 ```
 
 ### Example 5: Using in Scripts

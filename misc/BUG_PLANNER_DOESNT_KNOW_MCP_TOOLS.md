@@ -598,7 +598,7 @@ The Python code executor fails with `NameError: name 'math' is not defined` even
 
 Testing revealed that while the planner now knew about MCP tools and created plans to use them, **agents were still not actually calling the MCP tools**.
 
-**Trace Evidence** (`.trace/trace_20251207_224151.jsonl`):
+**Trace Evidence** (`.trace/trace_20251207_224151.json`):
 - Planner correctly created plan to use `osm-mcp-server.geocode_address` and `osm-mcp-server.get_route_directions`
 - EXECUTOR agent tried to use Python `requests` and `geopy` libraries instead
 - Never called the MCP server tools

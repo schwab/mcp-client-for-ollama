@@ -153,8 +153,8 @@ Version 0.23.0 introduces major improvements to the agent delegation system, foc
   - Task start/end with timing
   - Loop iterations
 
-- Output format: JSON Lines (`.jsonl`) for easy analysis
-- Location: `.trace/trace_YYYYMMDD_HHMMSS.jsonl`
+- Output format: JSON Lines (`.json`) for easy analysis
+- Location: `.trace/trace_YYYYMMDD_HHMMSS.json`
 
 **Example Trace Entry:**
 ```json
@@ -193,7 +193,7 @@ Version 0.23.0 introduces major improvements to the agent delegation system, foc
 ```
 🔍 Trace Session Summary
 Session ID: 20251207_103045
-Log file: .trace/trace_20251207_103045.jsonl
+Log file: .trace/trace_20251207_103045.json
 
 Total trace entries: 45
 LLM calls: 12

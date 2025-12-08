@@ -110,7 +110,7 @@ This makes it easy to debug why a task failed or produced unexpected results.
 
 ### Log File Format
 
-Traces are written to `.trace/trace_YYYYMMDD_HHMMSS.jsonl` in JSON Lines format.
+Traces are written to `.trace/trace_YYYYMMDD_HHMMSS.json` in JSON Lines format.
 
 **Example trace entry:**
 ```json
@@ -175,7 +175,7 @@ At the end of each delegation session, a summary is automatically printed:
 ```
 🔍 Trace Session Summary
 Session ID: 20251207_103045
-Log file: .trace/trace_20251207_103045.jsonl
+Log file: .trace/trace_20251207_103045.json
 
 Total trace entries: 45
 LLM calls: 12
@@ -190,25 +190,25 @@ The trace files are in JSON Lines format, which can be analyzed with standard to
 
 **Count LLM calls per agent:**
 ```bash
-grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
+grep '"entry_type": "llm_call"' .trace/trace_*.json | \
   jq -r '.agent_type' | sort | uniq -c
 ```
 
 **Find failed tasks:**
 ```bash
-grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_end"' .trace/trace_*.json | \
   jq 'select(.data.status == "failed")'
 ```
 
 **Extract all prompts for a specific task:**
 ```bash
-grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_2"' .trace/trace_*.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.prompt'
 ```
 
 **Calculate average task duration:**
 ```bash
-grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_end"' .trace/trace_*.json | \
   jq '.data.duration_ms' | \
   awk '{sum+=$1; count++} END {print sum/count " ms"}'
 ```
@@ -305,7 +305,7 @@ The summary is automatically printed at the end:
 ```
 🔍 Trace Session Summary
 Session ID: 20251207_103045
-Log file: .trace/trace_20251207_103045.jsonl
+Log file: .trace/trace_20251207_103045.json
 
 Total trace entries: 45
 LLM calls: 12
@@ -320,17 +320,17 @@ Open the trace file and search for issues:
 
 **Find the planning phase:**
 ```bash
-jq 'select(.entry_type == "planning_phase")' .trace/trace_20251207_103045.jsonl
+jq 'select(.entry_type == "planning_phase")' .trace/trace_20251207_103045.json
 ```
 
 **See what DEBUGGER agent did:**
 ```bash
-jq 'select(.agent_type == "DEBUGGER")' .trace/trace_20251207_103045.jsonl
+jq 'select(.agent_type == "DEBUGGER")' .trace/trace_20251207_103045.json
 ```
 
 **Check failed tool calls:**
 ```bash
-jq 'select(.entry_type == "tool_call" and .data.success == false)' .trace/trace_20251207_103045.jsonl
+jq 'select(.entry_type == "tool_call" and .data.success == false)' .trace/trace_20251207_103045.json
 ```
 
 ---
@@ -370,7 +370,7 @@ jq 'select(.entry_type == "tool_call" and .data.success == false)' .trace/trace_
 3. **Use DEBUG for tool issues** - When tool calls are failing
 4. **Clean up old traces** - Trace files can grow large over time
    ```bash
-   find .trace -name "*.jsonl" -mtime +7 -delete  # Delete traces older than 7 days
+   find .trace -name "*.json" -mtime +7 -delete  # Delete traces older than 7 days
    ```
 5. **Exclude from git** - Add `.trace/` to your `.gitignore`
 

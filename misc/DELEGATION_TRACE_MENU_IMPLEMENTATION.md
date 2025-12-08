@@ -305,7 +305,7 @@ You: delegate Read the README.md file
 ls -l .trace/
 
 # View trace
-cat .trace/trace_*.jsonl | jq . | head -20
+cat .trace/trace_*.json | jq . | head -20
 ```
 
 ---

@@ -63,53 +63,53 @@ You: @delegate Fix the bug in auth.py
 
 ### View Entire Trace
 ```bash
-cat .trace/trace_*.jsonl | jq .
+cat .trace/trace_*.json | jq .
 ```
 
 ### What Did the Planner Decide?
 ```bash
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | jq .
 ```
 
 ### What Did DEBUGGER Agent Do?
 ```bash
-grep '"agent_type": "DEBUGGER"' .trace/trace_*.jsonl | \
+grep '"agent_type": "DEBUGGER"' .trace/trace_*.json | \
   jq 'select(.entry_type == "llm_call")'
 ```
 
 ### Which Tasks Failed?
 ```bash
-grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_end"' .trace/trace_*.json | \
   jq 'select(.data.status == "failed")'
 ```
 
 ### Which Tool Calls Failed?
 ```bash
-grep '"entry_type": "tool_call"' .trace/trace_*.jsonl | \
+grep '"entry_type": "tool_call"' .trace/trace_*.json | \
   jq 'select(.data.success == false)'
 ```
 
 ### Count LLM Calls per Agent
 ```bash
-grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
+grep '"entry_type": "llm_call"' .trace/trace_*.json | \
   jq -r '.agent_type' | sort | uniq -c
 ```
 
 ### All Prompts for a Specific Agent
 ```bash
-grep '"agent_type": "CODER"' .trace/trace_*.jsonl | \
+grep '"agent_type": "CODER"' .trace/trace_*.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.prompt'
 ```
 
 ### All Responses from a Task
 ```bash
-grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_2"' .trace/trace_*.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.response'
 ```
 
 ### Task Duration Statistics
 ```bash
-grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_end"' .trace/trace_*.json | \
   jq -r '.data.duration_ms' | \
   awk '{sum+=$1; count++} END {print "Average: " sum/count " ms"}'
 ```
@@ -130,7 +130,7 @@ du -sh .trace/
 
 ### Delete Old Traces (7+ days)
 ```bash
-find .trace -name "*.jsonl" -mtime +7 -delete
+find .trace -name "*.json" -mtime +7 -delete
 ```
 
 ### Delete All Traces
@@ -140,7 +140,7 @@ rm -rf .trace/
 
 ### Archive Traces
 ```bash
-tar -czf traces-backup-$(date +%Y%m%d).tar.gz .trace/*.jsonl
+tar -czf traces-backup-$(date +%Y%m%d).tar.gz .trace/*.json
 mv traces-backup-*.tar.gz .trace/archive/
 ```
 
@@ -230,16 +230,16 @@ mv traces-backup-*.tar.gz .trace/archive/
 
 ```bash
 # 1. Find which task failed
-grep '"status": "failed"' .trace/trace_*.jsonl | jq .
+grep '"status": "failed"' .trace/trace_*.json | jq .
 
 # 2. Get task ID (e.g., "task_2")
 
 # 3. See all LLM calls for that task
-grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_2"' .trace/trace_*.json | \
   jq 'select(.entry_type == "llm_call")'
 
 # 4. Check for failed tool calls
-grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_2"' .trace/trace_*.json | \
   jq 'select(.entry_type == "tool_call" and .data.success == false)'
 ```
 
@@ -247,15 +247,15 @@ grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
 
 ```bash
 # 1. See what the planner was given
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | \
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | \
   jq '.data.query'
 
 # 2. See the planner's prompt
-grep '"agent_type": "PLANNER"' .trace/trace_*.jsonl | \
+grep '"agent_type": "PLANNER"' .trace/trace_*.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.prompt'
 
 # 3. See what plan it generated
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | \
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | \
   jq '.data.plan'
 ```
 
@@ -263,15 +263,15 @@ grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | \
 
 ```bash
 # 1. Check how many LLM calls
-grep '"task_id": "task_3"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_3"' .trace/trace_*.json | \
   grep '"entry_type": "llm_call"' | wc -l
 
 # 2. Check loop iterations
-grep '"task_id": "task_3"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_3"' .trace/trace_*.json | \
   jq 'select(.entry_type == "llm_call") | .data.loop_iteration'
 
 # 3. Check total duration
-grep '"task_id": "task_3"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_3"' .trace/trace_*.json | \
   jq 'select(.entry_type == "task_end") | .data.duration_ms'
 ```
 
@@ -291,25 +291,25 @@ cat .trace/trace_$(ls -t .trace/ | head -1) | jq .
 
 ### Search All Traces for a Pattern
 ```bash
-grep -r "authentication" .trace/*.jsonl | jq .
+grep -r "authentication" .trace/*.json | jq .
 ```
 
 ### Extract Only Task Descriptions
 ```bash
-grep '"entry_type": "task_start"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_start"' .trace/trace_*.json | \
   jq -r '.data.description'
 ```
 
 ### Count Total LLM Calls
 ```bash
-grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | wc -l
+grep '"entry_type": "llm_call"' .trace/trace_*.json | wc -l
 ```
 
 ### Get Summary Stats
 ```bash
-echo "Tasks: $(grep '"entry_type": "task_end"' .trace/trace_*.jsonl | wc -l)"
-echo "LLM Calls: $(grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | wc -l)"
-echo "Tool Calls: $(grep '"entry_type": "tool_call"' .trace/trace_*.jsonl | wc -l)"
+echo "Tasks: $(grep '"entry_type": "task_end"' .trace/trace_*.json | wc -l)"
+echo "LLM Calls: $(grep '"entry_type": "llm_call"' .trace/trace_*.json | wc -l)"
+echo "Tool Calls: $(grep '"entry_type": "tool_call"' .trace/trace_*.json | wc -l)"
 ```
 
 ---
@@ -344,6 +344,6 @@ echo "Tool Calls: $(grep '"entry_type": "tool_call"' .trace/trace_*.jsonl | wc -
 **Quick Start:**
 1. Add to config: `"trace_enabled": true, "trace_level": "full"`
 2. Use: `@delegate Your query`
-3. Analyze: `cat .trace/trace_*.jsonl | jq .`
+3. Analyze: `cat .trace/trace_*.json | jq .`
 
 **That's it!** 🔍

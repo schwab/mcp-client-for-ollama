@@ -563,7 +563,7 @@ filesystem server:
 
 After implementing Phase 1, testing revealed a critical issue: **Agents were still not using MCP tools even though the planner knew about them.**
 
-**Evidence from Trace File** (`.trace/trace_20251207_224151.jsonl`):
+**Evidence from Trace File** (`.trace/trace_20251207_224151.json`):
 - Line 1-2: Planner correctly created plan using MCP tools ✅
 - Lines 5-28: EXECUTOR tried to use Python libraries instead of MCP tools ❌
 - Never called `osm-mcp-server.geocode_address` or `osm-mcp-server.get_route_directions`

@@ -195,13 +195,13 @@ Trace files will be created and a summary shown at the end.
 
 ```bash
 # View trace
-cat .trace/trace_*.jsonl | jq .
+cat .trace/trace_*.json | jq .
 
 # What did planner decide?
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | jq .
 
 # What did DEBUGGER do?
-grep '"agent_type": "DEBUGGER"' .trace/trace_*.jsonl | jq .
+grep '"agent_type": "DEBUGGER"' .trace/trace_*.json | jq .
 ```
 
 ---

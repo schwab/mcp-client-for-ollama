@@ -107,7 +107,7 @@ ollmcp -q "delegate query" --trace-dir /var/log/ollmcp/traces
 
 **Behavior:**
 - Creates directory if it doesn't exist
-- Trace files named with timestamps: `trace_YYYYMMDD_HHMMSS.jsonl`
+- Trace files named with timestamps: `trace_YYYYMMDD_HHMMSS.json`
 - Configuration is saved for future runs
 - Can be absolute or relative path
 
@@ -135,7 +135,7 @@ Executing query: delegate Read all Python files in src/ and summarize
 Query completed successfully.
 ```
 
-**Trace File:** `.trace/trace_20251208_143022.jsonl`
+**Trace File:** `.trace/trace_20251208_143022.json`
 
 ---
 
@@ -188,7 +188,7 @@ Executing query: delegate task
 Query completed successfully.
 ```
 
-**Trace File:** `/var/log/delegation/traces/trace_20251208_143022.jsonl`
+**Trace File:** `/var/log/delegation/traces/trace_20251208_143022.json`
 
 ---
 
@@ -199,7 +199,7 @@ Query completed successfully.
 ollmcp -q "delegate task" --trace --trace-level full -Q > result.txt
 
 # Check trace file for debugging
-cat .trace/trace_*.jsonl | jq '.entry_type' | sort | uniq -c
+cat .trace/trace_*.json | jq '.entry_type' | sort | uniq -c
 ```
 
 **Output to stdout:**
@@ -245,7 +245,7 @@ jobs:
 
 ## Trace File Format
 
-Trace files are written in **JSON Lines** format (`.jsonl`), with one JSON object per line.
+Trace files are written in **JSON Lines** format (`.json`), with one JSON object per line.
 
 ### Common Entry Types
 
@@ -346,19 +346,19 @@ Trace files are written in **JSON Lines** format (`.jsonl`), with one JSON objec
 
 ```bash
 # Count entry types
-cat .trace/trace_*.jsonl | jq -r '.entry_type' | sort | uniq -c
+cat .trace/trace_*.json | jq -r '.entry_type' | sort | uniq -c
 
 # Extract all task IDs
-cat .trace/trace_*.jsonl | jq -r '.task_id' | grep -v null | sort -u
+cat .trace/trace_*.json | jq -r '.task_id' | grep -v null | sort -u
 
 # Find failed tasks
-cat .trace/trace_*.jsonl | jq 'select(.entry_type=="task_end" and .data.status=="failed")'
+cat .trace/trace_*.json | jq 'select(.entry_type=="task_end" and .data.status=="failed")'
 
 # Get timing for each task
-cat .trace/trace_*.jsonl | jq 'select(.entry_type=="task_end") | {task_id, duration: .data.duration_ms}'
+cat .trace/trace_*.json | jq 'select(.entry_type=="task_end") | {task_id, duration: .data.duration_ms}'
 
 # Extract all tool calls
-cat .trace/trace_*.jsonl | jq 'select(.entry_type=="tool_call") | {tool: .data.tool_name, success: .data.success}'
+cat .trace/trace_*.json | jq 'select(.entry_type=="tool_call") | {tool: .data.tool_name, success: .data.success}'
 ```
 
 ### Using Python
@@ -367,7 +367,7 @@ cat .trace/trace_*.jsonl | jq 'select(.entry_type=="tool_call") | {tool: .data.t
 import json
 
 # Parse trace file
-with open('.trace/trace_20251208_143022.jsonl', 'r') as f:
+with open('.trace/trace_20251208_143022.json', 'r') as f:
     entries = [json.loads(line) for line in f]
 
 # Analyze planning
@@ -454,11 +454,11 @@ ollmcp -q "delegate code analysis" --trace --trace-dir ./traces/code-analysis
 
 ```bash
 # Remove traces older than 7 days
-find .trace -name "trace_*.jsonl" -mtime +7 -delete
+find .trace -name "trace_*.json" -mtime +7 -delete
 
 # Archive old traces
-tar -czf traces-archive-$(date +%Y%m).tar.gz .trace/*.jsonl
-rm .trace/*.jsonl
+tar -czf traces-archive-$(date +%Y%m).tar.gz .trace/*.json
+rm .trace/*.json
 ```
 
 ### 5. Combine with Quiet Mode for Scripts

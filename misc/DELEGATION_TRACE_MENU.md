@@ -186,7 +186,7 @@ After saving, you'll see important reminders:
 │      or d <query>                         │
 │   2. Check trace summary at end           │
 │   3. Analyze trace file:                  │
-│      cat .trace/trace_*.jsonl | jq .      │
+│      cat .trace/trace_*.json | jq .      │
 │                                            │
 │ See TRACE_LOGGING_QUICK_REFERENCE.md      │
 │ for analysis commands                     │
@@ -275,7 +275,7 @@ At the end of delegation, you'll see a trace summary:
 ```
 🔍 Trace Session Summary
 Session ID: 20251207_153045
-Log file: .trace/trace_20251207_153045.jsonl
+Log file: .trace/trace_20251207_153045.json
 
 Total trace entries: 45
 LLM calls: 12
@@ -288,13 +288,13 @@ Tasks failed: 0
 
 ```bash
 # View the full trace
-cat .trace/trace_20251207_153045.jsonl | jq .
+cat .trace/trace_20251207_153045.json | jq .
 
 # See what the planner decided
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | jq .
 
 # See what DEBUGGER agent did
-grep '"agent_type": "DEBUGGER"' .trace/trace_*.jsonl | jq .
+grep '"agent_type": "DEBUGGER"' .trace/trace_*.json | jq .
 ```
 
 ---

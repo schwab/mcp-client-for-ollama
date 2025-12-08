@@ -47,7 +47,7 @@ At the end of delegation, you'll see a summary:
 ```
 🔍 Trace Session Summary
 Session ID: 20251207_153045
-Log file: .trace/trace_20251207_153045.jsonl
+Log file: .trace/trace_20251207_153045.json
 
 Total trace entries: 45
 LLM calls: 12
@@ -60,13 +60,13 @@ Tasks failed: 0
 
 ```bash
 # View the trace file
-cat .trace/trace_20251207_153045.jsonl | jq .
+cat .trace/trace_20251207_153045.json | jq .
 
 # See what the planner decided
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | jq .
 
 # See all prompts sent to DEBUGGER agent
-grep '"agent_type": "DEBUGGER"' .trace/trace_*.jsonl | jq -r '.data.prompt'
+grep '"agent_type": "DEBUGGER"' .trace/trace_*.json | jq -r '.data.prompt'
 ```
 
 ---
@@ -279,7 +279,7 @@ ollmcp --config /path/to/config.json
    ls -lh .trace/
 
    # View latest trace
-   cat .trace/trace_*.jsonl | tail -100 | jq .
+   cat .trace/trace_*.json | tail -100 | jq .
    ```
 
 ---
@@ -291,7 +291,7 @@ Trace files are in JSON Lines format - one JSON object per line.
 ### View Entire Trace
 
 ```bash
-cat .trace/trace_20251207_153045.jsonl | jq .
+cat .trace/trace_20251207_153045.json | jq .
 ```
 
 ### Find Planning Phase
@@ -299,7 +299,7 @@ cat .trace/trace_20251207_153045.jsonl | jq .
 See what tasks the planner created:
 
 ```bash
-grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
+grep '"entry_type": "planning_phase"' .trace/trace_*.json | jq .
 ```
 
 **Output:**
@@ -331,35 +331,35 @@ grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
 ### See All Prompts for a Specific Agent
 
 ```bash
-grep '"agent_type": "DEBUGGER"' .trace/trace_*.jsonl | \
+grep '"agent_type": "DEBUGGER"' .trace/trace_*.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.prompt'
 ```
 
 ### See All Responses from a Task
 
 ```bash
-grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+grep '"task_id": "task_2"' .trace/trace_*.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.response'
 ```
 
 ### Find Failed Tasks
 
 ```bash
-grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_end"' .trace/trace_*.json | \
   jq 'select(.data.status == "failed")'
 ```
 
 ### Find Failed Tool Calls
 
 ```bash
-grep '"entry_type": "tool_call"' .trace/trace_*.jsonl | \
+grep '"entry_type": "tool_call"' .trace/trace_*.json | \
   jq 'select(.data.success == false)'
 ```
 
 ### Count LLM Calls per Agent
 
 ```bash
-grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
+grep '"entry_type": "llm_call"' .trace/trace_*.json | \
   jq -r '.agent_type' | sort | uniq -c
 ```
 
@@ -374,7 +374,7 @@ grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
 ### Calculate Task Durations
 
 ```bash
-grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
+grep '"entry_type": "task_end"' .trace/trace_*.json | \
   jq -r '.data.duration_ms' | \
   awk '{sum+=$1; count++} END {print "Average: " sum/count " ms"}'
 ```
@@ -382,7 +382,7 @@ grep '"entry_type": "task_end"' .trace/trace_*.jsonl | \
 ### Extract All Tool Names Used
 
 ```bash
-grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
+grep '"entry_type": "llm_call"' .trace/trace_*.json | \
   jq -r '.data.tools_used[]' | sort -u
 ```
 
@@ -394,18 +394,18 @@ grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
 
 1. **Find the planning phase:**
    ```bash
-   grep '"entry_type": "planning_phase"' .trace/trace_*.jsonl | jq .
+   grep '"entry_type": "planning_phase"' .trace/trace_*.json | jq .
    ```
 
 2. **Check the planner's prompt:**
    ```bash
-   grep '"agent_type": "PLANNER"' .trace/trace_*.jsonl | \
+   grep '"agent_type": "PLANNER"' .trace/trace_*.json | \
      jq -r 'select(.entry_type == "llm_call") | .data.prompt'
    ```
 
 3. **Check the planner's response:**
    ```bash
-   grep '"agent_type": "PLANNER"' .trace/trace_*.jsonl | \
+   grep '"agent_type": "PLANNER"' .trace/trace_*.json | \
      jq -r 'select(.entry_type == "llm_call") | .data.response'
    ```
 
@@ -413,18 +413,18 @@ grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
 
 1. **Find which task failed:**
    ```bash
-   grep '"status": "failed"' .trace/trace_*.jsonl | jq .
+   grep '"status": "failed"' .trace/trace_*.json | jq .
    ```
 
 2. **See all LLM calls for that task:**
    ```bash
-   grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+   grep '"task_id": "task_2"' .trace/trace_*.json | \
      jq 'select(.entry_type == "llm_call")'
    ```
 
 3. **Check if any tool calls failed:**
    ```bash
-   grep '"task_id": "task_2"' .trace/trace_*.jsonl | \
+   grep '"task_id": "task_2"' .trace/trace_*.json | \
      jq 'select(.entry_type == "tool_call" and .data.success == false)'
    ```
 
@@ -432,19 +432,19 @@ grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | \
 
 1. **Check loop iterations:**
    ```bash
-   grep '"task_id": "task_3"' .trace/trace_*.jsonl | \
+   grep '"task_id": "task_3"' .trace/trace_*.json | \
      jq 'select(.entry_type == "llm_call") | .data.loop_iteration'
    ```
 
 2. **Count tool calls:**
    ```bash
-   grep '"task_id": "task_3"' .trace/trace_*.jsonl | \
+   grep '"task_id": "task_3"' .trace/trace_*.json | \
      grep '"entry_type": "tool_call"' | wc -l
    ```
 
 3. **Check task duration:**
    ```bash
-   grep '"task_id": "task_3"' .trace/trace_*.jsonl | \
+   grep '"task_id": "task_3"' .trace/trace_*.json | \
      jq 'select(.entry_type == "task_end") | .data.duration_ms'
    ```
 
@@ -500,7 +500,7 @@ You: @delegate Fix the authentication timeout bug and verify tests pass
 
 🔍 Trace Session Summary
 Session ID: 20251207_153045
-Log file: .trace/trace_20251207_153045.jsonl
+Log file: .trace/trace_20251207_153045.json
 
 Total trace entries: 45
 LLM calls: 12
@@ -516,14 +516,14 @@ Fixed the authentication timeout bug. The issue was in the session handler...
 
 ```bash
 # What did the planner decide?
-grep '"entry_type": "planning_phase"' .trace/trace_20251207_153045.jsonl | jq .
+grep '"entry_type": "planning_phase"' .trace/trace_20251207_153045.json | jq .
 
 # What did DEBUGGER find?
-grep '"agent_type": "DEBUGGER"' .trace/trace_20251207_153045.jsonl | \
+grep '"agent_type": "DEBUGGER"' .trace/trace_20251207_153045.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.response'
 
 # What code changes did CODER make?
-grep '"agent_type": "CODER"' .trace/trace_20251207_153045.jsonl | \
+grep '"agent_type": "CODER"' .trace/trace_20251207_153045.json | \
   jq -r 'select(.entry_type == "llm_call") | .data.response'
 ```
 
@@ -535,7 +535,7 @@ grep '"agent_type": "CODER"' .trace/trace_20251207_153045.jsonl | \
 
 ```bash
 # Delete traces older than 7 days
-find .trace -name "*.jsonl" -mtime +7 -delete
+find .trace -name "*.json" -mtime +7 -delete
 
 # Delete all traces
 rm -rf .trace/
@@ -548,10 +548,10 @@ rm -rf .trace/
 mkdir -p .trace/archive
 
 # Move specific trace
-mv .trace/trace_20251207_153045.jsonl .trace/archive/
+mv .trace/trace_20251207_153045.json .trace/archive/
 
 # Compress old traces
-tar -czf traces-backup-$(date +%Y%m%d).tar.gz .trace/*.jsonl
+tar -czf traces-backup-$(date +%Y%m%d).tar.gz .trace/*.json
 mv traces-backup-*.tar.gz .trace/archive/
 ```
 
@@ -588,7 +588,7 @@ echo ".trace/" >> .gitignore
 
 ### 5. Clean Up Old Traces Regularly
 ```bash
-find .trace -name "*.jsonl" -mtime +7 -delete
+find .trace -name "*.json" -mtime +7 -delete
 ```
 
 ### 6. Disable in Production
@@ -641,7 +641,7 @@ df -h .  # Check disk space
 
 **Solution 3:** Clean up old traces
 ```bash
-find .trace -name "*.jsonl" -mtime +7 -delete
+find .trace -name "*.json" -mtime +7 -delete
 ```
 
 ### Can't Parse JSON
@@ -650,13 +650,13 @@ Trace files are **JSON Lines** format (one JSON object per line), not regular JS
 
 **Wrong:**
 ```bash
-cat .trace/trace_*.jsonl | jq .  # May fail on large files
+cat .trace/trace_*.json | jq .  # May fail on large files
 ```
 
 **Right:**
 ```bash
-cat .trace/trace_*.jsonl | jq -c .  # Compact output
-grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | jq .  # Filter first
+cat .trace/trace_*.json | jq -c .  # Compact output
+grep '"entry_type": "llm_call"' .trace/trace_*.json | jq .  # Filter first
 ```
 
 ---
@@ -686,7 +686,7 @@ grep '"entry_type": "llm_call"' .trace/trace_*.jsonl | jq .  # Filter first
 
 4. **Analyze trace file:**
    ```bash
-   cat .trace/trace_*.jsonl | jq .
+   cat .trace/trace_*.json | jq .
    ```
 
 ### Configuration Options:

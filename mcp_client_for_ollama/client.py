@@ -1528,7 +1528,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
                     "[cyan]To use trace logging:[/cyan]\n"
                     "  1. Use delegation: [bold]delegate <your query>[/bold] or [bold]d <your query>[/bold]\n"
                     "  2. Check trace summary at end of delegation\n"
-                    f"  3. Analyze trace file: [bold]cat {delegation.get('trace_dir', '.trace')}/trace_*.jsonl | jq .[/bold]\n\n"
+                    f"  3. Analyze trace file: [bold]cat {delegation.get('trace_dir', '.trace')}/trace_*.json | jq .[/bold]\n\n"
                     "[dim]See TRACE_LOGGING_QUICK_REFERENCE.md for analysis commands[/dim]",
                     title="Usage",
                     border_style="green",

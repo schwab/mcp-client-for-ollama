@@ -69,7 +69,7 @@ class TraceLogger:
 
         # Create session log file
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = self.log_dir / f"trace_{self.session_id}.jsonl"
+        self.log_file = self.log_dir / f"trace_{self.session_id}.json"
 
         # Track entries
         self.entries: List[TraceEntry] = []
@@ -333,7 +333,7 @@ class TraceLogger:
         """Write a trace entry to the log file."""
         self.entries.append(entry)
 
-        # Write to JSONL file
+        # Write to JSON file
         with open(self.log_file, 'a') as f:
             json_data = asdict(entry)
             f.write(json.dumps(json_data) + "\n")
