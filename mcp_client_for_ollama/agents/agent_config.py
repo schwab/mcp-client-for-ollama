@@ -122,7 +122,7 @@ class AgentConfig:
         """
         Calculate the actual tools this agent can use.
 
-        Combines default_tools with available_tools, respecting forbidden_tools.
+        Combines default_tools with MCP server tools, respecting forbidden_tools.
 
         Args:
             available_tools: List of all tools available from MCP servers + builtin
@@ -130,8 +130,14 @@ class AgentConfig:
         Returns:
             List of tool names this agent can actually use
         """
-        # Start with default tools
+        # Start with default tools (builtin tools from agent config)
         effective = set(self.default_tools)
+
+        # Add all MCP server tools (non-builtin tools)
+        # This allows agents to use any installed MCP server tools automatically
+        for tool_name in available_tools:
+            if not tool_name.startswith('builtin.'):
+                effective.add(tool_name)
 
         # Remove forbidden tools
         effective -= set(self.forbidden_tools)

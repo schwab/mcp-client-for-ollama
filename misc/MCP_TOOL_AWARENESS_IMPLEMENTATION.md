@@ -1,7 +1,7 @@
 # MCP Tool Awareness Implementation - Complete
 
 **Date:** December 7, 2025
-**Status:** ✅ Phase 1 Complete - Ready for Testing
+**Status:** ✅ Phase 1 & 2 Complete - Ready for Testing
 **Priority:** P0 (Critical Bug Fix)
 
 ---
@@ -552,6 +552,144 @@ filesystem server:
 - Planner creates better, more reliable plans
 - Users get value from their MCP server investments
 - Foundation for future enhancements in place
+
+---
+
+---
+
+## Phase 2: Agent Tool Access (December 7, 2025) ✅
+
+### Problem Discovered During Testing
+
+After implementing Phase 1, testing revealed a critical issue: **Agents were still not using MCP tools even though the planner knew about them.**
+
+**Evidence from Trace File** (`.trace/trace_20251207_224151.jsonl`):
+- Line 1-2: Planner correctly created plan using MCP tools ✅
+- Lines 5-28: EXECUTOR tried to use Python libraries instead of MCP tools ❌
+- Never called `osm-mcp-server.geocode_address` or `osm-mcp-server.get_route_directions`
+- Fell back to `curl` commands and failed Python imports
+
+### Root Cause
+
+The `get_effective_tools()` method in `agent_config.py` only returned tools from the agent's `default_tools` list:
+
+**Original Code** (Lines 133-140):
+```python
+# Start with default tools
+effective = set(self.default_tools)  # Only builtin tools!
+
+# Remove forbidden tools
+effective -= set(self.forbidden_tools)
+
+# Filter to only tools that are actually available
+effective = effective.intersection(set(available_tools))  # ❌ MCP tools filtered out!
+```
+
+**Problem:** Since `default_tools` only contained builtin tools, the intersection filtered out all MCP server tools.
+
+### Solution Implemented
+
+**File:** `mcp_client_for_ollama/agents/agent_config.py:121-148`
+
+Updated `get_effective_tools()` to automatically include all MCP server tools:
+
+```python
+def get_effective_tools(self, available_tools: List[str]) -> List[str]:
+    """
+    Calculate the actual tools this agent can use.
+
+    Combines default_tools with MCP server tools, respecting forbidden_tools.
+    """
+    # Start with default tools (builtin tools from agent config)
+    effective = set(self.default_tools)
+
+    # Add all MCP server tools (non-builtin tools)
+    # This allows agents to use any installed MCP server tools automatically
+    for tool_name in available_tools:
+        if not tool_name.startswith('builtin.'):
+            effective.add(tool_name)  # ✅ Include MCP tools!
+
+    # Remove forbidden tools
+    effective -= set(self.forbidden_tools)
+
+    # Filter to only tools that are actually available
+    effective = effective.intersection(set(available_tools))
+
+    return list(effective)
+```
+
+### Key Changes
+
+1. **Automatic MCP Tool Inclusion**: All non-builtin tools are automatically added to the effective tools set
+2. **No Config Changes Required**: Agent definitions don't need to list MCP tools explicitly
+3. **Forbidden Tools Respected**: Still filters out any forbidden tools
+4. **Availability Check**: Only includes tools that are actually available
+
+### Testing Results
+
+**Unit Test:**
+```
+Test Results:
+Available tools: 7
+Effective tools: 6
+
+Effective tools list:
+  ✓ builtin.execute_bash_command [builtin]
+  ✓ builtin.execute_python_code [builtin]
+  ✓ builtin.read_file [builtin]
+  ✓ filesystem.list_directory [MCP TOOL - NOW INCLUDED!]
+  ✓ osm-mcp-server.geocode_address [MCP TOOL - NOW INCLUDED!]
+  ✓ osm-mcp-server.get_route_directions [MCP TOOL - NOW INCLUDED!]
+
+✅ SUCCESS: 3 MCP server tools included!
+```
+
+### Impact
+
+**Before Fix:**
+- Agents only had access to builtin tools
+- MCP server tools were ignored
+- Tasks failed or used suboptimal solutions (curl, Python libraries)
+
+**After Fix:**
+- Agents automatically have access to all MCP server tools
+- No configuration changes needed
+- Agents can call MCP tools directly
+- Better task execution and results
+
+---
+
+## Complete Solution Summary
+
+### Two-Phase Fix
+
+#### Phase 1: Planner Awareness ✅
+- Planner prompt includes available MCP tools
+- Tool categorization prevents prompt bloat
+- Few-shot examples teach MCP tool usage
+- Planning guidance prefers MCP tools
+
+**Result:** Planner creates plans that use MCP tools
+
+#### Phase 2: Agent Tool Access ✅
+- Agents automatically get access to all MCP server tools
+- `get_effective_tools()` includes non-builtin tools
+- No agent config changes required
+- Forbidden tools still respected
+
+**Result:** Agents can actually execute MCP tool calls
+
+### Files Modified
+
+1. ✅ `mcp_client_for_ollama/agents/delegation_client.py`
+   - Added `_get_available_tool_descriptions()` method (lines 1024-1042)
+   - Updated `create_plan()` to include MCP tools in prompt (lines 293-338)
+
+2. ✅ `mcp_client_for_ollama/agents/examples/planner_examples.json`
+   - Added 4 MCP tool usage examples (lines 440-541)
+
+3. ✅ `mcp_client_for_ollama/agents/agent_config.py`
+   - Updated `get_effective_tools()` to include MCP tools (lines 121-148)
 
 ---
 
