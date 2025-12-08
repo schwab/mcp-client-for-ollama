@@ -331,6 +331,10 @@ When planning tasks, consider:
 3. Prefer using MCP tools over writing custom Python code when available
 4. MCP tools are called by name (e.g., osm-mcp-server.geocode_address)
 
+CRITICAL: The agent_type field must ONLY contain agent names (EXECUTOR, CODER, READER, etc.), NEVER MCP tool names.
+- CORRECT: "agent_type": "EXECUTOR", "description": "Use nextcloud-api.nc_notes_create_note to create a note"
+- INCORRECT: "agent_type": "nextcloud-api.nc_notes_create_note"
+
 Now create a plan for this user request:
 {query}
 
