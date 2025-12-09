@@ -540,6 +540,21 @@
       }
     },
     {
+      "category": "bulk-file-processing",
+      "query": "List all markdown files in ./notes that don't have tags defined in their properties section",
+      "plan": {
+        "tasks": [
+          {
+            "id": "task_1",
+            "description": "Use Python to read all .md files in ./notes directory and check each file for tags in the properties section (between --- --- with format 'tags:\\n  -<tagname>'). Return a list of files that do NOT have tags defined.",
+            "agent_type": "EXECUTOR",
+            "dependencies": [],
+            "expected_output": "List of markdown files without tags in their properties"
+          }
+        ]
+      }
+    },
+    {
       "category": "mcp-tool-with-specific-data",
       "query": "Get note 46277 and append these bullet points: - Armstrong transport, - Fifth wheel freight, - Molo load board, - Pinnacle freight",
       "plan": {

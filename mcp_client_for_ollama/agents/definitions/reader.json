@@ -21,7 +21,7 @@
     "builtin.delete_file"
   ],
   "max_context_tokens": 32768,
-  "loop_limit": 2,
+  "loop_limit": 10,
   "temperature": 0.3,
   "planning_hints": "Assign READER tasks when you need to: read and analyze code, search for patterns, understand existing implementation, extract information from files, check file existence or structure. READER cannot modify files or execute code."
 }

@@ -22,7 +22,7 @@
     "builtin.set_system_prompt"
   ],
   "max_context_tokens": 8192,
-  "loop_limit": 3,
+  "loop_limit": 10,
   "temperature": 0.4,
   "planning_hints": "Assign EXECUTOR tasks when you need to: run bash commands, execute Python code, list files/directories, search for files, gather system information, run tests or scripts. EXECUTOR cannot write files or make changes to the codebase."
 }

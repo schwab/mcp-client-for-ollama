@@ -147,7 +147,8 @@ class DelegationClient:
             'simple-execute': ['run', 'execute', 'test suite'],
             'bug-investigation': ['investigate', 'debug', 'error', '500', 'failure'],
             'parallel-independent': ['and', 'both', 'generate and', 'write and'],
-            'mcp-tool-with-specific-data': ['append', 'add to', 'update with', 'insert', 'get note', 'modify note']
+            'mcp-tool-with-specific-data': ['append', 'add to', 'update with', 'insert', 'get note', 'modify note'],
+            'bulk-file-processing': ['all files', 'multiple files', 'each file', 'list files', 'all .md', 'all .py', 'check files']
         }
 
         # Score each example by keyword relevance
