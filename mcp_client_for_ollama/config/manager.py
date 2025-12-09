@@ -325,4 +325,8 @@ class ConfigManager:
                 except (TypeError, ValueError):
                     pass
 
+        # Preserve mcpServers section (critical - do not overwrite user's MCP server config!)
+        if "mcpServers" in config_data:
+            validated["mcpServers"] = config_data["mcpServers"]
+
         return validated
