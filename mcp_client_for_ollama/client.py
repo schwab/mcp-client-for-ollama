@@ -841,19 +841,29 @@ class MCPClient:
         Args:
             query: The user's query to process
         """
-        # Handle delegation command
-        if query.lower().startswith('delegate ') or query.lower().startswith('d '):
+        # Handle explicit delegation command prefix (forces delegation even if disabled)
+        force_delegation = False
+        actual_query = query
+
+        if query.lower().startswith('delegate ') or query.lower().startswith('dt '):
+            force_delegation = True
             # Extract the actual query after the command
             if query.lower().startswith('delegate '):
                 actual_query = query[9:].strip()
-            else:  # 'd '
-                actual_query = query[2:].strip()
+            else:  # 'dt '
+                actual_query = query[3:].strip()
 
-            if len(actual_query) < 5:
-                if not self.quiet_mode:
-                    self.console.print("[yellow]Delegation query must be at least 5 characters long.[/yellow]")
-                return
+        # Check if query is too short
+        if len(actual_query.strip()) < 5:
+            if not self.quiet_mode:
+                self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
+            return
 
+        # Decide whether to use delegation
+        use_delegation = force_delegation or self.is_delegation_enabled()
+
+        if use_delegation:
+            # Use delegation
             try:
                 # Get or create delegation client
                 delegation_client = self.get_delegation_client()
@@ -884,15 +894,10 @@ class MCPClient:
 
             return
 
-        # Check if query is too short
-        if len(query.strip()) < 5:
-            if not self.quiet_mode:
-                self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
-            return
-
+        # Non-delegated processing
         try:
             # Process the query
-            await self.process_query(query)
+            await self.process_query(actual_query)
         except ollama.ResponseError as e:
             error_msg = str(e)
             if not self.quiet_mode:
@@ -1036,7 +1041,11 @@ class MCPClient:
                     self.hil_manager.toggle_global()
                     continue
 
-                if query.lower() in ['delegation-trace', 'dt', 'trace-config', 'tc']:
+                if query.lower() in ['toggle-delegation', 'td']:
+                    await self.toggle_delegation()
+                    continue
+
+                if query.lower() in ['delegation-trace', 'dtt', 'trace-config', 'tc']:
                     await self.configure_delegation_trace()
                     continue
 
@@ -1091,18 +1100,28 @@ class MCPClient:
                     self._display_chat_history()
                     continue
 
-                # Handle delegation command
-                if query.lower().startswith('delegate ') or query.lower().startswith('d '):
+                # Handle delegation (explicit prefix or enabled by default)
+                force_delegation = False
+                actual_query = query
+
+                if query.lower().startswith('delegate ') or query.lower().startswith('dt '):
+                    force_delegation = True
                     # Extract the actual query after the command
                     if query.lower().startswith('delegate '):
                         actual_query = query[9:].strip()
-                    else:  # 'd '
-                        actual_query = query[2:].strip()
+                    else:  # 'dt '
+                        actual_query = query[3:].strip()
 
-                    if len(actual_query) < 5:
-                        self.console.print("[yellow]Delegation query must be at least 5 characters long.[/yellow]")
-                        continue
+                # Check if query is too short
+                if len(actual_query.strip()) < 5:
+                    self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
+                    continue
 
+                # Decide whether to use delegation
+                use_delegation = force_delegation or self.is_delegation_enabled()
+
+                if use_delegation:
+                    # Use delegation
                     try:
                         # Get or create delegation client
                         delegation_client = self.get_delegation_client()
@@ -1126,13 +1145,9 @@ class MCPClient:
 
                     continue
 
-                # Check if query is too short and not a special command
-                if len(query.strip()) < 5:
-                    self.console.print("[yellow]Query must be at least 5 characters long.[/yellow]")
-                    continue
-
+                # Non-delegated processing
                 try:
-                    await self.process_query(query)
+                    await self.process_query(actual_query)
                 except ollama.ResponseError as e:
                     # Extract error message without the traceback
                     error_msg = str(e)
@@ -1182,9 +1197,11 @@ class MCPClient:
             "• Type [bold]plan-mode[/bold] or [bold]pm[/bold] to toggle between PLAN (read-only) and ACT (full access) modes\n"
             "• Press [bold]Shift+Tab[/bold] to quickly toggle between PLAN and ACT modes\n\n"
 
-            "[bold cyan]Agent Delegation:[/bold cyan] [bold magenta](MVP)[/bold magenta]\n"
-            "• Type [bold]delegate <query>[/bold] or [bold]d <query>[/bold] to use multi-agent delegation\n"
-            "• Type [bold]delegation-trace[/bold] or [bold]dt[/bold] to configure trace logging for delegation debugging\n"
+            "[bold cyan]Agent Delegation:[/bold cyan] [bold green](Enabled by Default)[/bold green]\n"
+            "• Queries are automatically delegated to specialized agents for better results\n"
+            "• Type [bold]toggle-delegation[/bold] or [bold]td[/bold] to enable/disable delegation mode\n"
+            "• Type [bold]delegation-trace[/bold] or [bold]dtt[/bold] to configure trace logging for debugging\n"
+            "• Type [bold]dt <query>[/bold] to force delegation for a specific query (when disabled)\n"
             "• Agent delegation breaks down complex tasks into focused subtasks for specialized agents\n"
             "• Best for: multi-file edits, complex refactoring, or tasks requiring multiple steps\n\n"
 
@@ -1384,6 +1401,41 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             self.console.print("[bold green]✅ ACT MODE activated![/bold green]")
             self.console.print("[cyan]All tools are now available. Use Shift+Tab to switch to PLAN mode.[/cyan]")
 
+    async def toggle_delegation(self):
+        """Toggle delegation mode on/off"""
+        # Load current config
+        current_config = self.config_manager.load_configuration("default")
+        if not current_config:
+            current_config = {}
+
+        if "delegation" not in current_config or not isinstance(current_config["delegation"], dict):
+            current_config["delegation"] = {}
+
+        delegation = current_config["delegation"]
+
+        # Get current state (default to True)
+        current_state = delegation.get("enabled", True)
+
+        # Toggle the state
+        new_state = not current_state
+        delegation["enabled"] = new_state
+
+        # Save the configuration
+        current_config["delegation"] = delegation
+        self.config_manager.save_configuration("default", current_config)
+
+        # Display the new state
+        status = "[green]enabled[/green]" if new_state else "[yellow]disabled[/yellow]"
+        self.console.print(f"\n[bold]Delegation is now {status}[/bold]")
+
+        if new_state:
+            self.console.print("[dim]Queries will be processed using the agent delegation system.[/dim]")
+        else:
+            self.console.print("[dim]Queries will be processed directly (legacy mode).[/dim]")
+            self.console.print("[dim]You can still force delegation for specific queries using 'dt <query>'[/dim]")
+
+        self.console.print()
+
     async def configure_delegation_trace(self):
         """Configure trace logging for delegation mode"""
         from prompt_toolkit.shortcuts import radiolist_dialog, yes_no_dialog
@@ -1405,7 +1457,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         table.add_column("Setting", style="yellow", width=20)
         table.add_column("Value", style="green")
 
-        table.add_row("Delegation Enabled", str(delegation.get("enabled", False)))
+        table.add_row("Delegation Enabled", str(delegation.get("enabled", True)))
         table.add_row("Trace Enabled", str(delegation.get("trace_enabled", False)))
         table.add_row("Trace Level", delegation.get("trace_level", "basic"))
         table.add_row("Trace Directory", delegation.get("trace_dir", ".trace"))
@@ -1487,7 +1539,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         table.add_column("Setting", style="yellow", width=20)
         table.add_column("Value", style="green")
 
-        table.add_row("Delegation Enabled", str(delegation.get("enabled", False)))
+        table.add_row("Delegation Enabled", str(delegation.get("enabled", True)))
         table.add_row("Trace Enabled", str(delegation.get("trace_enabled", False)))
         table.add_row("Trace Level", delegation.get("trace_level", "basic"))
         table.add_row("Trace Directory", delegation.get("trace_dir", ".trace"))
@@ -1536,6 +1588,20 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
                 ))
         else:
             self.console.print("[yellow]Configuration not saved.[/yellow]")
+
+    def is_delegation_enabled(self) -> bool:
+        """
+        Check if delegation is enabled in the configuration.
+
+        Returns:
+            True if delegation is enabled, False otherwise. Defaults to True.
+        """
+        user_config = self.config_manager.load_configuration("default")
+        if user_config and "delegation" in user_config and isinstance(user_config["delegation"], dict):
+            # Return the enabled flag, defaulting to True if not specified
+            return user_config["delegation"].get("enabled", True)
+        # Default to True if no delegation config exists
+        return True
 
     def get_delegation_client(self):
         """
