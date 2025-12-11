@@ -868,8 +868,8 @@ class MCPClient:
                 # Get or create delegation client
                 delegation_client = self.get_delegation_client()
 
-                # Process with delegation
-                response = await delegation_client.process_with_delegation(actual_query)
+                # Process with delegation (pass chat history for context)
+                response = await delegation_client.process_with_delegation(actual_query, self.chat_history)
 
                 # Display response
                 if not self.quiet_mode:
@@ -1126,8 +1126,8 @@ class MCPClient:
                         # Get or create delegation client
                         delegation_client = self.get_delegation_client()
 
-                        # Process with delegation
-                        response = await delegation_client.process_with_delegation(actual_query)
+                        # Process with delegation (pass chat history for context)
+                        response = await delegation_client.process_with_delegation(actual_query, self.chat_history)
 
                         # Display response
                         self.console.print("\n[bold green]📋 Final Response:[/bold green]")
@@ -1625,7 +1625,8 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             }],
             'execution_mode': 'parallel',  # Phase 2: parallel execution enabled
             'max_parallel_tasks': 3,  # Limit concurrent LLM calls to prevent overload
-            'task_timeout': 300
+            'task_timeout': 300,
+            'context_depth': 3  # Include last 3 exchanges for context
         }
 
         # Merge in delegation settings from user config if present
@@ -1660,6 +1661,10 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             # Pass through collapsible output settings
             if "collapsible_output" in user_delegation:
                 config["collapsible_output"] = user_delegation["collapsible_output"]
+
+            # Context depth for follow-up questions
+            if "context_depth" in user_delegation:
+                config["context_depth"] = user_delegation["context_depth"]
 
         return DelegationClient(self, config)
 

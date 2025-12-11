@@ -51,6 +51,7 @@ class DelegationClient:
                 - execution_mode: "sequential" or "parallel" (default: "parallel")
                 - max_parallel_tasks: Maximum concurrent LLM calls (default: 3)
                 - task_timeout: Task execution timeout in seconds (default: 300)
+                - context_depth: Number of previous exchanges to include for context (default: 3)
         """
         self.mcp_client = mcp_client
         self.config = config
@@ -77,6 +78,9 @@ class DelegationClient:
         # Task tracking
         self.tasks: Dict[str, Task] = {}
         self.task_counter = 0
+
+        # Chat history for context (passed per-request)
+        self.chat_history: List[Dict] = []
 
         # Load planning examples for few-shot learning
         self.planner_examples = self._load_planner_examples()
@@ -189,7 +193,7 @@ class DelegationClient:
 
         return relevant
 
-    async def process_with_delegation(self, user_query: str) -> str:
+    async def process_with_delegation(self, user_query: str, chat_history: List[Dict] = None) -> str:
         """
         Process a query using the agent delegation system.
 
@@ -197,6 +201,7 @@ class DelegationClient:
 
         Args:
             user_query: The user's question or request
+            chat_history: Optional list of previous chat exchanges for context
 
         Returns:
             Final aggregated response from all tasks
@@ -204,6 +209,8 @@ class DelegationClient:
         Raises:
             Exception: If planning or execution fails
         """
+        # Store chat history for use in planning
+        self.chat_history = chat_history or []
         self.console.print("\n[bold cyan]🤖 Agent Delegation Mode[/bold cyan]")
         self.console.print(f"[dim]Query: {user_query}[/dim]\n")
 
@@ -248,6 +255,88 @@ class DelegationClient:
                 self.trace_logger.print_summary(self.console)
 
             return await self._fallback_direct_execution(user_query)
+
+    def _extract_key_entities(self, text: str) -> List[str]:
+        """
+        Extract key entities from text (file paths, IDs, names).
+
+        Args:
+            text: Text to extract entities from
+
+        Returns:
+            List of extracted key entities
+        """
+        import re
+        entities = []
+
+        # Extract file paths (common patterns)
+        file_patterns = [
+            r'[\'"]([a-zA-Z0-9_./\-]+\.(py|js|json|md|txt|yaml|yml|toml|conf|config))[\'"]',
+            r'(?:file|path|directory):\s*([a-zA-Z0-9_./\-]+)',
+            r'`([a-zA-Z0-9_./\-]+\.[a-zA-Z0-9]+)`'
+        ]
+        for pattern in file_patterns:
+            entities.extend(re.findall(pattern, text))
+
+        # Extract IDs (common patterns like abc-123, id_123, etc.)
+        id_patterns = [
+            r'\b(?:id|ID|Id):\s*([a-zA-Z0-9_-]+)',
+            r'\b([a-zA-Z0-9]{8,})\b',  # Long alphanumeric strings
+        ]
+        for pattern in id_patterns:
+            matches = re.findall(pattern, text)
+            # Filter out very common words
+            entities.extend([m for m in matches if len(str(m)) > 5])
+
+        # Deduplicate and return
+        return list(set([str(e) if isinstance(e, tuple) else e for e in entities]))[:10]
+
+    def _build_context_section(self) -> str:
+        """
+        Build a context section from chat history for the planner.
+
+        Returns:
+            Formatted context string to add to planning prompt
+        """
+        if not self.chat_history:
+            return ""
+
+        # Get context depth from config (default: 3)
+        context_depth = self.config.get('context_depth', 3)
+
+        # Get last N exchanges
+        recent_history = self.chat_history[-context_depth:] if len(self.chat_history) > context_depth else self.chat_history
+
+        # Build context section
+        context_section = "\n\nPREVIOUS CONVERSATION CONTEXT:\n"
+        context_section += "=" * 60 + "\n"
+
+        for i, entry in enumerate(recent_history, 1):
+            query = entry.get('query', '')
+            response = entry.get('response', '')
+
+            # Truncate very long responses
+            if len(response) > 500:
+                response = response[:500] + "...[truncated]"
+
+            context_section += f"\nExchange {i}:\n"
+            context_section += f"User: {query}\n"
+            context_section += f"Assistant: {response}\n"
+
+        # Extract key entities from all responses
+        all_entities = []
+        for entry in recent_history:
+            response = entry.get('response', '')
+            all_entities.extend(self._extract_key_entities(response))
+
+        if all_entities:
+            context_section += "\nKEY FACTS FROM PREVIOUS WORK:\n"
+            for entity in all_entities[:15]:  # Limit to top 15
+                context_section += f"- {entity}\n"
+
+        context_section += "=" * 60 + "\n"
+
+        return context_section
 
     async def create_plan(self, query: str) -> Dict[str, Any]:
         """
@@ -319,6 +408,9 @@ class DelegationClient:
                 for tool in available_tools:
                     tools_section += f"- {tool['name']}: {tool['description']}\n"
 
+        # Build context section from chat history
+        context_section = self._build_context_section()
+
         planning_prompt = f"""
 {planner_config.system_prompt}
 
@@ -326,12 +418,14 @@ Available agents:
 {chr(10).join(available_agents)}
 {tools_section}
 {examples_section}
+{context_section}
 
 When planning tasks, consider:
 1. What MCP tools are available that could solve this task directly
 2. Which agent type is best suited to use those tools (usually EXECUTOR)
 3. Prefer using MCP tools over writing custom Python code when available
 4. MCP tools are called by name (e.g., osm-mcp-server.geocode_address)
+5. If previous context exists, consider it when planning - the user may be asking follow-up questions
 
 CRITICAL: The agent_type field must ONLY contain agent names (EXECUTOR, CODER, READER, etc.), NEVER MCP tool names.
 - CORRECT: "agent_type": "EXECUTOR", "description": "Use nextcloud-api.nc_notes_create_note to create a note"
