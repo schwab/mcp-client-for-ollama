@@ -9,14 +9,16 @@ from datetime import datetime
 class BuiltinToolManager:
     """Manages the definition and execution of built-in tools."""
 
-    def __init__(self, model_config_manager: Any):
+    def __init__(self, model_config_manager: Any, ollama_host: str = None):
         """
         Initializes the BuiltinToolManager.
 
         Args:
             model_config_manager: An instance of ModelConfigManager to interact with model settings.
+            ollama_host: Optional Ollama server URL. If not provided, uses OLLAMA_HOST env var or default.
         """
         self.model_config_manager = model_config_manager
+        self.ollama_host = ollama_host or os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
         self.working_directory = os.getcwd()  # Store the working directory for security checks
         self._tool_handlers: Dict[str, Callable[[Dict[str, Any]], str]] = {
             "set_system_prompt": self._handle_set_system_prompt,
@@ -857,8 +859,8 @@ class BuiltinToolManager:
                 image_data = image_file.read()
                 image_base64 = base64.b64encode(image_data).decode('utf-8')
 
-            # Get Ollama API URL from config or use default
-            ollama_url = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+            # Get Ollama API URL from the configured host
+            ollama_url = self.ollama_host
 
             # Check if a vision model is configured
             configured_vision_model = None

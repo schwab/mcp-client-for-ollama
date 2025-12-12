@@ -50,8 +50,8 @@ class MCPClient:
         self.model_manager = ModelManager(console=self.console, default_model=model, ollama=self.ollama)
         # Initialize the model config manager
         self.model_config_manager = ModelConfigManager(console=self.console)
-        # Initialize the built-in tool manager
-        self.builtin_tool_manager = BuiltinToolManager(model_config_manager=self.model_config_manager)
+        # Initialize the built-in tool manager with the configured Ollama host
+        self.builtin_tool_manager = BuiltinToolManager(model_config_manager=self.model_config_manager, ollama_host=host)
         # Initialize the tool manager with server connector reference
         self.tool_manager = ToolManager(
             console=self.console, 
@@ -1461,7 +1461,8 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         import urllib.error
         from rich.table import Table
 
-        ollama_url = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+        # Use the configured Ollama host from the client
+        ollama_url = str(self.ollama._client.base_url)
 
         try:
             # Get list of available models
@@ -1536,7 +1537,8 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         import urllib.request
         import urllib.error
 
-        ollama_url = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+        # Use the configured Ollama host from the client
+        ollama_url = str(self.ollama._client.base_url)
 
         try:
             # Get list of available models
