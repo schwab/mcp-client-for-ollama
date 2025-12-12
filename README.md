@@ -502,7 +502,7 @@ Choose from available models interactively. The selected model will be used for 
 
 - **Auto-Detection**: If you haven't set a preferred model, the tool automatically detects and uses the first available vision model
 - **Configuration**: Set a preferred model using `svm` to use it consistently
-- **Supported Models**: llava, bakllava, cogvlm, cogvlm2, moondream, minicpm-v, obsidian, llava-llama3, llava-phi3
+- **Supported Models**: llava, llava-llama3, llava-phi3, bakllava, llama3.2-vision, llama3-vision, cogvlm, cogvlm2, moondream, minicpm-v, obsidian, and any model with "vision" in the name
 - **Supported Formats**: PNG, JPG, JPEG, GIF, BMP, WEBP
 
 ### Usage Examples

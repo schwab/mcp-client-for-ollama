@@ -215,12 +215,15 @@ The tool automatically detects these vision model families:
 - **llava** - General-purpose vision model (recommended)
 - **llava-llama3** - Based on Llama 3 architecture
 - **llava-phi3** - Based on Phi-3, optimized for efficiency
+- **llama3.2-vision** - Llama 3.2 with vision capabilities
+- **llama3-vision** - Llama 3 with vision capabilities
 - **bakllava** - Optimized for speed
 - **cogvlm** - Strong visual understanding
 - **cogvlm2** - Improved version of CogVLM
 - **moondream** - Lightweight, fast inference
 - **minicpm-v** - Efficient multi-modal model
 - **obsidian** - Specialized vision model
+- **Any model with "vision" in the name** - Generic detection for future models
 
 ### Model Selection Strategy
 
