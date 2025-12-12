@@ -1070,6 +1070,14 @@ class MCPClient:
                     await self.load_session()
                     continue
 
+                if query.lower() in ['list-vision-models', 'lvm']:
+                    await self.list_vision_models()
+                    continue
+
+                if query.lower() in ['set-vision-model', 'svm']:
+                    await self.set_vision_model()
+                    continue
+
                 if query.lower() in ['reparse-last', 'rl']:
                     await self.reparse_last()
                     continue
@@ -1216,6 +1224,11 @@ class MCPClient:
             "• Type [bold]human-in-the-loop[/bold] or [bold]hil[/bold] to toggle [bold]global[/bold] Human-in-the-Loop confirmations\n"
             "• Type [bold]hil-config[/bold] or [bold]hc[/bold] to configure granular HIL settings\n"
             "• Type [bold]reload-servers[/bold] or [bold]rs[/bold] to reload MCP servers\n\n"
+
+            "[bold cyan]Vision Models:[/bold cyan] [bold magenta](Multi-modal Support)[/bold magenta]\n"
+            "• Type [bold]list-vision-models[/bold] or [bold]lvm[/bold] to list available vision-capable models\n"
+            "• Type [bold]set-vision-model[/bold] or [bold]svm[/bold] to select a vision model for image analysis\n"
+            "• Use the [bold]builtin.read_image[/bold] tool to analyze images with vision models\n\n"
 
             "[bold cyan]Context:[/bold cyan]\n"
             "• Type [bold]context[/bold] or [bold]c[/bold] to toggle context retention\n"
@@ -1440,6 +1453,160 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             self.console.print("[dim]You can still force delegation for specific queries using 'dt <query>'[/dim]")
 
         self.console.print()
+
+    async def list_vision_models(self):
+        """List available vision-capable models on the Ollama server"""
+        import json
+        import urllib.request
+        import urllib.error
+        from rich.table import Table
+
+        ollama_url = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+
+        try:
+            # Get list of available models
+            tags_url = f"{ollama_url}/api/tags"
+            tags_request = urllib.request.Request(tags_url, method='GET')
+            with urllib.request.urlopen(tags_request, timeout=5) as response:
+                tags_data = json.loads(response.read().decode('utf-8'))
+                models = tags_data.get('models', [])
+
+                # Filter for vision models
+                vision_keywords = ['llava', 'bakllava', 'cogvlm', 'moondream']
+                vision_models = []
+
+                for model in models:
+                    model_name = model.get('name', '').lower()
+                    for keyword in vision_keywords:
+                        if keyword in model_name:
+                            vision_models.append(model)
+                            break
+
+                # Get currently configured vision model
+                current_config = self.config_manager.load_configuration("default")
+                configured_model = None
+                if current_config and "vision_model" in current_config:
+                    configured_model = current_config["vision_model"]
+
+                # Display results
+                self.console.print("\n[bold cyan]Vision-Capable Models on Ollama Server:[/bold cyan]")
+
+                if vision_models:
+                    table = Table(show_header=True, header_style="bold magenta")
+                    table.add_column("Model Name", style="cyan")
+                    table.add_column("Size", style="yellow")
+                    table.add_column("Modified", style="green")
+                    table.add_column("Current", style="bold red")
+
+                    for model in vision_models:
+                        model_name = model.get('name', 'Unknown')
+                        size_bytes = model.get('size', 0)
+
+                        # Format size
+                        if size_bytes < 1024**3:
+                            size_str = f"{size_bytes / (1024**2):.1f} MB"
+                        else:
+                            size_str = f"{size_bytes / (1024**3):.1f} GB"
+
+                        # Format modified time
+                        modified = model.get('modified_at', '')[:10] if 'modified_at' in model else 'N/A'
+
+                        # Check if this is the configured model
+                        is_current = "✓" if model_name == configured_model else ""
+
+                        table.add_row(model_name, size_str, modified, is_current)
+
+                    self.console.print(table)
+                    self.console.print(f"\n[dim]Use 'set-vision-model' or 'svm' to select a model[/dim]")
+                else:
+                    self.console.print("[yellow]No vision-capable models found on Ollama server.[/yellow]")
+                    self.console.print("[dim]Install one using: [cyan]ollama pull llava[/cyan][/dim]")
+
+                self.console.print()
+
+        except urllib.error.URLError as e:
+            self.console.print(f"[red]Error: Failed to connect to Ollama server at {ollama_url}[/red]")
+            self.console.print(f"[dim]Make sure Ollama is running. Error: {e.reason}[/dim]")
+        except Exception as e:
+            self.console.print(f"[red]Error listing vision models: {type(e).__name__}: {e}[/red]")
+
+    async def set_vision_model(self):
+        """Set the preferred vision model for image analysis"""
+        import json
+        import urllib.request
+        import urllib.error
+
+        ollama_url = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+
+        try:
+            # Get list of available models
+            tags_url = f"{ollama_url}/api/tags"
+            tags_request = urllib.request.Request(tags_url, method='GET')
+            with urllib.request.urlopen(tags_request, timeout=5) as response:
+                tags_data = json.loads(response.read().decode('utf-8'))
+                models = tags_data.get('models', [])
+
+                # Filter for vision models
+                vision_keywords = ['llava', 'bakllava', 'cogvlm', 'moondream']
+                vision_models = []
+
+                for model in models:
+                    model_name = model.get('name', '')
+                    if any(keyword in model_name.lower() for keyword in vision_keywords):
+                        vision_models.append(model_name)
+
+                if not vision_models:
+                    self.console.print("[yellow]No vision-capable models found on Ollama server.[/yellow]")
+                    self.console.print("[dim]Install one using: [cyan]ollama pull llava[/cyan][/dim]")
+                    return
+
+                # Display available models
+                self.console.print("\n[bold cyan]Available Vision Models:[/bold cyan]")
+                for idx, model_name in enumerate(vision_models, 1):
+                    self.console.print(f"  {idx}. {model_name}")
+
+                # Get user selection
+                self.console.print()
+                selection = await self.get_user_input("Enter model number (or model name), or 'c' to cancel: ")
+
+                if selection.lower() == 'c':
+                    self.console.print("[yellow]Cancelled.[/yellow]")
+                    return
+
+                # Parse selection
+                selected_model = None
+                try:
+                    # Try as number first
+                    idx = int(selection)
+                    if 1 <= idx <= len(vision_models):
+                        selected_model = vision_models[idx - 1]
+                    else:
+                        self.console.print(f"[red]Invalid selection. Please enter a number between 1 and {len(vision_models)}[/red]")
+                        return
+                except ValueError:
+                    # Try as model name
+                    if selection in vision_models:
+                        selected_model = selection
+                    else:
+                        self.console.print(f"[red]Model '{selection}' not found in available vision models[/red]")
+                        return
+
+                # Save to config
+                current_config = self.config_manager.load_configuration("default")
+                if not current_config:
+                    current_config = {}
+
+                current_config["vision_model"] = selected_model
+                self.config_manager.save_configuration("default", current_config)
+
+                self.console.print(f"\n[bold green]✓ Vision model set to: {selected_model}[/bold green]")
+                self.console.print(f"[dim]This model will be used for all image analysis tasks[/dim]\n")
+
+        except urllib.error.URLError as e:
+            self.console.print(f"[red]Error: Failed to connect to Ollama server at {ollama_url}[/red]")
+            self.console.print(f"[dim]Make sure Ollama is running. Error: {e.reason}[/dim]")
+        except Exception as e:
+            self.console.print(f"[red]Error setting vision model: {type(e).__name__}: {e}[/red]")
 
     async def configure_delegation_trace(self):
         """Configure trace logging for delegation mode"""
