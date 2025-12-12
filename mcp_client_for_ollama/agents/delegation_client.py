@@ -781,15 +781,15 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
         )
 
         try:
-            # Build task context
-            messages = self._build_task_context(task, agent_config)
-
-            # Get tools for this agent
+            # Get tools for this agent first (needed for context building)
             available_tool_names = self._get_available_tool_names()
             agent_tool_names = agent_config.get_effective_tools(available_tool_names)
 
             # Get actual tool objects
             agent_tools = self._get_tool_objects(agent_tool_names)
+
+            # Build task context (include available tools so agent knows what it has)
+            messages = self._build_task_context(task, agent_config, agent_tools)
 
             # Execute with tool support enabled
             response_text = await self._execute_with_tools(
@@ -879,18 +879,20 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         self.console.print("[green]✓[/green] Results aggregated")
         return aggregated
 
-    def _build_task_context(self, task: Task, agent_config: AgentConfig) -> List[Dict[str, str]]:
+    def _build_task_context(self, task: Task, agent_config: AgentConfig, available_tools: List = None) -> List[Dict[str, str]]:
         """
         Build the message context for a task.
 
         Includes:
         - Agent's system prompt
+        - List of available tools (if provided)
         - Results from dependency tasks (shared read)
         - Task description
 
         Args:
             task: The task to build context for
             agent_config: Agent configuration
+            available_tools: List of tool objects available to this agent
 
         Returns:
             List of message dictionaries
@@ -902,6 +904,20 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             "role": "system",
             "content": agent_config.system_prompt
         })
+
+        # Add available tools information
+        if available_tools:
+            tools_info = "\n\nAVAILABLE TOOLS:\n"
+            tools_info += "You have access to the following tools (call them by name):\n"
+            for tool in available_tools:
+                tool_desc = f"- {tool.name}: {tool.description}"
+                tools_info += tool_desc + "\n"
+            tools_info += "\nUse these tools to complete your task. Call them using the standard function call format."
+
+            messages.append({
+                "role": "system",
+                "content": tools_info
+            })
 
         # Add dependency results (shared read strategy)
         dependency_results = task.get_dependency_results(self.tasks)
