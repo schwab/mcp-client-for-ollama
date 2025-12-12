@@ -1,3 +1,3 @@
 """MCP Client for Ollama package."""
 
-__version__ = "0.23.18"
+__version__ = "0.23.19"
