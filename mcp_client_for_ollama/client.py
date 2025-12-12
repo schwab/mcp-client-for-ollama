@@ -709,7 +709,12 @@ class MCPClient:
                 with self.console.status(f"[cyan]⏳ Running {tool_name}...[/cyan]"):
                     result = await self.sessions[server_name]["session"].call_tool(actual_tool_name, tool_args)
                     if result.content:
-                        tool_response = f"{result.content[0].text}"
+                        # Combine all content items (MCP can return multiple)
+                        tool_response_parts = []
+                        for content_item in result.content:
+                            if hasattr(content_item, 'text'):
+                                tool_response_parts.append(content_item.text)
+                        tool_response = "\n".join(tool_response_parts) if tool_response_parts else ""
 
                         # Display the tool response
                         self.tool_display_manager.display_tool_response(tool_name, tool_args, tool_response, show=self.show_tool_execution)

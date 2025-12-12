@@ -35,8 +35,10 @@ class FZFStyleCompleter(Completer):
             list_result = await self.sessions['filesystem']['session'].call_tool(
                 'list_allowed_directories', {}
             )
-            if list_result.content and isinstance(list_result.content[0].text, str):
-                content_text = list_result.content[0].text.strip()
+            if list_result.content:
+                # Combine all content items
+                content_parts = [item.text for item in list_result.content if hasattr(item, 'text') and isinstance(item.text, str)]
+                content_text = "\n".join(content_parts).strip() if content_parts else ""
                 try:
                     list_data = json.loads(content_text)
                     if isinstance(list_data, dict) and 'items' in list_data:
@@ -188,8 +190,10 @@ class FZFStyleCompleter(Completer):
                     self.status_messages.append(f"[yellow]DEBUG: list_directory('{dir_to_list}') raw result: {list_result.content}[/yellow]")
 
                 session_items = []
-                if list_result.content and isinstance(list_result.content[0].text, str):
-                    content_text = list_result.content[0].text.strip()
+                if list_result.content:
+                    # Combine all content items
+                    content_parts = [item.text for item in list_result.content if hasattr(item, 'text') and isinstance(item.text, str)]
+                    content_text = "\n".join(content_parts).strip() if content_parts else ""
                     try:
                         list_data = json.loads(content_text)
                         if isinstance(list_data, dict) and 'items' in list_data:

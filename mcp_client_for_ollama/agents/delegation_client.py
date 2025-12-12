@@ -1106,7 +1106,12 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         if server_name and server_name in self.mcp_client.sessions:
             result = await self.mcp_client.sessions[server_name]["session"].call_tool(actual_tool_name, tool_args)
             if result.content:
-                return result.content[0].text
+                # Combine all content items (MCP can return multiple)
+                response_parts = []
+                for content_item in result.content:
+                    if hasattr(content_item, 'text'):
+                        response_parts.append(content_item.text)
+                return "\n".join(response_parts) if response_parts else "No text content in result."
             return "No tool response found."
 
         return f"Error: Unknown tool {tool_name}"
