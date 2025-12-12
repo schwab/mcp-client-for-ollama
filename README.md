@@ -41,6 +41,7 @@
   - [Server Reloading for Development](#server-reloading-for-development)
   - [Human-in-the-Loop (HIL) Tool Execution](#human-in-the-loop-hil-tool-execution)
   - [Performance Metrics](#performance-metrics)
+- [Multi-Modal Support (Image Analysis)](#multi-modal-support-image-analysis)
 - [Autocomplete and Prompt Features](#autocomplete-and-prompt-features)
 - [Configuration Management](#configuration-management)
 - ✨**NEW** [Auto-Load Configuration](#auto-load-configuration)
@@ -62,6 +63,7 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 
 - 🎯 **Agent Delegation System**: Break down complex multi-file tasks into focused subtasks executed by specialized agents (READER, CODER, EXECUTOR, RESEARCHER, DEBUGGER). Perfect for small models with limited context windows! ([docs](misc/agent-delegation-user-guide.md))
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
+- 🖼️ ✨**NEW** **Multi-Modal Support**: Analyze images using vision-capable models (llava, bakllava, cogvlm, moondream, etc.). Extract information from screenshots, diagrams, charts, and photos directly in your workflow.
 - ✨**NEW** **Auto-Load Configuration**: Automatically load project context from `.config/CLAUDE.md` and server configuration from `.config/config.json` on startup ([docs](misc/auto_load_configuration.md))
 - ✨**NEW** **Save and Load Session**: Save and load your chat session, including history.
 - ✨**NEW** **Reparse Last Response**: A command to re-parse the last model response, useful for debugging or when the model response is slightly malformed.
@@ -260,6 +262,7 @@ During chat, use these commands:
 | `context-info`   | `ci`             | Display context statistics                          |
 | `help`           | `h`              | Display help and available commands                 |
 | `human-in-loop`  | `hil`            | Toggle Human-in-the-Loop confirmations for tool execution |
+| `list-vision-models` | `lvm`        | List available vision-capable models on Ollama server |
 | `load-config`    | `lc`             | Load tool and model configuration from a file       |
 | `load-session`   | `ls`             | Load a chat session from a file                     |
 | `loop-limit`     | `ll`             | Set maximum iterative tool-loop iterations (Agent Mode). Default: 3 |
@@ -271,6 +274,7 @@ During chat, use these commands:
 | `reset-config`   | `rc`             | Reset configuration to defaults (all tools enabled) |
 | `save-config`    | `sc`             | Save current tool and model configuration to a file |
 | `save-session`   | `ss`             | Save the current chat session to a file             |
+| `set-vision-model` | `svm`          | Select a vision model for image analysis tasks      |
 | `show-metrics`   | `sm`             | Toggle performance metrics display                  |
 | `show-thinking`  | `st`             | Toggle thinking text visibility                     |
 | `show-tool-execution` | `ste`       | Toggle tool execution display visibility            |
@@ -449,6 +453,87 @@ The Performance Metrics feature displays detailed model performance data after e
 
 > [!NOTE]
 > **Data Source**: All metrics come directly from Ollama's response, ensuring accuracy and reliability.
+
+## Multi-Modal Support (Image Analysis)
+
+The client now supports analyzing images using vision-capable models like llava, bakllava, cogvlm, moondream, and more. This enables you to extract information from screenshots, diagrams, charts, and photos directly in your workflow.
+
+**📚 [Read the full Multi-Modal Support documentation](misc/MULTI_MODAL_SUPPORT.md)** for detailed usage, troubleshooting, and examples.
+
+### Quick Start
+
+1. **Install a vision model** (if not already available):
+   ```bash
+   ollama pull llava
+   ```
+
+2. **Analyze images** using the `builtin.read_image` tool:
+   - Ask the AI to analyze an image by providing the path
+   - Example queries:
+     - "What's in the image at screenshots/error.png?"
+     - "Analyze the diagram at docs/architecture.png"
+     - "Read the chart at data/metrics.jpg and summarize the data"
+
+### Vision Model Management
+
+**List available vision models:**
+```
+lvm
+```
+or
+```
+list-vision-models
+```
+
+This displays all vision-capable models on your Ollama server with their sizes and which one is currently configured.
+
+**Select a specific vision model:**
+```
+svm
+```
+or
+```
+set-vision-model
+```
+
+Choose from available models interactively. The selected model will be used for all image analysis tasks.
+
+### How It Works
+
+- **Auto-Detection**: If you haven't set a preferred model, the tool automatically detects and uses the first available vision model
+- **Configuration**: Set a preferred model using `svm` to use it consistently
+- **Supported Models**: llava, bakllava, cogvlm, cogvlm2, moondream, minicpm-v, obsidian, llava-llama3, llava-phi3
+- **Supported Formats**: PNG, JPG, JPEG, GIF, BMP, WEBP
+
+### Usage Examples
+
+**Direct tool call via delegation:**
+```bash
+d analyze the screenshot at test.png
+```
+
+**In conversation:**
+```
+You: What does the error in screenshots/bug.png say?
+AI: [Uses builtin.read_image to analyze the image and responds with the error message]
+```
+
+**For diagrams and charts:**
+```
+You: Explain the architecture diagram at docs/system-design.png
+AI: [Analyzes the diagram and provides detailed explanation]
+```
+
+### Agent Support
+
+The following agents have image analysis capabilities:
+- **EXECUTOR**: Can analyze images as part of command execution tasks
+- **READER**: Can analyze images when reading and understanding codebases
+- **RESEARCHER**: Can analyze diagrams, screenshots, and charts when researching
+
+### Configuration Persistence
+
+Your vision model selection is saved in `~/.config/ollmcp/config.json` and persists across sessions.
 
 ## Autocomplete and Prompt Features
 

@@ -888,7 +888,7 @@ class BuiltinToolManager:
                             return f"Error: Configured vision model '{configured_vision_model}' not found on Ollama server. Available models: {', '.join(available_model_names)}"
                     else:
                         # Auto-detect a vision model
-                        vision_models = ['llava', 'bakllava', 'llava-phi3', 'llava-llama3', 'cogvlm']
+                        vision_models = ['llava', 'bakllava', 'cogvlm', 'cogvlm2', 'moondream', 'minicpm-v', 'obsidian', 'llava-llama3', 'llava-phi3']
                         available_vision_model = None
 
                         for model in models:

@@ -1472,7 +1472,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
                 models = tags_data.get('models', [])
 
                 # Filter for vision models
-                vision_keywords = ['llava', 'bakllava', 'cogvlm', 'moondream']
+                vision_keywords = ['llava', 'bakllava', 'cogvlm', 'cogvlm2', 'moondream', 'minicpm-v', 'obsidian', 'llava-llama3', 'llava-phi3']
                 vision_models = []
 
                 for model in models:
@@ -1547,7 +1547,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
                 models = tags_data.get('models', [])
 
                 # Filter for vision models
-                vision_keywords = ['llava', 'bakllava', 'cogvlm', 'moondream']
+                vision_keywords = ['llava', 'bakllava', 'cogvlm', 'cogvlm2', 'moondream', 'minicpm-v', 'obsidian', 'llava-llama3', 'llava-phi3']
                 vision_models = []
 
                 for model in models:
