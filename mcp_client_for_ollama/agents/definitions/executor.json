@@ -9,7 +9,9 @@
     "builtin.read_file",
     "builtin.list_files",
     "builtin.file_exists",
-    "builtin.get_file_info"
+    "builtin.get_file_info",
+    "builtin.get_system_prompt",
+    "builtin.set_system_prompt"
   ],
   "allowed_tool_categories": [
     "filesystem_read",
@@ -18,8 +20,7 @@
   "forbidden_tools": [
     "builtin.write_file",
     "builtin.create_directory",
-    "builtin.delete_file",
-    "builtin.set_system_prompt"
+    "builtin.delete_file"
   ],
   "max_context_tokens": 262144,
   "loop_limit": 10,
