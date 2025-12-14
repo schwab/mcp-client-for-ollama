@@ -13,7 +13,7 @@ if not os.path.exists(DEFAULT_CONFIG_DIR):
 DEFAULT_CONFIG_FILE = "config.json"
 
 # Default model
-DEFAULT_MODEL = "qwen3-coder:30b"
+DEFAULT_MODEL = "qwen2.5:32b"
 
 # Default ollama lcoal url for API requests
 DEFAULT_OLLAMA_HOST = "https://vicunaapi.ngrok.io"
