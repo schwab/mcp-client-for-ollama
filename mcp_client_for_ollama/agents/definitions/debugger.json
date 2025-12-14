@@ -21,7 +21,7 @@
     "builtin.delete_file",
     "builtin.set_system_prompt"
   ],
-  "max_context_tokens": 16384,
+  "max_context_tokens": 262144,
   "loop_limit": 5,
   "temperature": 0.5,
   "planning_hints": "Assign DEBUGGER tasks when you need to: fix runtime errors, resolve compilation errors, debug failing tests, fix crashes or exceptions, investigate unexpected behavior. DEBUGGER can read, modify, and execute code to diagnose and fix issues."

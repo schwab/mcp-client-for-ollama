@@ -20,7 +20,7 @@
     "builtin.create_directory",
     "builtin.delete_file"
   ],
-  "max_context_tokens": 32768,
+  "max_context_tokens": 262144,
   "loop_limit": 3,
   "temperature": 0.6,
   "planning_hints": "Assign RESEARCHER tasks when you need to: analyze code or documents, create summaries, identify patterns, compare different files or approaches, synthesize information from multiple sources (local + external via MCP tools), research external data sources, document architecture or design patterns. RESEARCHER has access to all MCP tools for research but is read-only and focuses on understanding and explaining."
