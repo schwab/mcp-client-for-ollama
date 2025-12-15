@@ -464,7 +464,7 @@ filesystem server:
 
 ### User Documentation
 
-**Location:** `misc/BUG_PLANNER_DOESNT_KNOW_MCP_TOOLS.md`
+**Location:** `docs/BUG_PLANNER_DOESNT_KNOW_MCP_TOOLS.md`
 
 **Updated Sections:**
 - Implementation Priority (marked completed tasks)

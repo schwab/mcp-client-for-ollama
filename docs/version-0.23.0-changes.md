@@ -80,7 +80,7 @@ Bumped version from **0.22.0** → **0.23.0**
    - Tests plan validation
    - All tests passing ✅
 
-3. **`misc/planner-improvements-implemented.md`** (documentation)
+3. **`docs/planner-improvements-implemented.md`** (documentation)
    - Comprehensive implementation summary
    - Before/after comparisons
    - Expected impact metrics
@@ -210,16 +210,16 @@ None.
 ## Contributors
 
 Implementation by: Claude Sonnet 4.5
-Based on design in: `misc/planner-prompt-improvement.md`
+Based on design in: `docs/planner-prompt-improvement.md`
 
 ---
 
 ## Acknowledgments
 
 Thanks to the detailed planning documents:
-- `misc/planner-prompt-improvement.md` - Few-shot learning design
-- `misc/two-phase-planning-design.md` - Future enhancement planning
-- `misc/strips-planning-analysis.md` - STRIPS formalization analysis
+- `docs/planner-prompt-improvement.md` - Few-shot learning design
+- `docs/two-phase-planning-design.md` - Future enhancement planning
+- `docs/strips-planning-analysis.md` - STRIPS formalization analysis
 
 ---
 

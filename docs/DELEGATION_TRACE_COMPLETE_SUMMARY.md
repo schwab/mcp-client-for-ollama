@@ -84,7 +84,7 @@ Implemented an interactive menu system (`delegation-trace` / `dt`) to configure 
    - Added delegation settings validation (~56 lines)
    - Validates all trace and collapsible output settings
 
-### Documentation Created (All in `misc/`)
+### Documentation Created (All in `docs/`)
 
 1. **`BUG_FIX_DELEGATION_TRACE.md`** (7.6K)
    - Bug analysis and fix documentation
@@ -341,7 +341,7 @@ All known issues have been resolved:
 ## Documentation Structure
 
 ```
-misc/
+docs/
 ├── BUG_FIX_DELEGATION_TRACE.md              # Bug fix details
 ├── COLLAPSIBLE_OUTPUT_AND_TRACE_LOGGING.md  # Feature overview
 ├── DELEGATION_TRACE_MENU.md                 # Menu walkthrough

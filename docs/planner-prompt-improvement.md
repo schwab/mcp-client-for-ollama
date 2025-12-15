@@ -12,12 +12,12 @@
 The **PLANNER agent** is the brain of the delegation system. It's the first step in every delegated query:
 
 ```
-User Query: "Scan markdown files in misc/, read each, summarize them"
+User Query: "Scan markdown files in docs/, read each, summarize them"
     ↓
 PLANNER analyzes query
     ↓
 Creates task breakdown:
-  - task_1: List all .md files in misc/
+  - task_1: List all .md files in docs/
   - task_2: Read and summarize each file (depends: task_1)
   - task_3: Create executive summary (depends: task_2)
     ↓

@@ -221,7 +221,7 @@ Result: Creates optimal plan:
 4. **Adaptive learning** - Learn from execution failures to improve examples
 
 ### Remaining Design Documents
-From your `misc/` folder, these are still unimplemented:
+From your `docs/` folder, these are still unimplemented:
 1. **Two-Phase Planning** (`two-phase-planning-design.md`)
    - Separate information gathering from action execution
    - Estimated effort: 15-20 hours
@@ -245,7 +245,7 @@ From your `misc/` folder, these are still unimplemented:
 ### Created
 - `mcp_client_for_ollama/agents/examples/planner_examples.json`
 - `test_planner_improvements.py`
-- `misc/planner-improvements-implemented.md` (this file)
+- `docs/planner-improvements-implemented.md` (this file)
 
 ### Untracked (from before)
 - `mcp_client_for_ollama/agents/definitions/obsidian.json`

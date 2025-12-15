@@ -197,7 +197,7 @@ Potential improvements:
 - `mcp_client_for_ollama/tools/builtin.py` - Builtin tool implementations
 - `mcp_client_for_ollama/client.py` - Session management methods
 - `tests/test_builtin_tools.py` - Test coverage
-- `misc/builtin_file_access_tools.md` - Builtin tools documentation
+- `docs/builtin_file_access_tools.md` - Builtin tools documentation
 
 ## Version
 

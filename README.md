@@ -61,10 +61,10 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 
 ## Features
 
-- 🎯 **Agent Delegation System**: Break down complex multi-file tasks into focused subtasks executed by specialized agents (READER, CODER, EXECUTOR, RESEARCHER, DEBUGGER). Perfect for small models with limited context windows! ([docs](misc/agent-delegation-user-guide.md))
+- 🎯 **Agent Delegation System**: Break down complex multi-file tasks into focused subtasks executed by specialized agents (READER, CODER, EXECUTOR, RESEARCHER, DEBUGGER). Perfect for small models with limited context windows! ([docs](docs/agent-delegation-user-guide.md))
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
 - 🖼️ ✨**NEW** **Multi-Modal Support**: Analyze images using vision-capable models (llava, bakllava, cogvlm, moondream, etc.). Extract information from screenshots, diagrams, charts, and photos directly in your workflow.
-- ✨**NEW** **Auto-Load Configuration**: Automatically load project context from `.config/CLAUDE.md` and server configuration from `.config/config.json` on startup ([docs](misc/auto_load_configuration.md))
+- ✨**NEW** **Auto-Load Configuration**: Automatically load project context from `.config/CLAUDE.md` and server configuration from `.config/config.json` on startup ([docs](docs/auto_load_configuration.md))
 - ✨**NEW** **Save and Load Session**: Save and load your chat session, including history.
 - ✨**NEW** **Reparse Last Response**: A command to re-parse the last model response, useful for debugging or when the model response is slightly malformed.
 - 🧠 **Self-Editing System Prompt**: The model can modify its own instructions and persona in real-time using built-in tools (`builtin.get_system_prompt` and `builtin.set_system_prompt`).
@@ -458,7 +458,7 @@ The Performance Metrics feature displays detailed model performance data after e
 
 The client now supports analyzing images using vision-capable models like llava, bakllava, cogvlm, moondream, and more. This enables you to extract information from screenshots, diagrams, charts, and photos directly in your workflow.
 
-**📚 [Read the full Multi-Modal Support documentation](misc/MULTI_MODAL_SUPPORT.md)** for detailed usage, troubleshooting, and examples.
+**📚 [Read the full Multi-Modal Support documentation](docs/MULTI_MODAL_SUPPORT.md)** for detailed usage, troubleshooting, and examples.
 
 ### Quick Start
 
@@ -661,7 +661,7 @@ $ ollmcp
 ✅ **Team-friendly** - Share project context via git
 ✅ **Override-able** - CLI flags still work when needed
 
-**📚 Full documentation:** [Auto-Load Configuration Guide](misc/auto_load_configuration.md)
+**📚 Full documentation:** [Auto-Load Configuration Guide](docs/auto_load_configuration.md)
 
 ### ✨**NEW** Save and Load Session
 
@@ -868,7 +868,7 @@ d refactor authentication across multiple files
 - ✅ Better success rate - focused agents avoid context overflow
 - ✅ Extensible - add new agent types via JSON definition files
 
-**📚 [Read the full documentation](misc/agent-delegation-user-guide.md)** for detailed usage, configuration, and examples.
+**📚 [Read the full documentation](docs/agent-delegation-user-guide.md)** for detailed usage, configuration, and examples.
 
 ## Where Can I Find More MCP Servers?
 

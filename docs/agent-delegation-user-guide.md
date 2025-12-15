@@ -93,7 +93,7 @@ d read all .md files in docs/ and create a summary
 Try this example:
 
 ```bash
-delegate scan the md files in misc/ directory, read each one,
+delegate scan the md files in docs/ directory, read each one,
 summarize their contents, and produce an executive-level summary
 ```
 
@@ -604,7 +604,7 @@ A: You'll see clear phases: Planning → Execution → Aggregation, with task pr
 ## Getting Help
 
 - **Issues:** Found a bug? [Report it](https://github.com/jonigl/mcp-client-for-ollama/issues)
-- **Design Docs:** See `misc/agent-delegation-design.md` for technical details
+- **Design Docs:** See `docs/agent-delegation-design.md` for technical details
 - **Examples:** Check `tests/user_test_result_delegation_1.md` for real execution traces
 
 ---

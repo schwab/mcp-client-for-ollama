@@ -256,7 +256,7 @@ Added comprehensive tests in `tests/test_builtin_tools.py`:
 ### 4. Documentation
 
 Created comprehensive documentation:
-- **File**: `misc/builtin_file_access_tools.md`
+- **File**: `docs/builtin_file_access_tools.md`
 - Includes usage examples, best practices, security features
 - Documents all 8 new tools with parameters and examples
 
@@ -278,11 +278,11 @@ Created comprehensive documentation:
    - Total tests increased from 12 to 46
 
 ### New Documentation
-1. `misc/builtin_file_access_tools.md`
+1. `docs/builtin_file_access_tools.md`
    - Complete reference for new file access tools
    - Usage examples and security information
 
-2. `misc/builtin_tools_bug_fix.md` (this file)
+2. `docs/builtin_tools_bug_fix.md` (this file)
    - Bug analysis and fix documentation
 
 ## Migration Guide
