@@ -1050,7 +1050,7 @@ class MCPClient:
                     await self.toggle_delegation()
                     continue
 
-                if query.lower() in ['delegation-trace', 'dtt', 'trace-config', 'tc']:
+                if query.lower() in ['delegation-trace', 'dt', 'dtt', 'trace-config', 'tc']:
                     await self.configure_delegation_trace()
                     continue
 
@@ -1213,8 +1213,8 @@ class MCPClient:
             "[bold cyan]Agent Delegation:[/bold cyan] [bold green](Enabled by Default)[/bold green]\n"
             "• Queries are automatically delegated to specialized agents for better results\n"
             "• Type [bold]toggle-delegation[/bold] or [bold]td[/bold] to enable/disable delegation mode\n"
-            "• Type [bold]delegation-trace[/bold] or [bold]dtt[/bold] to configure trace logging for debugging\n"
-            "• Type [bold]dt <query>[/bold] to force delegation for a specific query (when disabled)\n"
+            "• Type [bold]delegation-trace[/bold], [bold]dt[/bold], or [bold]dtt[/bold] to configure trace logging for debugging\n"
+            "• Type [bold]delegate <query>[/bold] or [bold]d <query>[/bold] to force delegation for a specific query (when disabled)\n"
             "• Agent delegation breaks down complex tasks into focused subtasks for specialized agents\n"
             "• Best for: multi-file edits, complex refactoring, or tasks requiring multiple steps\n\n"
 
