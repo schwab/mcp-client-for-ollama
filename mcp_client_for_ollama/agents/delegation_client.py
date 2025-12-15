@@ -20,6 +20,14 @@ from .agent_config import AgentConfig
 from .model_pool import ModelPool
 from ..utils.collapsible_output import CollapsibleOutput, TaskOutputCollector
 from ..utils.trace_logger import TraceLogger, TraceLoggerFactory, TraceLevel
+from ..memory import (
+    MemoryInitializer,
+    InitializerPromptBuilder,
+    DomainMemory,
+    MemoryStorage,
+    BootRitual,
+    MemoryTools,
+)
 
 
 class DelegationClient:
@@ -97,6 +105,23 @@ class DelegationClient:
             auto_collapse=collapsible_config.get('auto_collapse', True)
         )
         self.task_output = TaskOutputCollector(self.console, self.collapsible)
+
+        # Initialize memory system (Phase 2 & 3)
+        memory_config = config.get('memory', {})
+        self.memory_enabled = memory_config.get('enabled', False)
+        if self.memory_enabled:
+            self.memory_storage = MemoryStorage(
+                base_dir=Path(memory_config.get('storage_dir', '~/.mcp-memory')).expanduser()
+            )
+            self.memory_initializer = MemoryInitializer(self.memory_storage)
+            self.memory_tools = MemoryTools(self.memory_storage)
+            self.current_memory: Optional[DomainMemory] = None
+            self.default_domain = memory_config.get('default_domain', 'coding')
+        else:
+            self.memory_storage = None
+            self.memory_initializer = None
+            self.memory_tools = None
+            self.current_memory = None
 
     def _load_planner_examples(self) -> List[Dict[str, Any]]:
         """
@@ -255,6 +280,170 @@ class DelegationClient:
                 self.trace_logger.print_summary(self.console)
 
             return await self._fallback_direct_execution(user_query)
+
+    async def process_with_memory(
+        self,
+        user_query: str,
+        chat_history: List[Dict] = None,
+        session_id: Optional[str] = None,
+        domain: Optional[str] = None,
+    ) -> str:
+        """
+        Process a query with persistent domain memory (Phase 2).
+
+        This method implements the Anthropic memory pattern:
+        1. If new session: Use INITIALIZER agent to bootstrap memory
+        2. If resuming: Load existing memory
+        3. Execute tasks with memory context (Phase 3 - future)
+        4. Update memory after execution (Phase 3 - future)
+
+        Args:
+            user_query: The user's question or request
+            chat_history: Optional list of previous chat exchanges
+            session_id: Optional session ID to resume
+            domain: Optional domain type (coding, research, etc.). Defaults to config.
+
+        Returns:
+            Final aggregated response
+
+        Raises:
+            Exception: If initialization or execution fails
+        """
+        if not self.memory_enabled:
+            # Memory not enabled, fall back to regular delegation
+            return await self.process_with_delegation(user_query, chat_history)
+
+        domain = domain or self.default_domain
+        self.chat_history = chat_history or []
+
+        self.console.print("\n[bold cyan]🧠 Memory-Aware Agent Mode[/bold cyan]")
+        self.console.print(f"[dim]Domain: {domain}[/dim]")
+        self.console.print(f"[dim]Query: {user_query}[/dim]\n")
+
+        try:
+            # Phase 0: Memory Setup
+            self.console.print("[bold magenta]🔮 Memory Setup Phase[/bold magenta]")
+
+            # Try to resume existing session or detect if new
+            if session_id:
+                # Explicit session ID provided - try to resume
+                if self.memory_storage.session_exists(session_id, domain):
+                    self.current_memory = self.memory_storage.load_memory(session_id, domain)
+                    self.console.print(f"[green]✓[/green] Resumed session: {session_id}")
+                    self.console.print(f"[dim]  {len(self.current_memory.goals)} goals, "
+                                     f"{self.current_memory.get_completion_percentage():.1f}% complete[/dim]\n")
+                else:
+                    self.console.print(f"[yellow]⚠️  Session {session_id} not found. Creating new session.[/yellow]")
+                    session_id = None
+
+            if not self.current_memory:
+                # New session - use INITIALIZER to bootstrap memory
+                self.console.print("[yellow]Initializing new memory session...[/yellow]")
+
+                # Build prompt for INITIALIZER
+                initializer_prompt = InitializerPromptBuilder.build_prompt(
+                    user_query=user_query,
+                    domain=domain,
+                )
+
+                # Run INITIALIZER agent
+                initializer_output = await self._run_initializer(initializer_prompt)
+
+                if not initializer_output:
+                    self.console.print("[yellow]⚠️  Memory initialization failed. Falling back to regular delegation.[/yellow]")
+                    return await self.process_with_delegation(user_query, chat_history)
+
+                # Bootstrap memory from INITIALIZER output
+                self.current_memory = self.memory_initializer.initialize_and_save(
+                    initializer_output,
+                    session_id=session_id,
+                )
+
+                session_id = self.current_memory.metadata.session_id
+                self.console.print(f"[green]✓[/green] Created session: {session_id}")
+                self.console.print(f"[dim]  {len(self.current_memory.goals)} goals, "
+                                 f"{len(self.current_memory.get_all_features())} features[/dim]\n")
+
+            # Store session ID for reference
+            self.console.print(f"[bold]Session ID:[/bold] {self.current_memory.metadata.session_id}")
+            self.console.print(f"[bold]Domain:[/bold] {self.current_memory.metadata.domain}")
+            self.console.print(f"[bold]Description:[/bold] {self.current_memory.metadata.description}\n")
+
+            # Phase 3: Set current session for memory tools
+            self.memory_tools.set_current_session(
+                self.current_memory.metadata.session_id,
+                self.current_memory.metadata.domain
+            )
+
+            # Phase 3: Worker agents will now read memory context before acting
+            result = await self.process_with_delegation(user_query, chat_history)
+
+            # Phase 3: Save updated memory after execution
+            self.memory_storage.save_memory(self.current_memory)
+
+            return result
+
+        except Exception as e:
+            self.console.print(f"[bold red]❌ Memory-aware processing failed: {e}[/bold red]")
+            self.console.print("[yellow]Falling back to regular delegation...[/yellow]")
+            return await self.process_with_delegation(user_query, chat_history)
+
+    async def _run_initializer(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """
+        Run the INITIALIZER agent to bootstrap domain memory.
+
+        Args:
+            prompt: The prompt for INITIALIZER
+
+        Returns:
+            Parsed JSON output from INITIALIZER, or None if failed
+        """
+        try:
+            # Get INITIALIZER agent config
+            initializer_config = self.agent_configs.get("INITIALIZER")
+            if not initializer_config:
+                self.console.print("[red]ERROR: INITIALIZER agent not found[/red]")
+                return None
+
+            # Build context for INITIALIZER
+            context = [
+                {"role": "system", "content": initializer_config.system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+
+            # Get available tools for INITIALIZER
+            tools = initializer_config.get_effective_tools(
+                self.mcp_client.tool_manager,
+                self.mcp_client.builtin_tool_manager,
+            )
+
+            # Execute with tools
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+            ) as progress:
+                task = progress.add_task("Running INITIALIZER agent...", total=None)
+
+                result = await self._execute_with_tools(
+                    context=context,
+                    tools=tools,
+                    agent_config=initializer_config,
+                    agent_type="INITIALIZER",
+                )
+
+                progress.update(task, completed=True)
+
+            if not result:
+                return None
+
+            # Parse JSON response
+            parsed = InitializerPromptBuilder.parse_initializer_response(result)
+            return parsed
+
+        except Exception as e:
+            self.console.print(f"[red]INITIALIZER execution failed: {e}[/red]")
+            return None
 
     def _extract_key_entities(self, text: str) -> List[str]:
         """
@@ -917,6 +1106,18 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             messages.append({
                 "role": "system",
                 "content": tools_info
+            })
+
+        # Phase 3: Inject memory context for worker agents (boot ritual)
+        if self.memory_enabled and self.current_memory and task.agent_type not in ["PLANNER", "INITIALIZER"]:
+            memory_context = BootRitual.build_memory_context(
+                memory=self.current_memory,
+                agent_type=task.agent_type,
+                task_description=task.description,
+            )
+            messages.append({
+                "role": "system",
+                "content": memory_context
             })
 
         # Add dependency results (shared read strategy)

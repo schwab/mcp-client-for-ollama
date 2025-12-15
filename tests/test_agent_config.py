@@ -239,13 +239,15 @@ class TestAgentConfig:
             display_name="Test",
             description="Test",
             system_prompt="Test",
-            default_tools=["tool1", "tool2", "tool3"]
+            default_tools=["builtin.tool1", "builtin.tool2", "builtin.tool3"]
         )
 
-        available_tools = ["tool1", "tool2", "tool3", "tool4"]
+        # MCP server tools (no builtin prefix) are auto-added
+        available_tools = ["builtin.tool1", "builtin.tool2", "builtin.tool3", "mcp-server.tool4"]
         effective = config.get_effective_tools(available_tools)
 
-        assert set(effective) == {"tool1", "tool2", "tool3"}
+        # Should get default builtin tools + MCP server tool
+        assert set(effective) == {"builtin.tool1", "builtin.tool2", "builtin.tool3", "mcp-server.tool4"}
 
     def test_get_effective_tools_with_forbidden(self):
         """Test that forbidden tools are excluded."""
@@ -254,15 +256,17 @@ class TestAgentConfig:
             display_name="Test",
             description="Test",
             system_prompt="Test",
-            default_tools=["tool1", "tool2", "tool3"],
-            forbidden_tools=["tool2"]
+            default_tools=["builtin.tool1", "builtin.tool2", "builtin.tool3"],
+            forbidden_tools=["builtin.tool2", "mcp-server.tool4"]
         )
 
-        available_tools = ["tool1", "tool2", "tool3", "tool4"]
+        available_tools = ["builtin.tool1", "builtin.tool2", "builtin.tool3", "mcp-server.tool4", "mcp-server.tool5"]
         effective = config.get_effective_tools(available_tools)
 
-        assert set(effective) == {"tool1", "tool3"}
-        assert "tool2" not in effective
+        # Should exclude forbidden tools but include other MCP tools
+        assert set(effective) == {"builtin.tool1", "builtin.tool3", "mcp-server.tool5"}
+        assert "builtin.tool2" not in effective
+        assert "mcp-server.tool4" not in effective
 
     def test_get_effective_tools_unavailable_filtered(self):
         """Test that unavailable tools are filtered out."""
@@ -304,9 +308,10 @@ class TestAgentConfig:
             default_tools=[]
         )
 
-        available_tools = ["tool1", "tool2"]
+        # Even with no default tools, MCP server tools are auto-added
+        available_tools = ["mcp-server.tool1", "mcp-server.tool2"]
         effective = config.get_effective_tools(available_tools)
-        assert effective == []
+        assert set(effective) == {"mcp-server.tool1", "mcp-server.tool2"}
 
     def test_matches_tool_category_no_restrictions(self):
         """Test that agents with no category restrictions match all tools."""

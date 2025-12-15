@@ -51,7 +51,16 @@ def default_config() -> dict:
         "hilSettings": {
             "enabled": True
         },
-        "sessionSaveDirectory": "/projects/journal/.ollmcp_sessions"
+        "sessionSaveDirectory": "/projects/journal/.ollmcp_sessions",
+        "memory": {
+            "enabled": False,  # Feature flag for gradual rollout
+            "storage_dir": "~/.mcp-memory",
+            "auto_persist": True,
+            "max_sessions": 50,
+            "session_ttl_days": 30,
+            "auto_cleanup": False,
+            "default_domain": "coding"
+        }
     }
 
 def get_config_path(config_name: str = "default") -> str:
