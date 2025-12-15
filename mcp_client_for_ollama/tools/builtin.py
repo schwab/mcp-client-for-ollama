@@ -35,6 +35,7 @@ class BuiltinToolManager:
             "file_exists": self._handle_file_exists,
             "get_file_info": self._handle_get_file_info,
             "read_image": self._handle_read_image,
+            "open_file": self._handle_open_file,
         }
 
     def get_builtin_tools(self) -> List[Tool]:
@@ -306,11 +307,26 @@ class BuiltinToolManager:
             }
         )
 
+        open_file_tool = Tool(
+            name="builtin.open_file",
+            description="Open a file with its default system application using xdg-open (Linux). Useful for opening PDFs, images, documents, and other files in their native viewers. The command runs in the background and returns immediately.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The relative path to the file to open."
+                    }
+                },
+                "required": ["path"]
+            }
+        )
+
         return [
             set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool,
             read_file_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
             create_directory_tool, delete_file_tool, file_exists_tool, get_file_info_tool,
-            read_image_tool
+            read_image_tool, open_file_tool
         ]
 
     def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
@@ -1156,4 +1172,57 @@ class BuiltinToolManager:
 
         except Exception as e:
             return f"Error patching file '{path}': {type(e).__name__}: {e}"
+
+    def _handle_open_file(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'open_file' tool call.
+
+        Opens a file with its default system application using xdg-open.
+        Useful for PDFs, images, documents, etc.
+
+        Args:
+            args: Dictionary containing 'path' argument
+
+        Returns:
+            Success message or error message
+        """
+        import subprocess
+
+        path = args.get("path")
+
+        if not path:
+            return "Error: 'path' argument is required for open_file."
+
+        # Validate path
+        allow_absolute = args.get("__internal_allow_absolute", False)
+        is_valid, result = self._validate_path(path, allow_absolute)
+        if not is_valid:
+            return result
+
+        resolved_path = result
+
+        try:
+            # Check if file exists
+            if not os.path.exists(resolved_path):
+                return f"Error: File '{path}' does not exist."
+
+            if not os.path.isfile(resolved_path):
+                return f"Error: '{path}' is not a file."
+
+            # Use xdg-open to open the file with default application
+            # Run in background with stdout/stderr redirected to devnull
+            # to prevent output from cluttering the terminal
+            subprocess.Popen(
+                ['xdg-open', resolved_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+
+            return f"File '{path}' opened successfully with default system application."
+
+        except FileNotFoundError:
+            return "Error: xdg-open command not found. This tool requires xdg-open (typically available on Linux systems)."
+        except Exception as e:
+            return f"Error opening file '{path}': {type(e).__name__}: {e}"
 
