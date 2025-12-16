@@ -50,13 +50,18 @@ class MCPClient:
         self.model_manager = ModelManager(console=self.console, default_model=model, ollama=self.ollama)
         # Initialize the model config manager
         self.model_config_manager = ModelConfigManager(console=self.console)
-        # Initialize the built-in tool manager with the configured Ollama host
-        self.builtin_tool_manager = BuiltinToolManager(model_config_manager=self.model_config_manager, ollama_host=host)
+        # Initialize the built-in tool manager with the configured Ollama host and config manager
+        self.builtin_tool_manager = BuiltinToolManager(
+            model_config_manager=self.model_config_manager,
+            ollama_host=host,
+            config_manager=self.config_manager
+        )
         # Initialize the tool manager with server connector reference
         self.tool_manager = ToolManager(
-            console=self.console, 
+            console=self.console,
             server_connector=self.server_connector,
-            model_config_manager=self.model_config_manager
+            model_config_manager=self.model_config_manager,
+            config_manager=self.config_manager
         )
         # Initialize the streaming manager
         self.streaming_manager = StreamingManager(console=self.console)

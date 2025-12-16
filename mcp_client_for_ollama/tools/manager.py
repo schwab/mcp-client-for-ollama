@@ -22,21 +22,26 @@ class ToolManager:
     an interactive interface, and organizing tools by server.
     """
 
-    def __init__(self, console: Optional[Console] = None, server_connector=None, model_config_manager=None):
+    def __init__(self, console: Optional[Console] = None, server_connector=None, model_config_manager=None, config_manager=None):
         """Initialize the ToolManager.
 
         Args:
             console: Rich console for output (optional)
             server_connector: Server connector to notify of tool state changes (optional)
             model_config_manager: Model config manager to modify model settings (optional)
+            config_manager: Config manager for application config access (optional)
         """
         self.console = console or Console()
         self.available_tools = []
         self.enabled_tools = {}
         self.server_connector = server_connector
         self.model_config_manager = model_config_manager
+        self.config_manager = config_manager
         if self.model_config_manager:
-            self.builtin_tool_manager = BuiltinToolManager(self.model_config_manager)
+            self.builtin_tool_manager = BuiltinToolManager(
+                self.model_config_manager,
+                config_manager=self.config_manager
+            )
             self._create_builtin_tools()
 
     def _create_builtin_tools(self):

@@ -43,10 +43,11 @@ def test_get_builtin_tools(builtin_tool_manager):
     """Test that get_builtin_tools returns the correct Tool objects."""
     tools = builtin_tool_manager.get_builtin_tools()
 
-    # 15 tools: set_system_prompt, get_system_prompt, execute_python_code, execute_bash_command,
+    # 21 tools: set_system_prompt, get_system_prompt, execute_python_code, execute_bash_command,
     # read_file, write_file, patch_file, list_files, list_directories,
-    # create_directory, delete_file, file_exists, get_file_info, read_image, open_file
-    assert len(tools) == 15
+    # create_directory, delete_file, file_exists, get_file_info, read_image, open_file,
+    # get_config, update_config_section, add_mcp_server, remove_mcp_server, list_mcp_servers, get_config_path
+    assert len(tools) == 21
     
     set_prompt_tool = next((t for t in tools if t.name == "builtin.set_system_prompt"), None)
     get_prompt_tool = next((t for t in tools if t.name == "builtin.get_system_prompt"), None)

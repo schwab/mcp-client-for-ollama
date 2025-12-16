@@ -9,16 +9,18 @@ from datetime import datetime
 class BuiltinToolManager:
     """Manages the definition and execution of built-in tools."""
 
-    def __init__(self, model_config_manager: Any, ollama_host: str = None):
+    def __init__(self, model_config_manager: Any, ollama_host: str = None, config_manager: Any = None):
         """
         Initializes the BuiltinToolManager.
 
         Args:
             model_config_manager: An instance of ModelConfigManager to interact with model settings.
             ollama_host: Optional Ollama server URL. If not provided, uses OLLAMA_HOST env var or default.
+            config_manager: An instance of ConfigManager to interact with application config.
         """
         self.model_config_manager = model_config_manager
         self.ollama_host = ollama_host or os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+        self.config_manager = config_manager
         self.working_directory = os.getcwd()  # Store the working directory for security checks
         self._tool_handlers: Dict[str, Callable[[Dict[str, Any]], str]] = {
             "set_system_prompt": self._handle_set_system_prompt,
@@ -36,6 +38,12 @@ class BuiltinToolManager:
             "get_file_info": self._handle_get_file_info,
             "read_image": self._handle_read_image,
             "open_file": self._handle_open_file,
+            "get_config": self._handle_get_config,
+            "update_config_section": self._handle_update_config_section,
+            "add_mcp_server": self._handle_add_mcp_server,
+            "remove_mcp_server": self._handle_remove_mcp_server,
+            "list_mcp_servers": self._handle_list_mcp_servers,
+            "get_config_path": self._handle_get_config_path,
         }
 
     def get_builtin_tools(self) -> List[Tool]:
@@ -322,11 +330,123 @@ class BuiltinToolManager:
             }
         )
 
+        get_config_tool = Tool(
+            name="builtin.get_config",
+            description="Get the current application configuration or a specific section. Returns the config as JSON. Available sections: delegation, memory, mcpServers, modelConfig, displaySettings, hilSettings, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "description": "Optional section name to retrieve (e.g., 'delegation', 'memory', 'mcpServers'). If omitted, returns the entire config."
+                    }
+                },
+                "required": []
+            }
+        )
+
+        update_config_section_tool = Tool(
+            name="builtin.update_config_section",
+            description="Update a specific section of the application configuration. Changes are saved to the config file immediately. Note: Some changes may require restart or reload to take effect.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "description": "The section to update (e.g., 'delegation', 'memory', 'displaySettings', 'hilSettings')."
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "The new data for the section as a JSON object."
+                    }
+                },
+                "required": ["section", "data"]
+            }
+        )
+
+        add_mcp_server_tool = Tool(
+            name="builtin.add_mcp_server",
+            description="Add a new MCP server to the configuration. For stdio servers, provide command and args. For HTTP/SSE servers, provide url. Server will be available after reloading servers with 'reload-servers' command.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Unique name for the MCP server."
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "Server type: 'stdio', 'sse', or 'streamable_http'.",
+                        "enum": ["stdio", "sse", "streamable_http"]
+                    },
+                    "command": {
+                        "type": "string",
+                        "description": "Command to run (for stdio servers). E.g., 'python', 'node', 'npx'."
+                    },
+                    "args": {
+                        "type": "array",
+                        "description": "Command arguments (for stdio servers). E.g., ['-m', 'my_mcp_server'].",
+                        "items": {"type": "string"}
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Server URL (for sse/streamable_http servers). E.g., 'http://localhost:8000'."
+                    },
+                    "env": {
+                        "type": "object",
+                        "description": "Environment variables for the server (optional).",
+                        "additionalProperties": {"type": "string"}
+                    },
+                    "disabled": {
+                        "type": "boolean",
+                        "description": "Whether the server should be disabled initially (default: false)."
+                    }
+                },
+                "required": ["name", "type"]
+            }
+        )
+
+        remove_mcp_server_tool = Tool(
+            name="builtin.remove_mcp_server",
+            description="Remove an MCP server from the configuration. Use 'reload-servers' command after removal to disconnect the server.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the MCP server to remove."
+                    }
+                },
+                "required": ["name"]
+            }
+        )
+
+        list_mcp_servers_tool = Tool(
+            name="builtin.list_mcp_servers",
+            description="List all configured MCP servers with their types and status. Returns a JSON array of server configurations.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
+        get_config_path_tool = Tool(
+            name="builtin.get_config_path",
+            description="Get the absolute path to the current configuration file. Useful for knowing where the config is stored.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
         return [
             set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool,
             read_file_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
             create_directory_tool, delete_file_tool, file_exists_tool, get_file_info_tool,
-            read_image_tool, open_file_tool
+            read_image_tool, open_file_tool, get_config_tool, update_config_section_tool,
+            add_mcp_server_tool, remove_mcp_server_tool, list_mcp_servers_tool, get_config_path_tool
         ]
 
     def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
@@ -1225,4 +1345,309 @@ class BuiltinToolManager:
             return "Error: xdg-open command not found. This tool requires xdg-open (typically available on Linux systems)."
         except Exception as e:
             return f"Error opening file '{path}': {type(e).__name__}: {e}"
+
+    def _handle_get_config(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'get_config' tool call.
+
+        Gets the current application configuration or a specific section.
+
+        Args:
+            args: Dictionary containing optional 'section' argument
+
+        Returns:
+            JSON string with the config or section, or error message
+        """
+        import json
+
+        if not self.config_manager:
+            return "Error: Config manager not available. This tool requires config_manager to be set."
+
+        try:
+            # Load the current configuration
+            config = self.config_manager.load_configuration()
+
+            if not config:
+                return "Error: Could not load configuration."
+
+            # Get specific section if requested
+            section = args.get("section")
+            if section:
+                if section in config:
+                    return json.dumps(config[section], indent=2)
+                else:
+                    return f"Error: Section '{section}' not found in config. Available sections: {', '.join(config.keys())}"
+
+            # Return full config
+            return json.dumps(config, indent=2)
+
+        except Exception as e:
+            return f"Error getting config: {type(e).__name__}: {e}"
+
+    def _handle_update_config_section(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'update_config_section' tool call.
+
+        Updates a specific section of the application configuration.
+
+        Args:
+            args: Dictionary containing 'section' and 'data' arguments
+
+        Returns:
+            Success message or error message
+        """
+        import json
+
+        if not self.config_manager:
+            return "Error: Config manager not available. This tool requires config_manager to be set."
+
+        section = args.get("section")
+        data = args.get("data")
+
+        if not section:
+            return "Error: 'section' argument is required."
+
+        if data is None:
+            return "Error: 'data' argument is required."
+
+        try:
+            # Load the current configuration
+            config = self.config_manager.load_configuration()
+
+            if not config:
+                config = {}
+
+            # Update the section
+            config[section] = data
+
+            # Save the configuration
+            success = self.config_manager.save_configuration(config)
+
+            if success:
+                return f"Configuration section '{section}' updated successfully. Note: Some changes may require restart or reload to take effect."
+            else:
+                return f"Error: Failed to save configuration."
+
+        except Exception as e:
+            return f"Error updating config section '{section}': {type(e).__name__}: {e}"
+
+    def _handle_add_mcp_server(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'add_mcp_server' tool call.
+
+        Adds a new MCP server to the configuration.
+
+        Args:
+            args: Dictionary containing server configuration
+
+        Returns:
+            Success message or error message
+        """
+        import json
+
+        if not self.config_manager:
+            return "Error: Config manager not available. This tool requires config_manager to be set."
+
+        name = args.get("name")
+        server_type = args.get("type")
+
+        if not name:
+            return "Error: 'name' argument is required."
+
+        if not server_type:
+            return "Error: 'type' argument is required."
+
+        if server_type not in ["stdio", "sse", "streamable_http"]:
+            return f"Error: Invalid server type '{server_type}'. Must be 'stdio', 'sse', or 'streamable_http'."
+
+        try:
+            # Load the current configuration
+            config = self.config_manager.load_configuration()
+
+            if not config:
+                config = {}
+
+            # Ensure mcpServers section exists
+            if "mcpServers" not in config:
+                config["mcpServers"] = {}
+
+            # Check if server already exists
+            if name in config["mcpServers"]:
+                return f"Error: MCP server '{name}' already exists. Use update_config_section to modify it or remove it first."
+
+            # Build server configuration
+            server_config = {"type": server_type}
+
+            # Add type-specific fields
+            if server_type == "stdio":
+                command = args.get("command")
+                if not command:
+                    return "Error: 'command' argument is required for stdio servers."
+                server_config["command"] = command
+
+                if "args" in args:
+                    server_config["args"] = args["args"]
+
+            elif server_type in ["sse", "streamable_http"]:
+                url = args.get("url")
+                if not url:
+                    return f"Error: 'url' argument is required for {server_type} servers."
+                server_config["url"] = url
+
+            # Add optional fields
+            if "env" in args:
+                server_config["env"] = args["env"]
+
+            if "disabled" in args:
+                server_config["disabled"] = args["disabled"]
+
+            # Add server to config
+            config["mcpServers"][name] = server_config
+
+            # Save the configuration
+            success = self.config_manager.save_configuration(config)
+
+            if success:
+                return f"MCP server '{name}' added successfully.\n\nServer configuration:\n{json.dumps(server_config, indent=2)}\n\nUse 'reload-servers' command to connect to the new server."
+            else:
+                return "Error: Failed to save configuration."
+
+        except Exception as e:
+            return f"Error adding MCP server '{name}': {type(e).__name__}: {e}"
+
+    def _handle_remove_mcp_server(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'remove_mcp_server' tool call.
+
+        Removes an MCP server from the configuration.
+
+        Args:
+            args: Dictionary containing 'name' argument
+
+        Returns:
+            Success message or error message
+        """
+        if not self.config_manager:
+            return "Error: Config manager not available. This tool requires config_manager to be set."
+
+        name = args.get("name")
+
+        if not name:
+            return "Error: 'name' argument is required."
+
+        try:
+            # Load the current configuration
+            config = self.config_manager.load_configuration()
+
+            if not config:
+                return "Error: Could not load configuration."
+
+            # Check if mcpServers section exists
+            if "mcpServers" not in config:
+                return "Error: No MCP servers configured."
+
+            # Check if server exists
+            if name not in config["mcpServers"]:
+                return f"Error: MCP server '{name}' not found. Available servers: {', '.join(config['mcpServers'].keys())}"
+
+            # Remove the server
+            del config["mcpServers"][name]
+
+            # Save the configuration
+            success = self.config_manager.save_configuration(config)
+
+            if success:
+                return f"MCP server '{name}' removed successfully. Use 'reload-servers' command to disconnect the server."
+            else:
+                return "Error: Failed to save configuration."
+
+        except Exception as e:
+            return f"Error removing MCP server '{name}': {type(e).__name__}: {e}"
+
+    def _handle_list_mcp_servers(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'list_mcp_servers' tool call.
+
+        Lists all configured MCP servers.
+
+        Args:
+            args: Dictionary (empty for this tool)
+
+        Returns:
+            JSON array of server configurations or error message
+        """
+        import json
+
+        if not self.config_manager:
+            return "Error: Config manager not available. This tool requires config_manager to be set."
+
+        try:
+            # Load the current configuration
+            config = self.config_manager.load_configuration()
+
+            if not config:
+                return "Error: Could not load configuration."
+
+            # Get mcpServers section
+            mcp_servers = config.get("mcpServers", {})
+
+            if not mcp_servers:
+                return "No MCP servers configured."
+
+            # Build server list with relevant info
+            server_list = []
+            for name, server_config in mcp_servers.items():
+                server_info = {
+                    "name": name,
+                    "type": server_config.get("type", "unknown"),
+                    "disabled": server_config.get("disabled", False)
+                }
+
+                # Add type-specific info
+                if server_config.get("type") == "stdio":
+                    server_info["command"] = server_config.get("command")
+                    server_info["args"] = server_config.get("args", [])
+                elif server_config.get("type") in ["sse", "streamable_http"]:
+                    server_info["url"] = server_config.get("url")
+
+                server_list.append(server_info)
+
+            return json.dumps(server_list, indent=2)
+
+        except Exception as e:
+            return f"Error listing MCP servers: {type(e).__name__}: {e}"
+
+    def _handle_get_config_path(self, args: Dict[str, Any]) -> str:
+        """
+        Handles the 'get_config_path' tool call.
+
+        Gets the absolute path to the current configuration file.
+
+        Args:
+            args: Dictionary (empty for this tool)
+
+        Returns:
+            Absolute path to config file or error message
+        """
+        try:
+            from mcp_client_for_ollama.utils.constants import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
+
+            config_dir = os.path.abspath(DEFAULT_CONFIG_DIR)
+            config_file = os.path.join(config_dir, DEFAULT_CONFIG_FILE)
+
+            exists = os.path.exists(config_file)
+
+            result = f"Configuration file path: {config_file}\n"
+            result += f"File exists: {exists}\n"
+
+            if exists:
+                size = os.path.getsize(config_file)
+                mtime = datetime.fromtimestamp(os.path.getmtime(config_file)).strftime('%Y-%m-%d %H:%M:%S')
+                result += f"File size: {size} bytes\n"
+                result += f"Last modified: {mtime}"
+
+            return result
+
+        except Exception as e:
+            return f"Error getting config path: {type(e).__name__}: {e}"
 
