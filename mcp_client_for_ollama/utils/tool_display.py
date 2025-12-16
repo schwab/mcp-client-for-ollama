@@ -65,26 +65,22 @@ class ToolDisplayManager:
         ))
 
     def display_tool_response(self, tool_name: str, tool_args: Any, tool_response: str, show: bool = True) -> None:
-        """Display the tool response panel with arguments and response
+        """Display the tool response panel with response only (arguments already shown in execution panel)
 
         Args:
             tool_name: Name of the tool that was executed
-            tool_args: Arguments that were passed to the tool (always JSON-serializable)
+            tool_args: Arguments that were passed to the tool (kept for API compatibility but not displayed)
             tool_response: Response from the tool
             show: Whether to display the tool response panel (default: True)
         """
         if not show:
             return
 
-        args_display = self._format_json(tool_args)
-
         # Try to format response as JSON if possible, otherwise check for markdown patterns
         try:
             response_data = json.loads(tool_response)
             response_display = self._format_json(response_data)
-            header_text = Text.from_markup("[bold]Arguments:[/bold]\n\n")
-            response_header_text = Text.from_markup("\n[bold]Response:[/bold]\n\n")
-            panel_renderable = Group(header_text, args_display, response_header_text, response_display)
+            panel_renderable = response_display
 
         except (json.JSONDecodeError, TypeError, ValueError):
             # Response is not JSON - check if it has enough markdown patterns
@@ -95,9 +91,7 @@ class ToolDisplayManager:
                 # Not enough markdown patterns - use plain text
                 response_display = Text(tool_response, style="white")
 
-            header_text = Text.from_markup("[bold]Arguments:[/bold]\n\n")
-            response_header_text = Text.from_markup("\n[bold]Response:[/bold]\n\n")
-            panel_renderable = Group(header_text, args_display, response_header_text, response_display)
+            panel_renderable = response_display
 
         self.console.print()  # Add a blank line before the panel
         self.console.print(Panel(
