@@ -2,14 +2,16 @@
 
 import io, sys, os, shutil, fnmatch, base64
 from pathlib import Path
-from typing import List, Dict, Any, Callable, Set
+from typing import List, Dict, Any, Callable, Set, Optional
 from mcp import Tool
 from datetime import datetime
+from rich.console import Console
+from rich.prompt import Confirm
 
 class BuiltinToolManager:
     """Manages the definition and execution of built-in tools."""
 
-    def __init__(self, model_config_manager: Any, ollama_host: str = None, config_manager: Any = None):
+    def __init__(self, model_config_manager: Any, ollama_host: str = None, config_manager: Any = None, console: Optional[Console] = None):
         """
         Initializes the BuiltinToolManager.
 
@@ -17,11 +19,14 @@ class BuiltinToolManager:
             model_config_manager: An instance of ModelConfigManager to interact with model settings.
             ollama_host: Optional Ollama server URL. If not provided, uses OLLAMA_HOST env var or default.
             config_manager: An instance of ConfigManager to interact with application config.
+            console: Rich console for user prompts and output.
         """
         self.model_config_manager = model_config_manager
         self.ollama_host = ollama_host or os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
         self.config_manager = config_manager
+        self.console = console or Console()
         self.working_directory = os.getcwd()  # Store the working directory for security checks
+        self._approved_paths: Set[str] = set()  # Store approved base directories for file access
         self._tool_handlers: Dict[str, Callable[[Dict[str, Any]], str]] = {
             "set_system_prompt": self._handle_set_system_prompt,
             "get_system_prompt": self._handle_get_system_prompt,
@@ -573,13 +578,14 @@ class BuiltinToolManager:
         except Exception as e:
             return f"Execution failed.\nError: {type(e).__name__}: {e}"
 
-    def _validate_path(self, path: str, allow_absolute: bool = False) -> tuple[bool, str]:
+    def _validate_path(self, path: str, allow_absolute: bool = False, require_permission: bool = True) -> tuple[bool, str]:
         """
-        Validates that a path is safe to use (within working directory).
+        Validates that a path is safe to use, prompting for user permission if outside working directory.
 
         Args:
             path: The path to validate
             allow_absolute: If True, allows absolute paths (for internal use only)
+            require_permission: If True, prompts user for permission when accessing files outside working directory
 
         Returns:
             Tuple of (is_valid, resolved_path or error_message)
@@ -595,13 +601,87 @@ class BuiltinToolManager:
                 # Resolve the path relative to working directory
                 resolved_path = os.path.abspath(os.path.join(self.working_directory, path))
 
-            # For relative paths, ensure they're within the working directory
-            if not allow_absolute and not resolved_path.startswith(os.path.abspath(self.working_directory)):
-                return False, "Error: Path traversal outside working directory is not allowed."
+            working_dir_abs = os.path.abspath(self.working_directory)
+
+            # Check if path is outside working directory
+            if not allow_absolute and not resolved_path.startswith(working_dir_abs):
+                if not require_permission:
+                    return False, "Error: Path traversal outside working directory is not allowed."
+
+                # Check if we've already approved this path or a parent directory
+                if not self._is_path_approved(resolved_path):
+                    # Prompt user for permission
+                    if not self._request_path_permission(path, resolved_path):
+                        return False, "Error: Permission denied to access file outside working directory."
 
             return True, resolved_path
         except Exception as e:
             return False, f"Error: Invalid path. {type(e).__name__}: {e}"
+
+    def _is_path_approved(self, resolved_path: str) -> bool:
+        """
+        Check if a path or any of its parent directories has been approved.
+
+        Args:
+            resolved_path: The absolute resolved path to check
+
+        Returns:
+            True if the path is approved, False otherwise
+        """
+        resolved_path = os.path.abspath(resolved_path)
+
+        # Check if path itself or any parent is approved
+        for approved_path in self._approved_paths:
+            if resolved_path.startswith(approved_path):
+                return True
+
+        return False
+
+    def _request_path_permission(self, original_path: str, resolved_path: str) -> bool:
+        """
+        Request user permission to access a file outside the working directory.
+
+        Args:
+            original_path: The original path requested by the user
+            resolved_path: The absolute resolved path
+
+        Returns:
+            True if permission granted, False otherwise
+        """
+        # Get the directory containing the file
+        if os.path.isfile(resolved_path) or not os.path.exists(resolved_path):
+            base_dir = os.path.dirname(resolved_path)
+        else:
+            base_dir = resolved_path
+
+        self.console.print()
+        self.console.print(f"[yellow]⚠️  File Access Permission Request[/yellow]")
+        self.console.print(f"[dim]The agent wants to access a file outside the working directory:[/dim]")
+        self.console.print(f"  Requested: [cyan]{original_path}[/cyan]")
+        self.console.print(f"  Resolved:  [cyan]{resolved_path}[/cyan]")
+        self.console.print(f"  Working directory: [dim]{self.working_directory}[/dim]")
+        self.console.print()
+
+        try:
+            approved = Confirm.ask(
+                "[yellow]Allow access to this location?[/yellow]",
+                default=False
+            )
+
+            if approved:
+                # Store the base directory for future access
+                self._approved_paths.add(base_dir)
+                self.console.print(f"[green]✓ Access granted to: {base_dir}[/green]")
+                self.console.print(f"[dim]Future access to files in this directory will not require permission.[/dim]")
+            else:
+                self.console.print(f"[red]✗ Access denied[/red]")
+
+            self.console.print()
+            return approved
+
+        except (KeyboardInterrupt, EOFError):
+            self.console.print("[red]✗ Permission denied (interrupted)[/red]")
+            return False
 
     def _parse_gitignore(self, gitignore_path: str) -> List[str]:
         """

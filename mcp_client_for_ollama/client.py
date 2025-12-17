@@ -54,7 +54,8 @@ class MCPClient:
         self.builtin_tool_manager = BuiltinToolManager(
             model_config_manager=self.model_config_manager,
             ollama_host=host,
-            config_manager=self.config_manager
+            config_manager=self.config_manager,
+            console=self.console
         )
         # Initialize the tool manager with server connector reference
         self.tool_manager = ToolManager(

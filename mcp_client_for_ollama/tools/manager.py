@@ -40,7 +40,8 @@ class ToolManager:
         if self.model_config_manager:
             self.builtin_tool_manager = BuiltinToolManager(
                 self.model_config_manager,
-                config_manager=self.config_manager
+                config_manager=self.config_manager,
+                console=self.console
             )
             self._create_builtin_tools()
 
