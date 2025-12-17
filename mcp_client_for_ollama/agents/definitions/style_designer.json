@@ -6,7 +6,10 @@
   "default_tools": [
     "builtin.read_file",
     "builtin.list_files",
-    "builtin.file_exists"
+    "builtin.file_exists",
+    "builtin.get_config",
+    "builtin.list_mcp_servers",
+    "builtin.get_config_path"
   ],
   "allowed_tool_categories": [
     "filesystem_read"

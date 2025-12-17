@@ -11,7 +11,13 @@
     "builtin.create_directory",
     "builtin.get_file_info",
     "builtin.get_system_prompt",
-    "builtin.set_system_prompt"
+    "builtin.set_system_prompt",
+    "builtin.get_config",
+    "builtin.update_config_section",
+    "builtin.add_mcp_server",
+    "builtin.remove_mcp_server",
+    "builtin.list_mcp_servers",
+    "builtin.get_config_path"
   ],
   "allowed_tool_categories": [
     "filesystem_read",

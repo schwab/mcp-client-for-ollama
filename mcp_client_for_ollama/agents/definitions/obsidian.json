@@ -8,7 +8,13 @@
     "builtin.write_file",
     "builtin.list_files",
     "builtin.file_exists",
-    "builtin.get_file_info"
+    "builtin.get_file_info",
+    "builtin.get_config",
+    "builtin.update_config_section",
+    "builtin.add_mcp_server",
+    "builtin.remove_mcp_server",
+    "builtin.list_mcp_servers",
+    "builtin.get_config_path"
   ],
   "allowed_tool_categories": [
     "filesystem_read",

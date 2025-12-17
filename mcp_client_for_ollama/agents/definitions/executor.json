@@ -11,7 +11,10 @@
     "builtin.file_exists",
     "builtin.get_file_info",
     "builtin.get_system_prompt",
-    "builtin.set_system_prompt"
+    "builtin.set_system_prompt",
+    "builtin.get_config",
+    "builtin.list_mcp_servers",
+    "builtin.get_config_path"
   ],
   "allowed_tool_categories": [
     "filesystem_read",
