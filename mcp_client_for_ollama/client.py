@@ -976,6 +976,14 @@ class MCPClient:
                     self.configure_model_options()
                     continue
 
+                if query.lower() in ['agent-models', 'am']:
+                    await self.show_agent_models()
+                    continue
+
+                if query.lower() in ['configure-agents', 'ca']:
+                    await self.configure_agent_models()
+                    continue
+
                 if query.lower() in ['context', 'c']:
                     self.toggle_context_retention()
                     continue
@@ -1207,6 +1215,8 @@ class MCPClient:
             "[bold cyan]Model:[/bold cyan]\n"
             "• Type [bold]model[/bold] or [bold]m[/bold] to select a model\n"
             "• Type [bold]model-config[/bold] or [bold]mc[/bold] to configure system prompt and model parameters\n"
+            "• Type [bold]agent-models[/bold] or [bold]am[/bold] to view current models for each agent\n"
+            "• Type [bold]configure-agents[/bold] or [bold]ca[/bold] to configure models for individual agents\n"
             f"• Type [bold]thinking-mode[/bold] or [bold]tm[/bold] to toggle thinking mode\n"
             "• Type [bold]show-thinking[/bold] or [bold]st[/bold] to toggle thinking text visibility\n"
             "• Type [bold]show-metrics[/bold] or [bold]sm[/bold] to toggle performance metrics display\n\n"
@@ -2398,3 +2408,22 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
 
 if __name__ == "__main__":
     app()
+
+    async def show_agent_models(self):
+        """Display current model configuration for all agents"""
+        if self.delegation_client:
+            self.delegation_client.show_agent_models()
+        else:
+            self.console.print("[yellow]Agent delegation is not enabled[/yellow]")
+    
+    async def configure_agent_models(self):
+        """Interactive UI to configure models for individual agents"""
+        if self.delegation_client:
+            await self.delegation_client.select_agent_model_interactive(clear_console_func=self.clear_console)
+            
+            # After configuration, redisplay context
+            self.display_available_tools()
+            self.display_current_model()
+            self._display_chat_history()
+        else:
+            self.console.print("[yellow]Agent delegation is not enabled[/yellow]")

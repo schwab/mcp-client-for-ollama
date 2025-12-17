@@ -1516,3 +1516,253 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             Response from direct execution
         """
         return await self.mcp_client.process_query(query)
+
+    def show_agent_models(self):
+        """
+        Display current model configuration for all agents.
+        
+        Shows:
+        - Agent type
+        - Configured model (if set in agent definition)
+        - Effective model (what will actually be used)
+        - Source (agent config, global config, or default)
+        """
+        from rich.table import Table
+        from rich.text import Text
+        
+        # Get current global model
+        global_model = self.mcp_client.model_manager.get_current_model()
+        global_planner = self.config.get('planner_model')
+        
+        # Create table
+        table = Table(title="🧠 Agent Model Configuration", show_header=True, header_style="bold magenta")
+        table.add_column("Agent Type", style="cyan", width=15)
+        table.add_column("Configured Model", style="yellow", width=25)
+        table.add_column("Effective Model", style="green", width=25)
+        table.add_column("Source", style="dim", width=20)
+        
+        # Sort agents by type
+        sorted_agents = sorted(self.agent_configs.items(), key=lambda x: x[0])
+        
+        for agent_type, config in sorted_agents:
+            # Determine configured model
+            configured = config.model if config.model else "-"
+            
+            # Determine effective model (what will actually be used)
+            if agent_type == "PLANNER":
+                effective = config.model or global_planner or global_model
+                source = "agent config" if config.model else ("global planner" if global_planner else "global default")
+            else:
+                effective = config.model or global_model
+                source = "agent config" if config.model else "global default"
+            
+            # Add row with color coding
+            configured_text = Text(configured, style="yellow" if config.model else "dim")
+            effective_text = Text(effective, style="green bold" if config.model else "green")
+            
+            table.add_row(agent_type, str(configured_text), str(effective_text), source)
+        
+        # Display table
+        self.console.print()
+        self.console.print(table)
+        self.console.print()
+        self.console.print(f"[dim]Global default model: {global_model}[/dim]")
+        if global_planner:
+            self.console.print(f"[dim]Global planner model: {global_planner}[/dim]")
+        self.console.print()
+
+    async def select_agent_model_interactive(self, clear_console_func=None):
+        """
+        Interactive UI to select models for individual agents.
+        
+        Allows users to:
+        - View current model for each agent
+        - Select a specific model for any agent
+        - Clear agent-specific model (use global default)
+        - Save changes to agent definition files
+        
+        Args:
+            clear_console_func: Function to clear the console (optional)
+        """
+        from rich.prompt import Prompt, Confirm
+        from rich.table import Table
+        from rich.text import Text
+        
+        # Check if Ollama is running
+        if not await self.mcp_client.model_manager.check_ollama_running():
+            self.console.print(Panel(
+                "[bold red]Ollama is not running![/bold red]\n\n"
+                "Please start Ollama before trying to configure agent models.",
+                title="Error", border_style="red", expand=False
+            ))
+            return
+        
+        # Get available models
+        with self.console.status("[cyan]Getting available models from Ollama...[/cyan]"):
+            models = await self.mcp_client.model_manager.list_ollama_models()
+        
+        if not models:
+            self.console.print("[yellow]No models available. Try pulling a model with 'ollama pull <model>'[/yellow]")
+            return
+        
+        # Extract model names
+        model_names = sorted([m.get("name", "") for m in models])
+        
+        # Track changes
+        changes_made = {}
+        result_message = None
+        result_style = "green"
+        
+        # Main selection loop
+        while True:
+            if clear_console_func:
+                clear_console_func()
+            
+            # Display header
+            self.console.print(Panel(Text.from_markup("[bold]🎯 Configure Agent Models[/bold]", justify="center"), 
+                                    expand=True, border_style="green"))
+            
+            # Create table of agents
+            table = Table(show_header=True, header_style="bold magenta")
+            table.add_column("#", style="dim", width=3)
+            table.add_column("Agent Type", style="cyan", width=15)
+            table.add_column("Current Model", style="yellow", width=30)
+            table.add_column("Status", style="dim", width=15)
+            
+            sorted_agents = sorted(self.agent_configs.items(), key=lambda x: x[0])
+            
+            for i, (agent_type, config) in enumerate(sorted_agents, 1):
+                # Check if there are unsaved changes
+                if agent_type in changes_made:
+                    current_model = changes_made[agent_type] if changes_made[agent_type] else "[dim](use global)[/dim]"
+                    status = "[yellow]*modified*[/yellow]"
+                else:
+                    current_model = config.model if config.model else "[dim](use global)[/dim]"
+                    status = ""
+                
+                table.add_row(str(i), agent_type, current_model, status)
+            
+            self.console.print(table)
+            self.console.print()
+            
+            # Show result message if any
+            if result_message:
+                self.console.print(Panel(result_message, border_style=result_style, expand=False))
+                result_message = None
+            
+            # Show commands
+            self.console.print(Panel("[bold yellow]Commands[/bold yellow]", expand=False))
+            self.console.print("• Enter [bold magenta]number[/bold magenta] to configure agent model")
+            self.console.print("• [bold]s[/bold] or [bold]save[/bold] - Save changes and return")
+            self.console.print("• [bold]q[/bold] or [bold]quit[/bold] - Cancel and return")
+            self.console.print()
+            
+            selection = Prompt.ask("> ").strip().lower()
+            
+            if selection in ['s', 'save']:
+                if not changes_made:
+                    result_message = "[yellow]No changes to save[/yellow]"
+                    result_style = "yellow"
+                    continue
+                
+                # Save changes to agent definition files
+                saved_count = 0
+                for agent_type, new_model in changes_made.items():
+                    try:
+                        # Get agent config
+                        config = self.agent_configs[agent_type]
+                        
+                        # Find the definition file
+                        def_file = Path(__file__).parent / "definitions" / f"{agent_type.lower()}.json"
+                        
+                        # Load current definition
+                        with open(def_file, 'r') as f:
+                            data = json.load(f)
+                        
+                        # Update model field
+                        if new_model:
+                            data['model'] = new_model
+                        else:
+                            # Remove model field to use global default
+                            if 'model' in data:
+                                del data['model']
+                        
+                        # Save back
+                        with open(def_file, 'w') as f:
+                            json.dump(data, f, indent=2)
+                        
+                        # Update in-memory config
+                        config.model = new_model
+                        saved_count += 1
+                    
+                    except Exception as e:
+                        self.console.print(f"[red]Error saving {agent_type}: {e}[/red]")
+                
+                self.console.print(f"\n[green]✓ Saved {saved_count} agent model configuration(s)[/green]")
+                self.console.print("[dim]Press Enter to continue...[/dim]")
+                input()
+                return
+            
+            elif selection in ['q', 'quit']:
+                if changes_made:
+                    if Confirm.ask("[yellow]Discard unsaved changes?[/yellow]"):
+                        return
+                    else:
+                        continue
+                return
+            
+            elif selection.isdigit():
+                index = int(selection) - 1
+                if 0 <= index < len(sorted_agents):
+                    agent_type, config = sorted_agents[index]
+                    
+                    # Show model selection for this agent
+                    if clear_console_func:
+                        clear_console_func()
+                    
+                    self.console.print(Panel(f"[bold]Select Model for {agent_type}[/bold]", border_style="cyan"))
+                    self.console.print()
+                    
+                    # Show available models
+                    for i, model_name in enumerate(model_names, 1):
+                        current_indicator = ""
+                        if agent_type in changes_made:
+                            if changes_made[agent_type] == model_name:
+                                current_indicator = " [green]← selected[/green]"
+                        elif config.model == model_name:
+                            current_indicator = " [yellow]← current[/yellow]"
+                        
+                        self.console.print(f"{i}. {model_name}{current_indicator}")
+                    
+                    self.console.print()
+                    self.console.print("[bold]0.[/bold] Clear (use global default)")
+                    self.console.print("[bold]c.[/bold] Cancel")
+                    self.console.print()
+                    
+                    model_selection = Prompt.ask("> ").strip().lower()
+                    
+                    if model_selection == 'c':
+                        continue
+                    elif model_selection == '0':
+                        changes_made[agent_type] = None
+                        result_message = f"[green]{agent_type} will use global default model[/green]"
+                        result_style = "green"
+                    elif model_selection.isdigit():
+                        model_index = int(model_selection) - 1
+                        if 0 <= model_index < len(model_names):
+                            selected_model = model_names[model_index]
+                            changes_made[agent_type] = selected_model
+                            result_message = f"[green]{agent_type} model set to {selected_model}[/green]"
+                            result_style = "green"
+                        else:
+                            result_message = "[red]Invalid model number[/red]"
+                            result_style = "red"
+                    else:
+                        result_message = "[red]Invalid selection[/red]"
+                        result_style = "red"
+                else:
+                    result_message = "[red]Invalid agent number[/red]"
+                    result_style = "red"
+            else:
+                result_message = "[red]Invalid command[/red]"
+                result_style = "red"
