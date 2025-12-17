@@ -32,6 +32,7 @@ class AgentConfig:
         max_context_tokens: Maximum context window size for this agent
         loop_limit: Maximum number of tool-call iterations
         temperature: Sampling temperature for model responses
+        model: Ollama model to use for this agent (optional, uses global default if not set)
         planning_hints: Guidance for planner on when to use this agent
         output_format: Expected output format specification (optional)
     """
@@ -46,6 +47,7 @@ class AgentConfig:
     max_context_tokens: int = 8192
     loop_limit: int = 2
     temperature: float = 0.5
+    model: Optional[str] = None  # Ollama model override (e.g., "qwen2.5:7b")
     planning_hints: Optional[str] = None
     output_format: Optional[Dict[str, Any]] = None
 
@@ -79,6 +81,7 @@ class AgentConfig:
             max_context_tokens=data.get('max_context_tokens', 8192),
             loop_limit=data.get('loop_limit', 2),
             temperature=data.get('temperature', 0.5),
+            model=data.get('model'),  # Optional model override
             planning_hints=data.get('planning_hints'),
             output_format=data.get('output_format'),
         )
@@ -186,6 +189,7 @@ class AgentConfig:
             "max_context_tokens": self.max_context_tokens,
             "loop_limit": self.loop_limit,
             "temperature": self.temperature,
+            "model": self.model,
             "planning_hints": self.planning_hints,
             "output_format": self.output_format,
         }

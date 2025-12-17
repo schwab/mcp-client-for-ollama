@@ -626,8 +626,8 @@ Now create a plan for this user request:
 Remember: Output ONLY valid JSON following the format shown above. No markdown, no additional text.
 """
 
-        # Get planner model (configurable or fallback to current)
-        planner_model = self.config.get('planner_model') or self.mcp_client.model_manager.get_current_model()
+        # Get planner model (agent config -> global config -> fallback to current)
+        planner_model = planner_config.model or self.config.get('planner_model') or self.mcp_client.model_manager.get_current_model()
 
         # Execute planning with minimal tools
         with Progress(
@@ -981,9 +981,11 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
             messages = self._build_task_context(task, agent_config, agent_tools)
 
             # Execute with tool support enabled
+            # Use agent-specific model if configured, otherwise use endpoint model
+            model_to_use = agent_config.model or endpoint.model
             response_text = await self._execute_with_tools(
                 messages=messages,
-                model=endpoint.model,
+                model=model_to_use,
                 temperature=agent_config.temperature,
                 tools=agent_tools,
                 loop_limit=agent_config.loop_limit,

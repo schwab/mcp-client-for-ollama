@@ -1503,6 +1503,17 @@ class BuiltinToolManager:
             return "Error: 'data' argument is required."
 
         try:
+            # Parse data if it's a JSON string (common mistake from agents)
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError as e:
+                    return f"Error: 'data' is a string but not valid JSON: {e}"
+
+            # Validate data is a dict/object
+            if not isinstance(data, dict):
+                return f"Error: 'data' must be a JSON object (dict), got {type(data).__name__}"
+
             # Load the current configuration
             config = self.config_manager.load_configuration()
 
