@@ -630,33 +630,39 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
         planner_model = planner_config.model or self.config.get('planner_model') or self.mcp_client.model_manager.get_current_model()
 
         # Execute planning with minimal tools
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=self.console,
-        ) as progress:
-            task = progress.add_task(f"Planning with {planner_model}...", total=None)
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+            ) as progress:
+                task = progress.add_task(f"Planning with {planner_model}... (Ctrl+C to cancel)", total=None)
 
-            # Build messages for planner
-            messages = [{"role": "user", "content": planning_prompt}]
+                # Build messages for planner
+                messages = [{"role": "user", "content": planning_prompt}]
 
-            # Get available tools for planner
-            available_tool_names = self._get_available_tool_names()
-            planner_tool_names = planner_config.get_effective_tools(available_tool_names)
-            planner_tool_objects = self._get_tool_objects(planner_tool_names)
+                # Get available tools for planner
+                available_tool_names = self._get_available_tool_names()
+                planner_tool_names = planner_config.get_effective_tools(available_tool_names)
+                planner_tool_objects = self._get_tool_objects(planner_tool_names)
 
-            # Execute planning (planner usually doesn't need tools, just JSON output)
-            response_text = await self._execute_with_tools(
-                messages=messages,
-                model=planner_model,
-                temperature=planner_config.temperature,
-                tools=planner_tool_objects,
-                loop_limit=planner_config.loop_limit,
-                task_id=None,  # Planning phase
-                agent_type=None  # Will be logged as PLANNER
-            )
+                # Execute planning (planner usually doesn't need tools, just JSON output)
+                response_text = await self._execute_with_tools(
+                    messages=messages,
+                    model=planner_model,
+                    temperature=planner_config.temperature,
+                    tools=planner_tool_objects,
+                    loop_limit=planner_config.loop_limit,
+                    task_id=None,  # Planning phase
+                    agent_type=None  # Will be logged as PLANNER
+                )
 
-            progress.update(task, completed=True)
+                progress.update(task, completed=True)
+
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow]⚠️  Planning interrupted by user (Ctrl+C)[/yellow]")
+            self.console.print("[dim]   Returning to main prompt...[/dim]")
+            raise Exception("Planning cancelled by user")
 
         # Parse JSON from response
         task_plan = self._extract_json_from_response(response_text)
@@ -825,10 +831,7 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
                 task.mark_blocked()
                 continue
 
-            # Execute task
-            self.console.print(f"\n[cyan]▶️  Executing {task.id} ({task.agent_type})[/cyan]")
-            self.console.print(f"[dim]   {task.description}[/dim]")
-
+            # Execute task (execution message printed inside execute_single_task with model info)
             try:
                 await self.execute_single_task(task)
                 completed_ids.add(task.id)
@@ -919,9 +922,7 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
         async def execute_with_semaphore(task: Task) -> tuple[Task, bool]:
             """Execute a single task with semaphore-controlled concurrency."""
             async with self._parallelism_semaphore:
-                self.console.print(f"\n[cyan]▶️  Executing {task.id} ({task.agent_type})[/cyan]")
-                self.console.print(f"[dim]   {task.description}[/dim]")
-
+                # Execution message printed inside execute_single_task with model info
                 try:
                     await self.execute_single_task(task)
                     return (task, True)
@@ -983,6 +984,11 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
             # Execute with tool support enabled
             # Use agent-specific model if configured, otherwise use endpoint model
             model_to_use = agent_config.model or endpoint.model
+
+            # Display execution with model info
+            self.console.print(f"\n[cyan]▶️  Executing {task.id} ({task.agent_type}) <{model_to_use}>[/cyan]")
+            self.console.print(f"[dim]   {task.description}[/dim]")
+
             response_text = await self._execute_with_tools(
                 messages=messages,
                 model=model_to_use,
