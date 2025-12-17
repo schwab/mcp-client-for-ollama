@@ -487,7 +487,10 @@ class BuiltinToolManager:
         """Handles the 'execute_python_code' tool call."""
         code = args.get("code")
         if code is None:
-            return "Error: 'code' argument is required for execute_python_code."
+            return (
+                "Error: 'code' argument is required for execute_python_code.\n"
+                "Example: {\"code\": \"print('Hello, World!')\"}"
+            )
 
         # Capture stdout and stderr
         old_stdout = sys.stdout
@@ -554,10 +557,51 @@ class BuiltinToolManager:
             exec_locals = {}
             exec(code, exec_globals, exec_locals)
             output = redirected_output.getvalue()
-            return f"Execution successful.\nOutput:\n{output}"
+            if output:
+                return f"✓ Python code executed successfully.\n\nOutput:\n{output}"
+            else:
+                return "✓ Python code executed successfully (no output)."
+        except SyntaxError as e:
+            output = redirected_output.getvalue()
+            return (
+                f"✗ Python syntax error on line {e.lineno}:\n{e.msg}\n"
+                f"Code snippet: {e.text}\n"
+                "💡 Tips:\n"
+                "  - Check for missing colons, parentheses, or quotes\n"
+                "  - Verify proper indentation\n"
+                "  - Ensure all brackets are balanced"
+            )
+        except NameError as e:
+            output = redirected_output.getvalue()
+            return (
+                f"✗ Python execution failed - NameError: {e}\n"
+                "💡 Possible causes:\n"
+                "  - Variable or function not defined\n"
+                "  - Typo in variable/function name\n"
+                "  - Module not imported (limited imports available in sandbox)"
+            )
+        except ImportError as e:
+            output = redirected_output.getvalue()
+            return (
+                f"✗ Python execution failed - ImportError: {e}\n"
+                "💡 Note: This tool runs in a restricted sandbox environment.\n"
+                "Only basic built-in functions are available. External modules may not work.\n"
+                "Tip: For complex code requiring external modules, consider using builtin.execute_bash_command with 'python script.py'"
+            )
         except Exception as e:
             output = redirected_output.getvalue()
-            return f"Execution failed.\nError: {type(e).__name__}: {e}\nOutput:\n{output}"
+            error_type = type(e).__name__
+            error_msg = f"✗ Python execution failed - {error_type}: {e}\n"
+            if output:
+                error_msg += f"\nOutput before error:\n{output}\n"
+            error_msg += (
+                "\n💡 Troubleshooting tips:\n"
+                "  - Check the error message for specific issues\n"
+                "  - Verify variable types match expected operations\n"
+                "  - Use print() statements to debug intermediate values\n"
+                "  - Consider breaking complex code into smaller parts"
+            )
+            return error_msg
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
@@ -567,16 +611,45 @@ class BuiltinToolManager:
         import subprocess
         command = args.get("command")
         if command is None:
-            return "Error: 'command' argument is required for execute_bash_command."
+            return (
+                "Error: 'command' argument is required for execute_bash_command.\n"
+                "Example: {\"command\": \"ls -la\"}"
+            )
 
         try:
             result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
             output = result.stdout
-            return f"Execution successful.\nOutput:\n{output}"
+            if output:
+                return f"✓ Command executed successfully.\n\nOutput:\n{output}"
+            else:
+                return "✓ Command executed successfully (no output)."
         except subprocess.CalledProcessError as e:
-            return f"Execution failed.\nError: {e}\nOutput:\n{e.stdout}\nStderr:\n{e.stderr}"
+            exit_code = e.returncode
+            error_msg = f"✗ Command failed with exit code {exit_code}.\n\nCommand: {command}\n"
+            if e.stdout:
+                error_msg += f"\nStdout:\n{e.stdout}"
+            if e.stderr:
+                error_msg += f"\nStderr:\n{e.stderr}"
+            error_msg += (
+                "\n💡 Troubleshooting tips:\n"
+                "  - Check if the command syntax is correct\n"
+                "  - Verify required files/directories exist\n"
+                "  - Ensure you have necessary permissions\n"
+                "  - Check if required tools are installed"
+            )
+            return error_msg
+        except FileNotFoundError as e:
+            return (
+                f"Error: Command execution failed - shell not found.\n"
+                f"Details: {e}\n"
+                "💡 This usually means the system shell (bash/sh) is not available."
+            )
         except Exception as e:
-            return f"Execution failed.\nError: {type(e).__name__}: {e}"
+            return (
+                f"Error executing command: {type(e).__name__}: {e}\n"
+                f"Command: {command}\n"
+                "💡 Tip: Verify the command syntax is valid for bash/sh."
+            )
 
     def _validate_path(self, path: str, allow_absolute: bool = False, require_permission: bool = True) -> tuple[bool, str]:
         """
@@ -812,7 +885,10 @@ class BuiltinToolManager:
         """Handles the 'read_file' tool call."""
         path = args.get("path")
         if not path:
-            return "Error: 'path' argument is required for read_file."
+            return (
+                "Error: 'path' argument is required for read_file.\n"
+                "Example: {\"path\": \"src/main.py\"}"
+            )
 
         # Check for internal-only parameter to allow absolute paths
         allow_absolute = args.get("__internal_allow_absolute", False)
@@ -836,19 +912,48 @@ class BuiltinToolManager:
 
         try:
             if not os.path.exists(resolved_path):
-                return f"Error: File '{path}' does not exist."
+                return (
+                    f"Error: File '{path}' does not exist.\n"
+                    f"💡 Tips:\n"
+                    f"  - Verify the path is correct\n"
+                    f"  - Use builtin.list_files to see available files\n"
+                    f"  - Check if the file is in a subdirectory"
+                )
 
             if not os.path.isfile(resolved_path):
-                return f"Error: '{path}' is not a file."
+                return (
+                    f"Error: '{path}' exists but is not a file (it's a directory).\n"
+                    "💡 Tips:\n"
+                    "  - Use builtin.list_files to read directory contents\n"
+                    "  - Specify the actual file path within the directory"
+                )
 
             with open(resolved_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
-            return f"File '{path}' read successfully.\n\nContent:\n{content}"
+            file_size = len(content)
+            return f"✓ File '{path}' read successfully. Size: {file_size} bytes\n\nContent:\n{content}"
         except UnicodeDecodeError:
-            return f"Error: File '{path}' is not a text file or uses an unsupported encoding."
+            return (
+                f"Error: File '{path}' is not a text file or uses an unsupported encoding.\n"
+                "💡 This file may be:\n"
+                "  - A binary file (executable, image, etc.)\n"
+                "  - Encoded in a non-UTF-8 format\n"
+                "Tip: Only text files can be read with this tool."
+            )
+        except PermissionError as e:
+            return (
+                f"Error: Permission denied reading '{path}'.\n"
+                f"Details: {e}\n"
+                "💡 Possible solutions:\n"
+                "  - Check file permissions\n"
+                "  - Ensure the file is not locked by another program"
+            )
         except Exception as e:
-            return f"Error reading file '{path}': {type(e).__name__}: {e}"
+            return (
+                f"Error reading file '{path}': {type(e).__name__}: {e}\n"
+                "💡 Tip: Verify the file path and try builtin.file_exists to check if the file exists."
+            )
 
     def _handle_write_file(self, args: Dict[str, Any]) -> str:
         """Handles the 'write_file' tool call."""
@@ -856,14 +961,26 @@ class BuiltinToolManager:
         content = args.get("content")
 
         if not path:
-            return "Error: 'path' argument is required for write_file."
+            return (
+                "Error: 'path' argument is required for write_file.\n"
+                "Example: {\"path\": \"src/example.py\", \"content\": \"...\"}"
+            )
         if content is None:
-            return "Error: 'content' argument is required for write_file."
+            return (
+                "Error: 'content' argument is required for write_file.\n"
+                "Example: {\"path\": \"src/example.py\", \"content\": \"print('hello')\"}\n"
+                "Note: Content can be an empty string for creating empty files."
+            )
 
         # Check for internal-only parameter to allow absolute paths
         allow_absolute = args.get("__internal_allow_absolute", False)
         is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
+            # Enhance path validation errors with suggestions
+            if "outside working directory" in result.lower():
+                result += "\n💡 Tip: Use relative paths, or the system will request user permission for external locations."
+            elif "absolute paths" in result.lower():
+                result += "\n💡 Tip: Use relative paths (e.g., 'src/file.py' instead of '/absolute/path/file.py')."
             return result
 
         resolved_path = result
@@ -878,9 +995,34 @@ class BuiltinToolManager:
                 f.write(content)
 
             file_size = os.path.getsize(resolved_path)
-            return f"File '{path}' written successfully. Size: {file_size} bytes."
+            # Enhanced success message with actual location
+            if os.path.isabs(path):
+                return f"✓ File written successfully to: {resolved_path}\nSize: {file_size} bytes"
+            else:
+                return f"✓ File '{path}' written successfully. Size: {file_size} bytes\nActual location: {resolved_path}"
+        except PermissionError as e:
+            return (
+                f"Error: Permission denied writing to '{path}'.\n"
+                f"Details: {e}\n"
+                "💡 Possible solutions:\n"
+                "  - Check file/directory permissions\n"
+                "  - Ensure the file is not open in another program\n"
+                "  - Try a different location"
+            )
+        except OSError as e:
+            return (
+                f"Error: OS error writing file '{path}'.\n"
+                f"Details: {e}\n"
+                "💡 Possible solutions:\n"
+                "  - Check disk space\n"
+                "  - Verify the path is valid for your OS\n"
+                "  - Ensure parent directory is writable"
+            )
         except Exception as e:
-            return f"Error writing file '{path}': {type(e).__name__}: {e}"
+            return (
+                f"Error writing file '{path}': {type(e).__name__}: {e}\n"
+                "💡 Tip: Double-check the path and try using read_file to verify the location after writing."
+            )
 
     def _handle_list_files(self, args: Dict[str, Any]) -> str:
         """Handles the 'list_files' tool call."""
@@ -1498,28 +1640,56 @@ class BuiltinToolManager:
         data = args.get("data")
 
         if not section:
-            return "Error: 'section' argument is required."
+            return (
+                "Error: 'section' argument is required for update_config_section.\n"
+                "Example: {\"section\": \"memory\", \"data\": {\"enabled\": true}}"
+            )
 
         if data is None:
-            return "Error: 'data' argument is required."
+            return (
+                "Error: 'data' argument is required for update_config_section.\n"
+                "Example: {\"section\": \"memory\", \"data\": {\"enabled\": true, \"storage_dir\": \".memory\"}}\n"
+                "Note: 'data' must be a JSON object (dict), not a string."
+            )
 
         try:
             # Parse data if it's a JSON string (common mistake from agents)
             if isinstance(data, str):
                 try:
                     data = json.loads(data)
+                    # Successfully parsed - provide a helpful message about this common mistake
+                    # Continue processing but don't return yet
                 except json.JSONDecodeError as e:
-                    return f"Error: 'data' is a string but not valid JSON: {e}"
+                    return (
+                        f"Error: 'data' argument is a string but not valid JSON.\n"
+                        f"Details: {e}\n"
+                        "💡 Common mistake: Pass data as a JSON object, not a JSON string:\n"
+                        "   ❌ WRONG: {\"section\": \"memory\", \"data\": \"{\\\"enabled\\\": true}\"}\n"
+                        "   ✅ RIGHT: {\"section\": \"memory\", \"data\": {\"enabled\": true}}\n"
+                        "Tip: Remove the quotes around the data value and pass the object directly."
+                    )
 
             # Validate data is a dict/object
             if not isinstance(data, dict):
-                return f"Error: 'data' must be a JSON object (dict), got {type(data).__name__}"
+                return (
+                    f"Error: 'data' must be a JSON object (dict), got {type(data).__name__}.\n"
+                    "💡 Correct format:\n"
+                    "   {\"section\": \"memory\", \"data\": {\"enabled\": true, \"storage_dir\": \".memory\"}}\n"
+                    "Note: The 'data' parameter should be an object with the configuration fields for this section."
+                )
 
             # Load the current configuration
             config = self.config_manager.load_configuration()
 
             if not config:
                 config = {}
+
+            # Get current section data for reporting
+            old_data = config.get(section, {})
+            changed_fields = []
+            for key, value in data.items():
+                if key not in old_data or old_data[key] != value:
+                    changed_fields.append(key)
 
             # Update the section
             config[section] = data
@@ -1528,12 +1698,40 @@ class BuiltinToolManager:
             success = self.config_manager.save_configuration(config)
 
             if success:
-                return f"Configuration section '{section}' updated successfully. Note: Some changes may require restart or reload to take effect."
+                if changed_fields:
+                    fields_str = ", ".join(f"'{f}'" for f in changed_fields)
+                    return (
+                        f"✓ Configuration section '{section}' updated successfully.\n"
+                        f"Changed fields: {fields_str}\n"
+                        "Note: Some changes may require restart or reload to take effect."
+                    )
+                else:
+                    return (
+                        f"✓ Configuration section '{section}' updated (no changes detected).\n"
+                        "Note: The data matches the current configuration."
+                    )
             else:
-                return f"Error: Failed to save configuration."
+                return (
+                    f"Error: Failed to save configuration for section '{section}'.\n"
+                    "💡 Possible solutions:\n"
+                    "  - Check config file permissions\n"
+                    "  - Verify the config file is not open in another program\n"
+                    "  - Check disk space"
+                )
 
+        except PermissionError as e:
+            return (
+                f"Error: Permission denied writing config for section '{section}'.\n"
+                f"Details: {e}\n"
+                "💡 Possible solutions:\n"
+                "  - Check config file permissions\n"
+                "  - Ensure the config file is not open in another program"
+            )
         except Exception as e:
-            return f"Error updating config section '{section}': {type(e).__name__}: {e}"
+            return (
+                f"Error updating config section '{section}': {type(e).__name__}: {e}\n"
+                "💡 Tip: Use builtin.get_config to check the current configuration structure."
+            )
 
     def _handle_add_mcp_server(self, args: Dict[str, Any]) -> str:
         """
@@ -1556,13 +1754,29 @@ class BuiltinToolManager:
         server_type = args.get("type")
 
         if not name:
-            return "Error: 'name' argument is required."
+            return (
+                "Error: 'name' argument is required for add_mcp_server.\n"
+                "Example: {\"name\": \"my-server\", \"type\": \"stdio\", \"command\": \"python\", \"args\": [\"-m\", \"my_mcp_server\"]}"
+            )
 
         if not server_type:
-            return "Error: 'type' argument is required."
+            return (
+                "Error: 'type' argument is required for add_mcp_server.\n"
+                "Valid types: 'stdio', 'sse', 'streamable_http'\n"
+                "Examples:\n"
+                "  stdio: {\"name\": \"local\", \"type\": \"stdio\", \"command\": \"node\", \"args\": [\"server.js\"]}\n"
+                "  sse: {\"name\": \"remote\", \"type\": \"sse\", \"url\": \"https://example.com/mcp\"}"
+            )
 
         if server_type not in ["stdio", "sse", "streamable_http"]:
-            return f"Error: Invalid server type '{server_type}'. Must be 'stdio', 'sse', or 'streamable_http'."
+            return (
+                f"Error: Invalid server type '{server_type}'.\n"
+                "💡 Valid types:\n"
+                "  - 'stdio': Local process communication\n"
+                "  - 'sse': Server-Sent Events over HTTP\n"
+                "  - 'streamable_http': Streamable HTTP protocol\n"
+                "Example: {\"name\": \"my-server\", \"type\": \"stdio\", \"command\": \"python\", \"args\": [\"-m\", \"server\"]}"
+            )
 
         try:
             # Load the current configuration
@@ -1577,7 +1791,13 @@ class BuiltinToolManager:
 
             # Check if server already exists
             if name in config["mcpServers"]:
-                return f"Error: MCP server '{name}' already exists. Use update_config_section to modify it or remove it first."
+                return (
+                    f"Error: MCP server '{name}' already exists.\n"
+                    "💡 Options:\n"
+                    "  - Use builtin.remove_mcp_server to remove it first\n"
+                    "  - Use a different name for the new server\n"
+                    "  - Use builtin.update_config_section to modify the existing server"
+                )
 
             # Build server configuration
             server_config = {"type": server_type}
@@ -1586,7 +1806,10 @@ class BuiltinToolManager:
             if server_type == "stdio":
                 command = args.get("command")
                 if not command:
-                    return "Error: 'command' argument is required for stdio servers."
+                    return (
+                        "Error: 'command' argument is required for stdio servers.\n"
+                        "Example: {\"name\": \"my-server\", \"type\": \"stdio\", \"command\": \"python\", \"args\": [\"-m\", \"my_mcp_server\"]}"
+                    )
                 server_config["command"] = command
 
                 if "args" in args:
@@ -1595,7 +1818,10 @@ class BuiltinToolManager:
             elif server_type in ["sse", "streamable_http"]:
                 url = args.get("url")
                 if not url:
-                    return f"Error: 'url' argument is required for {server_type} servers."
+                    return (
+                        f"Error: 'url' argument is required for {server_type} servers.\n"
+                        f"Example: {{\"name\": \"my-server\", \"type\": \"{server_type}\", \"url\": \"https://example.com/mcp\"}}"
+                    )
                 server_config["url"] = url
 
             # Add optional fields
@@ -1612,12 +1838,33 @@ class BuiltinToolManager:
             success = self.config_manager.save_configuration(config)
 
             if success:
-                return f"MCP server '{name}' added successfully.\n\nServer configuration:\n{json.dumps(server_config, indent=2)}\n\nUse 'reload-servers' command to connect to the new server."
+                return (
+                    f"✓ MCP server '{name}' added successfully.\n\n"
+                    f"Server configuration:\n{json.dumps(server_config, indent=2)}\n\n"
+                    "💡 Next step: Use 'reload-servers' command to connect to the new server."
+                )
             else:
-                return "Error: Failed to save configuration."
+                return (
+                    "Error: Failed to save configuration.\n"
+                    "💡 Possible solutions:\n"
+                    "  - Check config file permissions\n"
+                    "  - Verify the config file is not open in another program\n"
+                    "  - Check disk space"
+                )
 
+        except PermissionError as e:
+            return (
+                f"Error: Permission denied writing config for MCP server '{name}'.\n"
+                f"Details: {e}\n"
+                "💡 Possible solutions:\n"
+                "  - Check config file permissions\n"
+                "  - Ensure the config file is not open in another program"
+            )
         except Exception as e:
-            return f"Error adding MCP server '{name}': {type(e).__name__}: {e}"
+            return (
+                f"Error adding MCP server '{name}': {type(e).__name__}: {e}\n"
+                "💡 Tip: Use builtin.list_mcp_servers to see current servers."
+            )
 
     def _handle_remove_mcp_server(self, args: Dict[str, Any]) -> str:
         """
