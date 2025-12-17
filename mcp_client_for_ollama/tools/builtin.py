@@ -735,6 +735,18 @@ class BuiltinToolManager:
 
         # Check for internal-only parameter to allow absolute paths
         allow_absolute = args.get("__internal_allow_absolute", False)
+
+        # Special case: Allow reading the config file even if it's an absolute path
+        # This is needed because get_config_path returns an absolute path
+        if not allow_absolute and os.path.isabs(path):
+            try:
+                from mcp_client_for_ollama.utils.constants import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
+                config_file = os.path.abspath(os.path.join(DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE))
+                if os.path.abspath(path) == config_file:
+                    allow_absolute = True
+            except Exception:
+                pass  # If we can't determine config path, continue with normal validation
+
         is_valid, result = self._validate_path(path, allow_absolute)
         if not is_valid:
             return result
