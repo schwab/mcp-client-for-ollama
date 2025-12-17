@@ -593,9 +593,7 @@ class BuiltinToolManager:
         try:
             # Convert to absolute path and resolve any .. or . components
             if os.path.isabs(path):
-                if not allow_absolute:
-                    return False, "Error: Absolute paths are not allowed. Use relative paths only."
-                # For absolute paths, just expand ~ and return
+                # For absolute paths, just expand ~ and resolve
                 resolved_path = os.path.abspath(os.path.expanduser(path))
             else:
                 # Resolve the path relative to working directory
@@ -604,15 +602,18 @@ class BuiltinToolManager:
             working_dir_abs = os.path.abspath(self.working_directory)
 
             # Check if path is outside working directory
-            if not allow_absolute and not resolved_path.startswith(working_dir_abs):
-                if not require_permission:
-                    return False, "Error: Path traversal outside working directory is not allowed."
+            if not resolved_path.startswith(working_dir_abs):
+                # Path is outside working directory
+                if not allow_absolute:
+                    # Not internally allowed, check if we should request permission
+                    if not require_permission:
+                        return False, "Error: Path traversal outside working directory is not allowed."
 
-                # Check if we've already approved this path or a parent directory
-                if not self._is_path_approved(resolved_path):
-                    # Prompt user for permission
-                    if not self._request_path_permission(path, resolved_path):
-                        return False, "Error: Permission denied to access file outside working directory."
+                    # Check if we've already approved this path or a parent directory
+                    if not self._is_path_approved(resolved_path):
+                        # Prompt user for permission
+                        if not self._request_path_permission(path, resolved_path):
+                            return False, "Error: Permission denied to access file outside working directory."
 
             return True, resolved_path
         except Exception as e:
