@@ -1,2 +1,0 @@
-- We found another issue in testing. The results are in :  /trace_20251217_061448.json  The AI appears to have done everything it should of except for actually writing out the resulting file it modified. 
-- in this thread, https://news.ycombinator.com/item?id=46081704 there are conversations about having agents that are specifically designed to analyze errors and correct problems. Have we considered this for our program yet?

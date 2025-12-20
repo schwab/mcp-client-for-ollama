@@ -1,0 +1,4 @@
+- Design a feature that allows the cli to be used as a web interface. 
+- expose all menus in the web interface
+- create a dockerfile for installing the tool on a server
+- expose the app folder via a docker volume so changes to config are persisted and .trace files are accesible

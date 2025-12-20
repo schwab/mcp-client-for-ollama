@@ -135,21 +135,22 @@ def test_execute_tool_execute_python_code_success(builtin_tool_manager):
     """Test successful execution of Python code."""
     tool_args = {"code": "print('Hello from Python!')"}
     result = builtin_tool_manager.execute_tool("execute_python_code", tool_args)
-    assert "Execution successful." in result
+    assert "executed successfully" in result
     assert "Hello from Python!" in result
 
 def test_execute_tool_execute_python_code_with_error(builtin_tool_manager):
     """Test execution of Python code that raises an error."""
     tool_args = {"code": "raise ValueError('Test error')"}
     result = builtin_tool_manager.execute_tool("execute_python_code", tool_args)
-    assert "Execution failed." in result
+    assert "execution failed" in result
     assert "ValueError: Test error" in result
 
 def test_execute_tool_execute_python_code_missing_arg(builtin_tool_manager):
     """Test execution of Python code with a missing 'code' argument."""
     tool_args = {}
     result = builtin_tool_manager.execute_tool("execute_python_code", tool_args)
-    assert result == "Error: 'code' argument is required for execute_python_code."
+    assert "Error: 'code' argument is required for execute_python_code." in result
+    assert "Example:" in result
 
 def test_execute_tool_unknown_tool(builtin_tool_manager):
     """Test executing an unknown built-in tool."""
@@ -161,20 +162,21 @@ def test_execute_tool_execute_bash_command_success(builtin_tool_manager):
     """Test successful execution of a bash command."""
     tool_args = {"command": "echo 'Hello from Bash!'"}
     result = builtin_tool_manager.execute_tool("execute_bash_command", tool_args)
-    assert "Execution successful." in result
+    assert "executed successfully" in result
     assert "Hello from Bash!" in result
 
 def test_execute_tool_execute_bash_command_with_error(builtin_tool_manager):
     """Test execution of a bash command that raises an error."""
     tool_args = {"command": "exit 1"}
     result = builtin_tool_manager.execute_tool("execute_bash_command", tool_args)
-    assert "Execution failed." in result
+    assert "Command failed" in result
 
 def test_execute_tool_execute_bash_command_missing_arg(builtin_tool_manager):
     """Test execution of a bash command with a missing 'command' argument."""
     tool_args = {}
     result = builtin_tool_manager.execute_tool("execute_bash_command", tool_args)
-    assert result == "Error: 'command' argument is required for execute_bash_command."
+    assert "Error: 'command' argument is required for execute_bash_command." in result
+    assert "Example:" in result
 
 
 # File Access Tool Tests

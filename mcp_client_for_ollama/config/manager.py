@@ -329,4 +329,8 @@ class ConfigManager:
         if "mcpServers" in config_data:
             validated["mcpServers"] = config_data["mcpServers"]
 
+        # Preserve memory settings
+        if "memory" in config_data and isinstance(config_data["memory"], dict):
+            validated["memory"] = config_data["memory"]
+
         return validated

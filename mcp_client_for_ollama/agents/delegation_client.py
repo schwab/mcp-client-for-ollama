@@ -412,10 +412,41 @@ class DelegationClient:
             ]
 
             # Get available tools for INITIALIZER
-            tools = initializer_config.get_effective_tools(
-                self.mcp_client.tool_manager,
-                self.mcp_client.builtin_tool_manager,
-            )
+            # Build list of all available tool names
+            available_tool_names = []
+
+            # Add builtin tools
+            if self.mcp_client.builtin_tool_manager:
+                builtin_tools = self.mcp_client.builtin_tool_manager.get_builtin_tools()
+                available_tool_names.extend([tool.name for tool in builtin_tools])
+
+            # Add MCP server tools
+            if self.mcp_client.tool_manager:
+                mcp_tools = self.mcp_client.tool_manager.get_enabled_tool_objects()
+                available_tool_names.extend([tool.name for tool in mcp_tools])
+
+            # Get the effective tools for this agent (filtered by agent config)
+            tool_names = initializer_config.get_effective_tools(available_tool_names)
+
+            # Convert tool names to Tool objects
+            tools = []
+
+            # Get builtin tool objects
+            if self.mcp_client.builtin_tool_manager:
+                builtin_tools = self.mcp_client.builtin_tool_manager.get_builtin_tools()
+                for tool in builtin_tools:
+                    if tool.name in tool_names:
+                        tools.append(tool)
+
+            # Get MCP tool objects
+            if self.mcp_client.tool_manager:
+                mcp_tools = self.mcp_client.tool_manager.get_enabled_tool_objects()
+                for tool in mcp_tools:
+                    if tool.name in tool_names:
+                        tools.append(tool)
+
+            # Get model for INITIALIZER
+            initializer_model = initializer_config.model or self.mcp_client.model_manager.get_current_model()
 
             # Execute with tools
             with Progress(
@@ -426,20 +457,30 @@ class DelegationClient:
                 task = progress.add_task("Running INITIALIZER agent...", total=None)
 
                 result = await self._execute_with_tools(
-                    context=context,
+                    messages=context,
+                    model=initializer_model,
+                    temperature=initializer_config.temperature,
                     tools=tools,
-                    agent_config=initializer_config,
+                    loop_limit=initializer_config.loop_limit,
+                    task_id=None,
                     agent_type="INITIALIZER",
                 )
 
                 progress.update(task, completed=True)
 
             if not result:
+                self.console.print("[yellow]⚠️  INITIALIZER returned empty response[/yellow]")
                 return None
 
             # Parse JSON response
-            parsed = InitializerPromptBuilder.parse_initializer_response(result)
-            return parsed
+            try:
+                parsed = InitializerPromptBuilder.parse_initializer_response(result)
+                return parsed
+            except ValueError as e:
+                self.console.print(f"[red]INITIALIZER execution failed: {e}[/red]")
+                self.console.print(f"[dim]Raw response (first 1000 chars):[/dim]")
+                self.console.print(f"[dim]{result[:1000]}[/dim]")
+                return None
 
         except Exception as e:
             self.console.print(f"[red]INITIALIZER execution failed: {e}[/red]")
@@ -600,6 +641,40 @@ class DelegationClient:
         # Build context section from chat history
         context_section = self._build_context_section()
 
+        # Build memory-aware planning instructions if memory is enabled
+        memory_instructions = ""
+        if self.memory_enabled and self.current_memory:
+            memory_instructions = """
+IMPORTANT - MEMORY-AWARE PLANNING:
+You have access to the current memory state (see MEMORY CONTEXT above).
+- Review current goals and their status before planning
+- Check which features are pending, in_progress, or completed
+- Build on work that's already been completed
+- Continue work that's in progress
+
+CRITICAL - STATUS UPDATES REQUIRED:
+Your plan MUST include tasks to update memory status. For each feature worked on:
+1. Create a task to do the work (EXECUTOR/CODER/etc.)
+2. Create a task to update feature status using builtin.update_feature_status
+3. Create a task to log progress using builtin.log_progress
+
+Memory tools available:
+  * builtin.update_feature_status - Update feature status (pending/in_progress/completed/failed/blocked)
+  * builtin.log_progress - Record what was accomplished
+  * builtin.add_test_result - Record test results for features
+  * builtin.get_memory_state - Get current memory state
+  * builtin.get_feature_details - Get details about a specific feature
+
+Example task plan with memory updates:
+{
+  "tasks": [
+    {"agent_type": "EXECUTOR", "description": "Work on Feature X using tool Y"},
+    {"agent_type": "EXECUTOR", "description": "Use builtin.update_feature_status to mark Feature X as completed"},
+    {"agent_type": "EXECUTOR", "description": "Use builtin.log_progress to record what was accomplished"}
+  ]
+}
+"""
+
         planning_prompt = f"""
 {planner_config.system_prompt}
 
@@ -608,6 +683,7 @@ Available agents:
 {tools_section}
 {examples_section}
 {context_section}
+{memory_instructions}
 
 When planning tasks, consider:
 1. What MCP tools are available that could solve this task directly
@@ -639,7 +715,23 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
                 task = progress.add_task(f"Planning with {planner_model}... (Ctrl+C to cancel)", total=None)
 
                 # Build messages for planner
-                messages = [{"role": "user", "content": planning_prompt}]
+                messages = []
+
+                # Inject memory context if memory system is enabled
+                if self.memory_enabled and self.current_memory:
+                    from ..memory.boot_ritual import BootRitual
+                    memory_context = BootRitual.build_memory_context(
+                        memory=self.current_memory,
+                        agent_type="PLANNER",
+                        task_description=query,
+                    )
+                    messages.append({
+                        "role": "system",
+                        "content": memory_context
+                    })
+
+                # Add planning prompt
+                messages.append({"role": "user", "content": planning_prompt})
 
                 # Get available tools for planner
                 available_tool_names = self._get_available_tool_names()
@@ -1235,6 +1327,9 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         loop_count = 0
         pending_tool_calls = tool_calls
 
+        # Build set of allowed tool names for validation
+        allowed_tool_names = set(tool.name for tool in tools) if tools else set()
+
         while pending_tool_calls and loop_count < loop_limit:
             loop_count += 1
 
@@ -1242,13 +1337,18 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
                 tool_name = tool_call.function.name
                 tool_args = tool_call.function.arguments
 
-                # Execute tool
-                try:
-                    tool_response = await self._execute_tool(tool_name, tool_args)
-                    tool_success = True
-                except Exception as e:
-                    tool_response = f"Error: {str(e)}"
+                # CRITICAL: Validate tool is in allowed list before executing
+                if allowed_tool_names and tool_name not in allowed_tool_names:
+                    tool_response = f"Error: Tool '{tool_name}' is not available to this agent. This tool may be forbidden or not in the agent's tool list."
                     tool_success = False
+                else:
+                    # Execute tool
+                    try:
+                        tool_response = await self._execute_tool(tool_name, tool_args)
+                        tool_success = True
+                    except Exception as e:
+                        tool_response = f"Error: {str(e)}"
+                        tool_success = False
 
                 # Log tool call
                 self.trace_logger.log_tool_call(

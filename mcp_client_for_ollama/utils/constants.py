@@ -114,6 +114,24 @@ INTERACTIVE_COMMANDS = {
     'dt': ('Configure delegation trace logging', True), # NEW
     'trace-config': ('Configure delegation trace logging', True), # NEW
     'tc': ('Configure delegation trace logging', True), # NEW
+
+    'memory-sessions': ('List all memory sessions', True), # NEW
+    'ms': ('List all memory sessions', True), # NEW
+
+    'memory-resume': ('Resume a memory session', True), # NEW
+    'mr': ('Resume a memory session', True), # NEW
+
+    'memory-new': ('Create a new memory session', True), # NEW
+    'mn': ('Create a new memory session', True), # NEW
+
+    'memory-status': ('Show current memory session status', True), # NEW
+    'mst': ('Show current memory session status', True), # NEW
+
+    'memory-enable': ('Enable the memory system', True), # NEW
+    'me': ('Enable the memory system', True), # NEW
+
+    'memory-disable': ('Disable the memory system', True), # NEW
+    'md': ('Disable the memory system', True), # NEW
 }
 
 # Default completion menu style (used by prompt_toolkit in interactive mode)

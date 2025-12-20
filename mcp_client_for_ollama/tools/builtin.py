@@ -27,6 +27,7 @@ class BuiltinToolManager:
         self.console = console or Console()
         self.working_directory = os.getcwd()  # Store the working directory for security checks
         self._approved_paths: Set[str] = set()  # Store approved base directories for file access
+        self.memory_tools = None  # Reference to MemoryTools instance (set when memory system is enabled)
         self._tool_handlers: Dict[str, Callable[[Dict[str, Any]], str]] = {
             "set_system_prompt": self._handle_set_system_prompt,
             "get_system_prompt": self._handle_get_system_prompt,
@@ -49,7 +50,34 @@ class BuiltinToolManager:
             "remove_mcp_server": self._handle_remove_mcp_server,
             "list_mcp_servers": self._handle_list_mcp_servers,
             "get_config_path": self._handle_get_config_path,
+            # Memory tools (only available when memory system is enabled)
+            "update_feature_status": self._handle_update_feature_status,
+            "log_progress": self._handle_log_progress,
+            "add_test_result": self._handle_add_test_result,
+            "get_memory_state": self._handle_get_memory_state,
+            "get_feature_details": self._handle_get_feature_details,
+            "get_goal_details": self._handle_get_goal_details,
+            # Interactive memory management tools
+            "add_goal": self._handle_add_goal,
+            "update_goal": self._handle_update_goal,
+            "remove_goal": self._handle_remove_goal,
+            "add_feature": self._handle_add_feature,
+            "update_feature": self._handle_update_feature,
+            "remove_feature": self._handle_remove_feature,
+            "update_session_description": self._handle_update_session_description,
+            "move_feature": self._handle_move_feature,
         }
+
+    def set_memory_tools(self, memory_tools: Any) -> None:
+        """
+        Set the MemoryTools instance for memory-related builtin tools.
+
+        This should be called when the delegation client is created with memory enabled.
+
+        Args:
+            memory_tools: MemoryTools instance from delegation_client
+        """
+        self.memory_tools = memory_tools
 
     def get_builtin_tools(self) -> List[Tool]:
         """
@@ -446,13 +474,378 @@ class BuiltinToolManager:
             }
         )
 
-        return [
+        # Memory tools - only available when memory system is enabled
+        update_feature_status_tool = Tool(
+            name="builtin.update_feature_status",
+            description="Update the status of a feature in the current memory session. Use this to mark features as pending, in_progress, completed, failed, or blocked. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_id": {
+                        "type": "string",
+                        "description": "ID of the feature to update (e.g., 'F1', 'F2')"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "New status for the feature",
+                        "enum": ["pending", "in_progress", "completed", "failed", "blocked"]
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Optional notes about the status update"
+                    }
+                },
+                "required": ["feature_id", "status"]
+            }
+        )
+
+        log_progress_tool = Tool(
+            name="builtin.log_progress",
+            description="Log a progress entry to the current memory session. Use this to record what actions you took and their outcomes. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "agent_type": {
+                        "type": "string",
+                        "description": "Type of agent making the entry (e.g., 'CODER', 'EXECUTOR', 'DEBUGGER')"
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Short description of the action taken (e.g., 'Implemented login endpoint')"
+                    },
+                    "outcome": {
+                        "type": "string",
+                        "description": "Outcome of the action",
+                        "enum": ["success", "failure", "partial", "blocked"]
+                    },
+                    "details": {
+                        "type": "string",
+                        "description": "Detailed description of what was done"
+                    },
+                    "feature_id": {
+                        "type": "string",
+                        "description": "Optional feature ID this relates to"
+                    },
+                    "artifacts_changed": {
+                        "type": "array",
+                        "description": "Optional list of files/artifacts modified",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["agent_type", "action", "outcome", "details"]
+            }
+        )
+
+        add_test_result_tool = Tool(
+            name="builtin.add_test_result",
+            description="Add a test result to a feature in the current memory session. Use this to record test execution results. Feature status will be auto-updated based on test results. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_id": {
+                        "type": "string",
+                        "description": "ID of the feature being tested"
+                    },
+                    "test_id": {
+                        "type": "string",
+                        "description": "ID/name of the test (e.g., 'test_login_success')"
+                    },
+                    "passed": {
+                        "type": "boolean",
+                        "description": "Whether the test passed"
+                    },
+                    "details": {
+                        "type": "string",
+                        "description": "Optional details about the test"
+                    },
+                    "output": {
+                        "type": "string",
+                        "description": "Optional test output"
+                    }
+                },
+                "required": ["feature_id", "test_id", "passed"]
+            }
+        )
+
+        get_memory_state_tool = Tool(
+            name="builtin.get_memory_state",
+            description="Get a summary of the current memory session state, including all goals, features, and progress. Use this to check what work has been completed and what remains. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
+        get_feature_details_tool = Tool(
+            name="builtin.get_feature_details",
+            description="Get detailed information about a specific feature, including acceptance criteria, test results, and notes. Use this to understand what a feature requires. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_id": {
+                        "type": "string",
+                        "description": "ID of the feature to get details for"
+                    }
+                },
+                "required": ["feature_id"]
+            }
+        )
+
+        get_goal_details_tool = Tool(
+            name="builtin.get_goal_details",
+            description="Get detailed information about a specific goal and its features. Use this when users ask about a specific goal (e.g., 'show me G1', 'what's in goal 2'). Shows goal description, constraints, progress, and feature summary. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "goal_id": {
+                        "type": "string",
+                        "description": "ID of the goal to get details for (e.g., 'G1', 'G2')"
+                    }
+                },
+                "required": ["goal_id"]
+            }
+        )
+
+        # Interactive memory management tools
+        add_goal_tool = Tool(
+            name="builtin.add_goal",
+            description="Add a new goal to the current memory session. Use this when users want to add new high-level goals as their plans evolve. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "Clear description of the goal"
+                    },
+                    "constraints": {
+                        "type": "array",
+                        "description": "Optional list of constraints or requirements",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["description"]
+            }
+        )
+
+        update_goal_tool = Tool(
+            name="builtin.update_goal",
+            description="Update an existing goal's description or constraints. Use this when users want to modify goals as their plans change. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "goal_id": {
+                        "type": "string",
+                        "description": "ID of the goal to update (e.g., 'G1')"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New description for the goal"
+                    },
+                    "add_constraints": {
+                        "type": "array",
+                        "description": "List of constraints to add",
+                        "items": {"type": "string"}
+                    },
+                    "remove_constraints": {
+                        "type": "array",
+                        "description": "List of constraints to remove",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["goal_id"]
+            }
+        )
+
+        remove_goal_tool = Tool(
+            name="builtin.remove_goal",
+            description="Remove a goal and all its features from the current memory session. Use this when users want to delete goals that are no longer needed. Requires confirmation. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "goal_id": {
+                        "type": "string",
+                        "description": "ID of the goal to remove (e.g., 'G1')"
+                    },
+                    "confirm": {
+                        "type": "boolean",
+                        "description": "Must be true to confirm deletion (safety check)"
+                    }
+                },
+                "required": ["goal_id"]
+            }
+        )
+
+        add_feature_tool = Tool(
+            name="builtin.add_feature",
+            description="Add a new feature to an existing goal. Use this when users want to add new requirements or tasks as they emerge. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "goal_id": {
+                        "type": "string",
+                        "description": "ID of the goal to add the feature to (e.g., 'G1')"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Clear description of the feature"
+                    },
+                    "criteria": {
+                        "type": "array",
+                        "description": "Optional list of pass/fail acceptance criteria",
+                        "items": {"type": "string"}
+                    },
+                    "tests": {
+                        "type": "array",
+                        "description": "Optional list of test names",
+                        "items": {"type": "string"}
+                    },
+                    "priority": {
+                        "type": "string",
+                        "description": "Priority level",
+                        "enum": ["high", "medium", "low"]
+                    },
+                    "assigned_to": {
+                        "type": "string",
+                        "description": "Optional assignee (agent type or person name)"
+                    }
+                },
+                "required": ["goal_id", "description"]
+            }
+        )
+
+        update_feature_tool = Tool(
+            name="builtin.update_feature",
+            description="Update an existing feature's properties (description, criteria, tests, priority, assignee). Use this when users want to modify features as requirements evolve. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_id": {
+                        "type": "string",
+                        "description": "ID of the feature to update (e.g., 'F1')"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New description for the feature"
+                    },
+                    "add_criteria": {
+                        "type": "array",
+                        "description": "List of criteria to add",
+                        "items": {"type": "string"}
+                    },
+                    "remove_criteria": {
+                        "type": "array",
+                        "description": "List of criteria to remove",
+                        "items": {"type": "string"}
+                    },
+                    "add_tests": {
+                        "type": "array",
+                        "description": "List of test names to add",
+                        "items": {"type": "string"}
+                    },
+                    "remove_tests": {
+                        "type": "array",
+                        "description": "List of test names to remove",
+                        "items": {"type": "string"}
+                    },
+                    "priority": {
+                        "type": "string",
+                        "description": "New priority level",
+                        "enum": ["high", "medium", "low"]
+                    },
+                    "assigned_to": {
+                        "type": "string",
+                        "description": "New assignee (agent type or person name)"
+                    }
+                },
+                "required": ["feature_id"]
+            }
+        )
+
+        remove_feature_tool = Tool(
+            name="builtin.remove_feature",
+            description="Remove a feature from its parent goal. Use this when users want to delete features that are no longer needed. Requires confirmation. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_id": {
+                        "type": "string",
+                        "description": "ID of the feature to remove (e.g., 'F1')"
+                    },
+                    "confirm": {
+                        "type": "boolean",
+                        "description": "Must be true to confirm deletion (safety check)"
+                    }
+                },
+                "required": ["feature_id"]
+            }
+        )
+
+        update_session_description_tool = Tool(
+            name="builtin.update_session_description",
+            description="Update the current memory session's description. Use this when users want to update the session metadata as their focus changes. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "New session description"
+                    }
+                },
+                "required": ["description"]
+            }
+        )
+
+        move_feature_tool = Tool(
+            name="builtin.move_feature",
+            description="Move a feature from one goal to another. Use this when users want to reorganize features as their goal structure changes. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_id": {
+                        "type": "string",
+                        "description": "ID of the feature to move (e.g., 'F1')"
+                    },
+                    "target_goal_id": {
+                        "type": "string",
+                        "description": "ID of the goal to move it to (e.g., 'G2')"
+                    }
+                },
+                "required": ["feature_id", "target_goal_id"]
+            }
+        )
+
+        # Build the tool list - include memory tools only if memory_tools is available
+        tools = [
             set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool,
             read_file_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
             create_directory_tool, delete_file_tool, file_exists_tool, get_file_info_tool,
             read_image_tool, open_file_tool, get_config_tool, update_config_section_tool,
             add_mcp_server_tool, remove_mcp_server_tool, list_mcp_servers_tool, get_config_path_tool
         ]
+
+        # Add memory tools if memory system is enabled
+        if self.memory_tools is not None:
+            tools.extend([
+                # Status and progress tracking
+                update_feature_status_tool,
+                log_progress_tool,
+                add_test_result_tool,
+                get_memory_state_tool,
+                get_feature_details_tool,
+                get_goal_details_tool,
+                # Interactive memory management
+                add_goal_tool,
+                update_goal_tool,
+                remove_goal_tool,
+                add_feature_tool,
+                update_feature_tool,
+                remove_feature_tool,
+                update_session_description_tool,
+                move_feature_tool,
+            ])
+
+        return tools
 
     def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
         """
@@ -2001,4 +2394,348 @@ class BuiltinToolManager:
 
         except Exception as e:
             return f"Error getting config path: {type(e).__name__}: {e}"
+
+    def _handle_update_feature_status(self, args: Dict[str, Any]) -> str:
+        """Handles the 'update_feature_status' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Restart the application\n"
+                "  3. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        feature_id = args.get("feature_id")
+        status = args.get("status")
+        notes = args.get("notes")
+
+        if not feature_id:
+            return "Error: 'feature_id' argument is required for update_feature_status."
+
+        if not status:
+            return "Error: 'status' argument is required for update_feature_status."
+
+        return self.memory_tools.update_feature_status(
+            feature_id=feature_id,
+            status=status,
+            notes=notes
+        )
+
+    def _handle_log_progress(self, args: Dict[str, Any]) -> str:
+        """Handles the 'log_progress' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Restart the application\n"
+                "  3. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        agent_type = args.get("agent_type")
+        action = args.get("action")
+        outcome = args.get("outcome")
+        details = args.get("details")
+        feature_id = args.get("feature_id")
+        artifacts_changed = args.get("artifacts_changed")
+
+        if not agent_type:
+            return "Error: 'agent_type' argument is required for log_progress."
+
+        if not action:
+            return "Error: 'action' argument is required for log_progress."
+
+        if not outcome:
+            return "Error: 'outcome' argument is required for log_progress."
+
+        if not details:
+            return "Error: 'details' argument is required for log_progress."
+
+        return self.memory_tools.log_progress(
+            agent_type=agent_type,
+            action=action,
+            outcome=outcome,
+            details=details,
+            feature_id=feature_id,
+            artifacts_changed=artifacts_changed
+        )
+
+    def _handle_add_test_result(self, args: Dict[str, Any]) -> str:
+        """Handles the 'add_test_result' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Restart the application\n"
+                "  3. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        feature_id = args.get("feature_id")
+        test_id = args.get("test_id")
+        passed = args.get("passed")
+        details = args.get("details")
+        output = args.get("output")
+
+        if not feature_id:
+            return "Error: 'feature_id' argument is required for add_test_result."
+
+        if not test_id:
+            return "Error: 'test_id' argument is required for add_test_result."
+
+        if passed is None:
+            return "Error: 'passed' argument is required for add_test_result."
+
+        return self.memory_tools.add_test_result(
+            feature_id=feature_id,
+            test_id=test_id,
+            passed=passed,
+            details=details,
+            output=output
+        )
+
+    def _handle_get_memory_state(self, args: Dict[str, Any]) -> str:
+        """Handles the 'get_memory_state' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Restart the application\n"
+                "  3. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        return self.memory_tools.get_memory_state()
+
+    def _handle_get_feature_details(self, args: Dict[str, Any]) -> str:
+        """Handles the 'get_feature_details' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Restart the application\n"
+                "  3. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        feature_id = args.get("feature_id")
+
+        if not feature_id:
+            return "Error: 'feature_id' argument is required for get_feature_details."
+
+        return self.memory_tools.get_feature_details(feature_id=feature_id)
+
+    def _handle_get_goal_details(self, args: Dict[str, Any]) -> str:
+        """Handles the 'get_goal_details' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        goal_id = args.get("goal_id")
+
+        if not goal_id:
+            return "Error: 'goal_id' argument is required for get_goal_details."
+
+        return self.memory_tools.get_goal_details(goal_id=goal_id)
+
+    # ========================================================================
+    # INTERACTIVE MEMORY MANAGEMENT TOOL HANDLERS
+    # ========================================================================
+
+    def _handle_add_goal(self, args: Dict[str, Any]) -> str:
+        """Handles the 'add_goal' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        description = args.get("description")
+        constraints = args.get("constraints")
+
+        if not description:
+            return "Error: 'description' argument is required for add_goal."
+
+        return self.memory_tools.add_goal(
+            description=description,
+            constraints=constraints
+        )
+
+    def _handle_update_goal(self, args: Dict[str, Any]) -> str:
+        """Handles the 'update_goal' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        goal_id = args.get("goal_id")
+        description = args.get("description")
+        add_constraints = args.get("add_constraints")
+        remove_constraints = args.get("remove_constraints")
+
+        if not goal_id:
+            return "Error: 'goal_id' argument is required for update_goal."
+
+        return self.memory_tools.update_goal(
+            goal_id=goal_id,
+            description=description,
+            add_constraints=add_constraints,
+            remove_constraints=remove_constraints
+        )
+
+    def _handle_remove_goal(self, args: Dict[str, Any]) -> str:
+        """Handles the 'remove_goal' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        goal_id = args.get("goal_id")
+        confirm = args.get("confirm", False)
+
+        if not goal_id:
+            return "Error: 'goal_id' argument is required for remove_goal."
+
+        return self.memory_tools.remove_goal(
+            goal_id=goal_id,
+            confirm=confirm
+        )
+
+    def _handle_add_feature(self, args: Dict[str, Any]) -> str:
+        """Handles the 'add_feature' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        goal_id = args.get("goal_id")
+        description = args.get("description")
+        criteria = args.get("criteria")
+        tests = args.get("tests")
+        priority = args.get("priority", "medium")
+        assigned_to = args.get("assigned_to")
+
+        if not goal_id:
+            return "Error: 'goal_id' argument is required for add_feature."
+        if not description:
+            return "Error: 'description' argument is required for add_feature."
+
+        return self.memory_tools.add_feature(
+            goal_id=goal_id,
+            description=description,
+            criteria=criteria,
+            tests=tests,
+            priority=priority,
+            assigned_to=assigned_to
+        )
+
+    def _handle_update_feature(self, args: Dict[str, Any]) -> str:
+        """Handles the 'update_feature' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        feature_id = args.get("feature_id")
+        description = args.get("description")
+        add_criteria = args.get("add_criteria")
+        remove_criteria = args.get("remove_criteria")
+        add_tests = args.get("add_tests")
+        remove_tests = args.get("remove_tests")
+        priority = args.get("priority")
+        assigned_to = args.get("assigned_to")
+
+        if not feature_id:
+            return "Error: 'feature_id' argument is required for update_feature."
+
+        return self.memory_tools.update_feature(
+            feature_id=feature_id,
+            description=description,
+            add_criteria=add_criteria,
+            remove_criteria=remove_criteria,
+            add_tests=add_tests,
+            remove_tests=remove_tests,
+            priority=priority,
+            assigned_to=assigned_to
+        )
+
+    def _handle_remove_feature(self, args: Dict[str, Any]) -> str:
+        """Handles the 'remove_feature' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        feature_id = args.get("feature_id")
+        confirm = args.get("confirm", False)
+
+        if not feature_id:
+            return "Error: 'feature_id' argument is required for remove_feature."
+
+        return self.memory_tools.remove_feature(
+            feature_id=feature_id,
+            confirm=confirm
+        )
+
+    def _handle_update_session_description(self, args: Dict[str, Any]) -> str:
+        """Handles the 'update_session_description' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        description = args.get("description")
+
+        if not description:
+            return "Error: 'description' argument is required for update_session_description."
+
+        return self.memory_tools.update_session_description(description=description)
+
+    def _handle_move_feature(self, args: Dict[str, Any]) -> str:
+        """Handles the 'move_feature' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        feature_id = args.get("feature_id")
+        target_goal_id = args.get("target_goal_id")
+
+        if not feature_id:
+            return "Error: 'feature_id' argument is required for move_feature."
+        if not target_goal_id:
+            return "Error: 'target_goal_id' argument is required for move_feature."
+
+        return self.memory_tools.move_feature(
+            feature_id=feature_id,
+            target_goal_id=target_goal_id
+        )
 

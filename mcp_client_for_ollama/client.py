@@ -876,11 +876,11 @@ class MCPClient:
         if use_delegation:
             # Use delegation
             try:
-                # Get or create delegation client
-                delegation_client = self.get_delegation_client()
+                # Get or create delegation client (store to preserve memory across calls)
+                self.delegation_client = self.get_delegation_client()
 
                 # Process with delegation (pass chat history for context)
-                response = await delegation_client.process_with_delegation(actual_query, self.chat_history)
+                response = await self.delegation_client.process_with_delegation(actual_query, self.chat_history)
 
                 # Display response
                 if not self.quiet_mode:
@@ -895,6 +895,11 @@ class MCPClient:
                     "query": f"[DELEGATED] {actual_query}",
                     "response": response
                 })
+
+                # Show memory status if session is active
+                if self.delegation_client and self.delegation_client.memory_enabled and \
+                   hasattr(self.delegation_client, 'current_memory') and self.delegation_client.current_memory:
+                    self._display_memory_progress_summary()
 
             except Exception as e:
                 if not self.quiet_mode:
@@ -1100,6 +1105,31 @@ class MCPClient:
                     await self._change_session_save_location()
                     continue
 
+                # Memory session management commands
+                if query.lower() in ['memory-sessions', 'ms']:
+                    await self.list_memory_sessions()
+                    continue
+
+                if query.lower() in ['memory-resume', 'mr']:
+                    await self.resume_memory_session()
+                    continue
+
+                if query.lower() in ['memory-new', 'mn']:
+                    await self.create_memory_session()
+                    continue
+
+                if query.lower() in ['memory-status', 'mst']:
+                    await self.show_memory_status()
+                    continue
+
+                if query.lower() in ['memory-enable', 'me']:
+                    await self.enable_memory()
+                    continue
+
+                if query.lower() in ['memory-disable', 'md']:
+                    await self.disable_memory()
+                    continue
+
                 if query.lower() in ['execute-python-code', 'epc']:
                     self.clear_console()
                     self.console.print(Panel("[bold]Execute Python Code[/bold]", border_style="blue"))
@@ -1150,11 +1180,11 @@ class MCPClient:
                 if use_delegation:
                     # Use delegation
                     try:
-                        # Get or create delegation client
-                        delegation_client = self.get_delegation_client()
+                        # Get or create delegation client (store to preserve memory across calls)
+                        self.delegation_client = self.get_delegation_client()
 
                         # Process with delegation (pass chat history for context)
-                        response = await delegation_client.process_with_delegation(actual_query, self.chat_history)
+                        response = await self.delegation_client.process_with_delegation(actual_query, self.chat_history)
 
                         # Display response
                         self.console.print("\n[bold green]📋 Final Response:[/bold green]")
@@ -1165,6 +1195,11 @@ class MCPClient:
                             "query": f"[DELEGATED] {actual_query}",
                             "response": response
                         })
+
+                        # Show memory status if session is active
+                        if self.delegation_client and self.delegation_client.memory_enabled and \
+                           hasattr(self.delegation_client, 'current_memory') and self.delegation_client.current_memory:
+                            self._display_memory_progress_summary()
 
                     except Exception as e:
                         self.console.print(f"[bold red]Delegation error:[/bold red] {str(e)}")
@@ -1260,6 +1295,14 @@ class MCPClient:
             "• Type [bold]save-session[/bold] or [bold]ss[/bold] to save the current chat session\n"
             "• Type [bold]load-session[/bold] or [bold]ls[/bold] to load a previous chat session\n"
             "• Type [bold]session-dir[/bold] or [bold]sd[/bold] to change the session save directory\n\n"
+
+            "[bold cyan]Memory System:[/bold cyan] [bold green](Persistent Agent Memory)[/bold green]\n"
+            "• Type [bold]memory-sessions[/bold] or [bold]ms[/bold] to list all memory sessions\n"
+            "• Type [bold]memory-resume[/bold] or [bold]mr[/bold] to resume a memory session\n"
+            "• Type [bold]memory-new[/bold] or [bold]mn[/bold] to create a new memory session\n"
+            "• Type [bold]memory-status[/bold] or [bold]mst[/bold] to show current memory session status\n"
+            "• Type [bold]memory-enable[/bold] or [bold]me[/bold] to enable the memory system\n"
+            "• Type [bold]memory-disable[/bold] or [bold]md[/bold] to disable the memory system\n\n"
 
             "[bold cyan]Auto-Loading (on startup):[/bold cyan]\n"
             "• Create [bold].config/CLAUDE.md[/bold] to automatically load project context\n"
@@ -1804,6 +1847,17 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         Returns:
             DelegationClient instance
         """
+        # Preserve current memory session if one exists
+        preserved_memory = None
+        preserved_session_id = None
+        preserved_domain = None
+
+        if self.delegation_client and hasattr(self.delegation_client, 'current_memory'):
+            preserved_memory = self.delegation_client.current_memory
+            if preserved_memory:
+                preserved_session_id = preserved_memory.metadata.session_id
+                preserved_domain = preserved_memory.metadata.domain
+
         # Always use the current model (don't cache for MVP)
         # This ensures model changes are reflected in delegation
         config = {
@@ -1856,7 +1910,24 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
             if "context_depth" in user_delegation:
                 config["context_depth"] = user_delegation["context_depth"]
 
-        return DelegationClient(self, config)
+        # Pass through memory settings from user config if present
+        if user_config and "memory" in user_config and isinstance(user_config["memory"], dict):
+            config["memory"] = user_config["memory"]
+
+        # Create the delegation client
+        delegation_client = DelegationClient(self, config)
+
+        # Link memory tools to builtin_tool_manager if memory is enabled
+        if delegation_client.memory_enabled and delegation_client.memory_tools:
+            self.builtin_tool_manager.set_memory_tools(delegation_client.memory_tools)
+
+        # Restore preserved memory session if one existed
+        if preserved_memory and delegation_client.memory_enabled:
+            delegation_client.current_memory = preserved_memory
+            if delegation_client.memory_tools and preserved_session_id and preserved_domain:
+                delegation_client.memory_tools.set_current_session(preserved_session_id, preserved_domain)
+
+        return delegation_client
 
     def get_filtered_tools_for_current_mode(self) -> List:
         """Get tools filtered based on current mode (PLAN vs ACT)
@@ -2178,6 +2249,455 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
                 title="Reload Failed", border_style="red", expand=False
             ))
 
+    async def list_memory_sessions(self):
+        """List all memory sessions with filtering options"""
+        # Ensure delegation_client is created if delegation is enabled
+        if not self.delegation_client and self.is_delegation_enabled():
+            self.delegation_client = self.get_delegation_client()
+
+        if not self.delegation_client or not self.delegation_client.memory_enabled:
+            self.console.print("[yellow]Memory system is not enabled[/yellow]")
+            self.console.print("[dim]Enable it by typing 'memory-enable' or 'me'[/dim]")
+            return
+
+        from rich.table import Table
+        from .memory.schemas import DomainType
+
+        # Ask user which domain to filter by
+        self.console.print("\n[bold cyan]Filter by domain:[/bold cyan]")
+        self.console.print("  1. All domains")
+        self.console.print("  2. CODING")
+        self.console.print("  3. RESEARCH")
+        self.console.print("  4. OPERATIONS")
+        self.console.print("  5. CONTENT")
+        self.console.print("  6. GENERAL")
+
+        choice = await self.get_user_input("Select domain filter (1-6)")
+
+        domain_map = {
+            "1": None,
+            "2": DomainType.CODING.value,
+            "3": DomainType.RESEARCH.value,
+            "4": DomainType.OPERATIONS.value,
+            "5": DomainType.CONTENT.value,
+            "6": DomainType.GENERAL.value,
+        }
+
+        domain_filter = domain_map.get(choice.strip())
+        if choice.strip() not in domain_map:
+            self.console.print("[red]Invalid selection[/red]")
+            return
+
+        # Get sessions from storage
+        sessions = self.delegation_client.memory_storage.list_sessions(domain=domain_filter)
+
+        if not sessions:
+            self.console.print("\n[yellow]No memory sessions found[/yellow]")
+            return
+
+        # Display sessions in a table
+        table = Table(show_header=True, header_style="bold magenta", title="Memory Sessions")
+        table.add_column("Session ID", style="cyan", width=20)
+        table.add_column("Domain", style="green", width=12)
+        table.add_column("Description", style="white", width=40)
+        table.add_column("Progress", style="yellow", width=10)
+        table.add_column("Features", style="blue", width=10)
+        table.add_column("Updated", style="dim", width=20)
+
+        for session in sessions:
+            progress_pct = session.get("completion_percentage", 0)
+            completed = session.get("completed_features", 0)
+            total = session.get("total_features", 0)
+
+            table.add_row(
+                session.get("session_id", "")[:20],
+                session.get("domain", ""),
+                session.get("description", "")[:40],
+                f"{progress_pct:.0f}%",
+                f"{completed}/{total}",
+                session.get("updated_at", "")[:19] if session.get("updated_at") else ""
+            )
+
+        self.console.print(table)
+
+    async def resume_memory_session(self):
+        """Resume an existing memory session"""
+        # Ensure delegation_client is created if delegation is enabled
+        if not self.delegation_client and self.is_delegation_enabled():
+            self.delegation_client = self.get_delegation_client()
+
+        if not self.delegation_client or not self.delegation_client.memory_enabled:
+            self.console.print("[yellow]Memory system is not enabled[/yellow]")
+            self.console.print("[dim]Enable it by typing 'memory-enable' or 'me'[/dim]")
+            return
+
+        # Get all sessions
+        sessions = self.delegation_client.memory_storage.list_sessions()
+
+        if not sessions:
+            self.console.print("[yellow]No memory sessions found[/yellow]")
+            self.console.print("[dim]Create a new session with 'memory-new' or 'mn'[/dim]")
+            return
+
+        # Display sessions
+        self.console.print("\n[bold cyan]Available Sessions:[/bold cyan]")
+        for i, session in enumerate(sessions[:10], 1):  # Show first 10
+            session_id = session.get("session_id", "")
+            domain = session.get("domain", "")
+            desc = session.get("description", "")[:50]
+            progress = session.get("completion_percentage", 0)
+
+            self.console.print(f"  {i}. [{session_id}] ({domain}) - {desc} [{progress:.0f}% complete]")
+
+        # Get user selection
+        choice = await self.get_user_input("Enter session number to resume (1-10) or session ID")
+
+        # Parse choice
+        session_id = None
+        domain = None
+
+        if choice.strip().isdigit():
+            idx = int(choice.strip()) - 1
+            if 0 <= idx < len(sessions[:10]):
+                session_id = sessions[idx].get("session_id")
+                domain = sessions[idx].get("domain")
+        else:
+            # Assume it's a session ID, find the domain
+            for session in sessions:
+                if session.get("session_id") == choice.strip():
+                    session_id = choice.strip()
+                    domain = session.get("domain")
+                    break
+
+        if not session_id or not domain:
+            self.console.print("[red]Invalid session selection[/red]")
+            return
+
+        # Load the session
+        try:
+            memory = self.delegation_client.memory_storage.load_memory(session_id, domain)
+            if memory:
+                self.delegation_client.current_memory = memory
+                self.delegation_client.memory_tools.set_current_session(session_id, domain)
+
+                # Clear chat history to prevent pollution from previous conversations
+                # The memory session provides all necessary context
+                self.chat_history = []
+
+                self.console.print(f"\n[green]✓ Resumed session:[/green] {session_id}")
+                self.console.print(f"[dim]Domain: {domain}[/dim]")
+                self.console.print(f"[dim]Description: {memory.metadata.description}[/dim]")
+                self.console.print(f"[dim]Chat history cleared - session context loaded from memory[/dim]")
+            else:
+                self.console.print("[red]Failed to load session[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error loading session: {e}[/red]")
+
+    async def create_memory_session(self):
+        """Create a new memory session"""
+        # Ensure delegation_client is created if delegation is enabled
+        if not self.delegation_client and self.is_delegation_enabled():
+            self.delegation_client = self.get_delegation_client()
+
+        if not self.delegation_client or not self.delegation_client.memory_enabled:
+            self.console.print("[yellow]Memory system is not enabled[/yellow]")
+            self.console.print("[dim]Enable it by typing 'memory-enable' or 'me'[/dim]")
+            return
+
+        from .memory.schemas import DomainType
+
+        # Select domain
+        self.console.print("\n[bold cyan]Select domain for new session:[/bold cyan]")
+        self.console.print("  1. CODING - Software development projects")
+        self.console.print("  2. RESEARCH - Research and analysis tasks")
+        self.console.print("  3. OPERATIONS - System operations and DevOps")
+        self.console.print("  4. CONTENT - Content creation and writing")
+        self.console.print("  5. GENERAL - General purpose tasks")
+
+        choice = await self.get_user_input("Select domain (1-5)")
+
+        domain_map = {
+            "1": DomainType.CODING,
+            "2": DomainType.RESEARCH,
+            "3": DomainType.OPERATIONS,
+            "4": DomainType.CONTENT,
+            "5": DomainType.GENERAL,
+        }
+
+        domain = domain_map.get(choice.strip())
+        if not domain:
+            self.console.print("[red]Invalid selection[/red]")
+            return
+
+        # Get session description
+        description = await self.get_user_input("Enter project description")
+        if not description or not description.strip():
+            self.console.print("[yellow]Session creation cancelled[/yellow]")
+            return
+
+        # Generate session ID from description
+        import re
+        from datetime import datetime
+
+        # Create a slug from description
+        slug = re.sub(r'[^a-z0-9]+', '-', description.lower().strip())[:30]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_id = f"{slug}_{timestamp}"
+
+        self.console.print(f"\n[cyan]Creating new session:[/cyan] {session_id}")
+        self.console.print(f"[dim]Domain: {domain.value}[/dim]")
+        self.console.print(f"[dim]Description: {description}[/dim]")
+
+        # Use INITIALIZER agent to bootstrap the session
+        self.console.print("\n[cyan]Initializing session with INITIALIZER agent...[/cyan]")
+
+        try:
+            # Build initialization prompt
+            init_prompt = f"""Project Domain: {domain.value}
+Project Description: {description}
+
+Please analyze this project and create an initial memory structure with:
+1. 2-4 high-level goals
+2. 3-5 features per goal (as initial breakdown)
+3. Any relevant context or constraints
+"""
+
+            # Run INITIALIZER agent to bootstrap memory
+            result = await self.delegation_client._run_initializer(init_prompt)
+
+            # Check if INITIALIZER succeeded
+            if not result:
+                self.console.print("[red]Failed to initialize memory session[/red]")
+                self.console.print("[yellow]INITIALIZER did not produce valid output[/yellow]")
+                return
+
+            # Initialize memory from INITIALIZER output
+            memory = self.delegation_client.memory_initializer.initialize_and_save(
+                initializer_output=result,
+                session_id=session_id
+            )
+
+            # Set as current session
+            self.delegation_client.current_memory = memory
+            self.delegation_client.memory_tools.set_current_session(session_id, domain.value)
+
+            # Clear chat history to start fresh with new memory session
+            self.chat_history = []
+
+            self.console.print(f"\n[green]✓ Created new session:[/green] {session_id}")
+            self.console.print(f"[dim]Goals: {len(memory.goals)}[/dim]")
+            total_features = sum(len(g.features) for g in memory.goals)
+            self.console.print(f"[dim]Features: {total_features}[/dim]")
+
+        except Exception as e:
+            self.console.print(f"[red]Error creating session: {e}[/red]")
+
+    async def show_memory_status(self):
+        """Show current memory session status"""
+        # Ensure delegation_client is created if delegation is enabled
+        if not self.delegation_client and self.is_delegation_enabled():
+            self.delegation_client = self.get_delegation_client()
+
+        if not self.delegation_client or not self.delegation_client.memory_enabled:
+            self.console.print("[yellow]Memory system is not enabled[/yellow]")
+            self.console.print("[dim]Enable it by typing 'memory-enable' or 'me'[/dim]")
+            return
+
+        if not hasattr(self.delegation_client, 'current_memory') or not self.delegation_client.current_memory:
+            self.console.print("[yellow]No active memory session[/yellow]")
+            self.console.print("[dim]Resume a session with 'memory-resume' or create one with 'memory-new'[/dim]")
+            return
+
+        from rich.panel import Panel
+        from rich.table import Table
+
+        memory = self.delegation_client.current_memory
+
+        # Build status panel content
+        status_lines = []
+        status_lines.append(f"[bold cyan]Session ID:[/bold cyan] {memory.metadata.session_id}")
+        status_lines.append(f"[bold cyan]Domain:[/bold cyan] {memory.metadata.domain}")
+        status_lines.append(f"[bold cyan]Description:[/bold cyan] {memory.metadata.description}")
+        status_lines.append(f"[bold cyan]Created:[/bold cyan] {memory.metadata.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        status_lines.append(f"[bold cyan]Updated:[/bold cyan] {memory.metadata.updated_at.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        self.console.print(Panel("\n".join(status_lines), title="Memory Session Status", border_style="cyan"))
+
+        # Show goals and features
+        for goal in memory.goals:
+            table = Table(show_header=True, header_style="bold magenta", title=f"Goal: {goal.description}")
+            table.add_column("Feature", style="white", width=50)
+            table.add_column("Status", style="yellow", width=15)
+            table.add_column("Assigned To", style="blue", width=15)
+
+            for feature in goal.features:
+                # Map FeatureStatus enum values to colors
+                status_color = {
+                    "pending": "dim",
+                    "in_progress": "yellow",
+                    "completed": "green",
+                    "failed": "red",
+                    "blocked": "red",
+                }.get(feature.status.value if hasattr(feature.status, 'value') else feature.status, "white")
+
+                table.add_row(
+                    feature.description[:50],
+                    f"[{status_color}]{feature.status.value if hasattr(feature.status, 'value') else feature.status}[/{status_color}]",
+                    feature.assigned_to or "unassigned"
+                )
+
+            self.console.print(table)
+
+        # Show progress summary
+        all_features = [f for g in memory.goals for f in g.features]
+        completed = sum(1 for f in all_features if f.status == "completed")
+        total = len(all_features)
+        progress_pct = (completed / total * 100) if total > 0 else 0
+
+        self.console.print(f"\n[bold green]Progress:[/bold green] {completed}/{total} features completed ({progress_pct:.0f}%)")
+
+    def _display_memory_progress_summary(self):
+        """Display a compact summary of memory session progress after task completion"""
+        if not self.delegation_client or not self.delegation_client.current_memory:
+            return
+
+        from rich.panel import Panel
+
+        memory = self.delegation_client.current_memory
+
+        # Calculate progress
+        all_features = [f for g in memory.goals for f in g.features]
+        if not all_features:
+            return
+
+        # Count by status
+        status_counts = {
+            "pending": 0,
+            "in_progress": 0,
+            "completed": 0,
+            "failed": 0,
+            "blocked": 0
+        }
+
+        for feature in all_features:
+            status_value = feature.status.value if hasattr(feature.status, 'value') else feature.status
+            if status_value in status_counts:
+                status_counts[status_value] += 1
+
+        total = len(all_features)
+        completed = status_counts["completed"]
+        in_progress = status_counts["in_progress"]
+        progress_pct = (completed / total * 100) if total > 0 else 0
+
+        # Build compact summary
+        summary_lines = []
+        summary_lines.append(f"[bold cyan]Session:[/bold cyan] {memory.metadata.session_id}")
+        summary_lines.append(f"[bold cyan]Progress:[/bold cyan] {completed}/{total} completed ({progress_pct:.0f}%)")
+
+        # Show status breakdown if there's activity
+        status_parts = []
+        if in_progress > 0:
+            status_parts.append(f"[yellow]{in_progress} in progress[/yellow]")
+        if status_counts["pending"] > 0:
+            status_parts.append(f"[dim]{status_counts['pending']} pending[/dim]")
+        if status_counts["failed"] > 0:
+            status_parts.append(f"[red]{status_counts['failed']} failed[/red]")
+        if status_counts["blocked"] > 0:
+            status_parts.append(f"[red]{status_counts['blocked']} blocked[/red]")
+
+        if status_parts:
+            summary_lines.append(f"[bold cyan]Status:[/bold cyan] {', '.join(status_parts)}")
+
+        self.console.print()
+        self.console.print(Panel(
+            "\n".join(summary_lines),
+            title="Memory Session Progress",
+            border_style="cyan",
+            expand=False
+        ))
+
+    async def enable_memory(self):
+        """Enable the memory system"""
+        # Load current config
+        current_config = self.config_manager.load_configuration("default")
+
+        # Enable memory
+        if "memory" not in current_config:
+            current_config["memory"] = {}
+
+        current_config["memory"]["enabled"] = True
+
+        # Memory requires delegation - auto-enable it
+        if "delegation" not in current_config:
+            current_config["delegation"] = {}
+
+        if not current_config["delegation"].get("enabled", False):
+            current_config["delegation"]["enabled"] = True
+            self.console.print("[cyan]ℹ Memory system requires delegation - enabling delegation as well[/cyan]")
+
+        # Save config (config_data, config_name)
+        self.config_manager.save_configuration(current_config, "default")
+
+        self.console.print("[green]✓ Memory system enabled[/green]")
+
+        # Auto-reload delegation client to activate memory immediately
+        # Preserve any existing memory session
+        preserved_memory = None
+        if self.delegation_client and hasattr(self.delegation_client, 'current_memory'):
+            preserved_memory = self.delegation_client.current_memory
+
+        # Recreate delegation client with new config
+        self.delegation_client = None
+        self.delegation_client = self.get_delegation_client()
+
+        # Restore preserved memory session if one existed
+        if preserved_memory and self.delegation_client.memory_enabled:
+            self.delegation_client.current_memory = preserved_memory
+            if self.delegation_client.memory_tools and preserved_memory.metadata:
+                self.delegation_client.memory_tools.set_current_session(
+                    preserved_memory.metadata.session_id,
+                    preserved_memory.metadata.domain
+                )
+
+        self.console.print("[cyan]✓ Memory system is now active[/cyan]")
+        self.console.print("[dim]You can now create or resume memory sessions[/dim]")
+
+    async def disable_memory(self):
+        """Disable the memory system"""
+        # Load current config
+        current_config = self.config_manager.load_configuration("default")
+
+        # Disable memory
+        if "memory" not in current_config:
+            current_config["memory"] = {}
+
+        current_config["memory"]["enabled"] = False
+
+        # Save config (config_data, config_name)
+        self.config_manager.save_configuration(current_config, "default")
+
+        self.console.print("[yellow]Memory system disabled[/yellow]")
+        self.console.print("[dim]Type 'exit' to quit, then restart the application[/dim]")
+
+    async def show_agent_models(self):
+        """Display current model configuration for all agents"""
+        if self.delegation_client:
+            self.delegation_client.show_agent_models()
+        else:
+            self.console.print("[yellow]Agent delegation is not enabled[/yellow]")
+
+    async def configure_agent_models(self):
+        """Interactive UI to configure models for individual agents"""
+        if self.delegation_client:
+            await self.delegation_client.select_agent_model_interactive(clear_console_func=self.clear_console)
+
+            # After configuration, redisplay context
+            self.display_available_tools()
+            self.display_current_model()
+            self._display_chat_history()
+        else:
+            self.console.print("[yellow]Agent delegation is not enabled[/yellow]")
+
 app = typer.Typer(help="MCP Client for Ollama", context_settings={"help_option_names": ["-h", "--help"]})
 
 @app.command()
@@ -2408,22 +2928,3 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
 
 if __name__ == "__main__":
     app()
-
-    async def show_agent_models(self):
-        """Display current model configuration for all agents"""
-        if self.delegation_client:
-            self.delegation_client.show_agent_models()
-        else:
-            self.console.print("[yellow]Agent delegation is not enabled[/yellow]")
-    
-    async def configure_agent_models(self):
-        """Interactive UI to configure models for individual agents"""
-        if self.delegation_client:
-            await self.delegation_client.select_agent_model_interactive(clear_console_func=self.clear_console)
-            
-            # After configuration, redisplay context
-            self.display_available_tools()
-            self.display_current_model()
-            self._display_chat_history()
-        else:
-            self.console.print("[yellow]Agent delegation is not enabled[/yellow]")

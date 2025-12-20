@@ -395,18 +395,35 @@ class InitializerPromptBuilder:
         Raises:
             ValueError: If response is not valid JSON
         """
-        # Strip potential markdown code blocks
+        if not response or not response.strip():
+            raise ValueError("INITIALIZER returned empty response. The model may have only made tool calls without generating final JSON output.")
+
+        # Strip whitespace
         response = response.strip()
-        if response.startswith("```"):
-            # Remove code fences
-            lines = response.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines[-1].startswith("```"):
-                lines = lines[:-1]
-            response = "\n".join(lines)
+
+        # Try to extract JSON from markdown code blocks
+        if "```" in response:
+            # Find JSON within code fences
+            import re
+            # Match ```json...``` or ```...```
+            code_block_pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
+            matches = re.findall(code_block_pattern, response, re.DOTALL)
+            if matches:
+                response = matches[0].strip()
+
+        # If response still has text before/after JSON, try to extract just the JSON
+        if not response.startswith("{"):
+            # Find first { and last }
+            start_idx = response.find("{")
+            end_idx = response.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                response = response[start_idx:end_idx + 1]
 
         try:
-            return json.loads(response)
+            parsed = json.loads(response)
+            # Validate required fields
+            if "domain" not in parsed or "goals" not in parsed:
+                raise ValueError(f"INITIALIZER JSON missing required fields (domain, goals). Got: {list(parsed.keys())}")
+            return parsed
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON response from INITIALIZER: {e}")
+            raise ValueError(f"Invalid JSON response from INITIALIZER: {e}\n\nResponse preview (first 500 chars):\n{response[:500]}")
