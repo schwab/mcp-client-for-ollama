@@ -123,6 +123,26 @@ class DelegationClient:
             self.memory_tools = None
             self.current_memory = None
 
+    @staticmethod
+    def _load_shared_prompt(filename: str) -> str:
+        """
+        Load a shared prompt component from the shared_prompts directory.
+
+        Args:
+            filename: Name of the shared prompt file (e.g., 'tool_protocol.txt')
+
+        Returns:
+            Content of the shared prompt file, or empty string if not found
+        """
+        try:
+            prompt_path = Path(__file__).parent / "shared_prompts" / filename
+            if not prompt_path.exists():
+                return ""
+            return prompt_path.read_text()
+        except Exception:
+            # Silently fail - shared prompts are optional enhancements
+            return ""
+
     def _load_planner_examples(self) -> List[Dict[str, Any]]:
         """
         Load planning examples from the examples directory for few-shot learning.
@@ -1188,10 +1208,27 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         """
         messages = []
 
+        # Build enhanced system prompt with shared components
+        system_prompt_parts = [agent_config.system_prompt]
+
+        # Inject shared tool protocol (for all agents)
+        tool_protocol = self._load_shared_prompt("tool_protocol.txt")
+        if tool_protocol:
+            system_prompt_parts.append("\n\n" + tool_protocol)
+
+        # Inject memory workflow if memory is active (for worker agents)
+        if self.memory_enabled and self.current_memory and task.agent_type not in ["PLANNER", "INITIALIZER"]:
+            memory_workflow = self._load_shared_prompt("memory_workflow.txt")
+            if memory_workflow:
+                system_prompt_parts.append("\n\n" + memory_workflow)
+
+        # Combine all parts
+        enhanced_prompt = "".join(system_prompt_parts)
+
         # System prompt
         messages.append({
             "role": "system",
-            "content": agent_config.system_prompt
+            "content": enhanced_prompt
         })
 
         # Add available tools information

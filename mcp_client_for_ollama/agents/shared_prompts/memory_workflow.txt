@@ -1,0 +1,11 @@
+Memory Context Active:
+A MEMORY CONTEXT section appears above with current goals and features for this persistent session.
+
+Your responsibilities:
+1. Review memory context to understand current goals and features
+2. After actions, log results:
+   - builtin.log_progress: Record actions and outcomes
+   - builtin.add_test_result: Log test results (updates feature status automatically)
+   - builtin.update_feature_status: Change feature status when appropriate
+3. Check state: Use builtin.get_memory_state, builtin.get_goal_details, builtin.get_feature_details
+4. Your work contributes to the overall project tracked in memory

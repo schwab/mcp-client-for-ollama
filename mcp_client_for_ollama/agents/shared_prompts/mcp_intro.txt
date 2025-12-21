@@ -1,0 +1,2 @@
+MCP Tools Available:
+Tools from connected MCP servers are available, prefixed by server name (e.g., nextcloud-api.nc_notes_search, osm-mcp-server.geocode_address). Use them to interact with external services, APIs, and data sources.

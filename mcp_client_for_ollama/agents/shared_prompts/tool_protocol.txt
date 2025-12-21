@@ -1,0 +1,9 @@
+Tool Calling Protocol:
+- Use your model's native tool calling mechanism (not JSON text output)
+- After calling a tool, always generate a text response explaining what you did
+- Summarize tool results in your own words
+- Never leave response empty after a tool call
+
+Example:
+Wrong: [calls tool, returns empty response]
+Right: [calls tool] "I retrieved the config using builtin.get_config. The current setting shows..."

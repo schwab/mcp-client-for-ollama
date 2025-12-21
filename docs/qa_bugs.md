@@ -75,7 +75,7 @@ Config Saved ─ Configuration saved successfully to:                           
 │ .config/modelenabledtoolscontextsettingsmodelsettingsagentsettingsmodelconfigdisplaysettingshilsettingssessionsavedirectorymemorydelegation │
 │ mcpservers.json       
 
-## MN issues
+## MN issues [ALREADY FIXED]
 Memory new is failing to create the new session. Here's a trace:
 llama3.1/[ACT]/27-tools❯ mn
 
@@ -95,7 +95,7 @@ Description: god_can_do
 Initializing session with INITIALIZER agent...
 Error creating session: DelegationClient.process_with_delegation() got an unexpected keyword argument 'force_agent_type'
 
-## MS issues:
+## MS issues [ALREADY FIXED]:
 Calling memory status gives an error:  memory-status
 ╭─────────────────────────────────────────────────────────── Memory Session Status ───────────────────────────────────────────────────────────╮
 │ Session ID: dead-on-the-inside_20251218_082436                                                                                              │
@@ -253,3 +253,18 @@ TRACE: .trace/trace_20251219_171455.json
 INTENDED RESULT: the goal should be changed and then we could work on the features
 ACTUAL RESULT: tool call failures ->  wrong tool called (builtin.update_config_section) -> brave search??
 FIX: Added guideline 14 to PLANNER (planner.json:5) requiring exact tool names in task descriptions. PLANNER must now say "Use builtin.update_goal to update goal G1's description" instead of vague "Update description of goal G1". This prevents EXECUTOR from guessing wrong tools. 
+
+## Still not showing goals or features [FIXED]
+TRACE: .trace/trace_20251219_172919.json
+INTENDED RESULT: Show the goal and its features
+ACTUAL RESULT: several failed tool calls, no goals or features shown
+FIX: EXECUTOR was outputting malformed JSON text like `{"type":"function","name":"builtin.get_goal_details",("goal_id"):"'G1'"}` instead of making proper tool calls. Added "CRITICAL - HOW TO CALL TOOLS" section to EXECUTOR (executor.json:5), DEBUGGER (debugger.json:5), and CODER (coder.json:5) with clear instructions to use the model's native tool calling mechanism, not JSON text output. Models must invoke tools directly using their structured tool calling capability.
+
+
+## EXECUTOR uses brave search summarizer to solve memory questions [FIXED]
+TRACE: .trace/trace_20251219_173534.json
+INTENDED RESULT: Show the memory goals and features
+ACTUAL RESULS: more brave searches and talk about football and other sports
+FIX: Two-part fix:
+1. Strengthened PLANNER guideline 5 (planner.json:5) with prominent example: "Instead of 'Retrieve details of the first goal', write 'Use builtin.get_goal_details(goal_id=\"G1\") to retrieve details of the first goal'". This ensures tool names appear early in planning guidelines.
+2. Enhanced EXECUTOR "CRITICAL - Tool Selection" section (executor.json:5) to explicitly list MEMORY and APPLICATION config operations FIRST, and added "NEVER use brave-search for" list including querying memory/goals/features, getting application config, and looking up internal application state. This prevents EXECUTOR from choosing web search for internal operations.
