@@ -484,6 +484,7 @@ class DelegationClient:
                     loop_limit=initializer_config.loop_limit,
                     task_id=None,
                     agent_type="INITIALIZER",
+                    quiet=True  # Suppress verbose output for cleaner UX
                 )
 
                 progress.update(task, completed=True)
@@ -698,8 +699,12 @@ Example task plan with memory updates:
         planning_prompt = f"""
 {planner_config.system_prompt}
 
-Available agents:
+===== AVAILABLE AGENTS (USE ONLY THESE) =====
+The ONLY valid agent types you can use are:
 {chr(10).join(available_agents)}
+
+CRITICAL CONSTRAINT: You MUST use ONLY the agent types listed above. Do NOT invent, hallucinate, or use any other agent type names. If you need functionality that doesn't match these agents, use the closest available agent or break the task differently.
+===== END AVAILABLE AGENTS =====
 {tools_section}
 {examples_section}
 {context_section}
@@ -712,14 +717,16 @@ When planning tasks, consider:
 4. MCP tools are called by name (e.g., osm-mcp-server.geocode_address)
 5. If previous context exists, consider it when planning - the user may be asking follow-up questions
 
-CRITICAL: The agent_type field must ONLY contain agent names (EXECUTOR, CODER, READER, etc.), NEVER MCP tool names.
+CRITICAL: The agent_type field must ONLY contain agent names from the AVAILABLE AGENTS list above, NEVER MCP tool names.
 - CORRECT: "agent_type": "EXECUTOR", "description": "Use nextcloud-api.nc_notes_create_note to create a note"
 - INCORRECT: "agent_type": "nextcloud-api.nc_notes_create_note"
+- INCORRECT: "agent_type": "ARCHITECT" (not in available agents list)
+- INCORRECT: "agent_type": "TESTER" (not in available agents list)
 
 Now create a plan for this user request:
 {query}
 
-Remember: Output ONLY valid JSON following the format shown above. No markdown, no additional text.
+Remember: Output ONLY valid JSON following the format shown above. Use ONLY agent types from the AVAILABLE AGENTS list. No markdown, no additional text.
 """
 
         # Get planner model (agent config -> global config -> fallback to current)
@@ -795,8 +802,8 @@ Remember: Output ONLY valid JSON following the format shown above. No markdown, 
         # Validate plan quality
         is_valid, error_msg = self._validate_plan_quality(task_plan)
         if not is_valid:
-            self.console.print(f"[yellow]⚠️  Plan quality warning: {error_msg}[/yellow]")
-            # Don't fail, just warn - let execution attempt to proceed
+            self.console.print(f"[red]❌ Plan validation failed: {error_msg}[/red]")
+            raise Exception(f"Invalid task plan: {error_msg}")
 
         # Display plan
         self._display_plan(task_plan)
@@ -1282,7 +1289,8 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         tools: List,
         loop_limit: int,
         task_id: str = None,
-        agent_type: str = None
+        agent_type: str = None,
+        quiet: bool = False
     ) -> str:
         """
         Execute a query with tool support (full agent capabilities).
@@ -1295,6 +1303,7 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             loop_limit: Maximum tool call iterations
             task_id: Optional task ID for trace logging
             agent_type: Optional agent type for trace logging
+            quiet: If True, suppress debug output (for background agents like INITIALIZER)
 
         Returns:
             Final response text from the model
@@ -1346,12 +1355,13 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             tools_used=tool_names
         )
 
-        # Debug: Check if tool calls were detected
-        if tool_calls:
-            self.console.print(f"[dim cyan]🔧 Detected {len(tool_calls)} tool call(s)[/dim cyan]")
-        elif response_text and ("builtin." in response_text or "arguments" in response_text):
-            self.console.print(f"[yellow]⚠️  Model generated tool-like text but no tool_calls detected[/yellow]")
-            self.console.print(f"[dim]Response preview: {response_text[:200]}...[/dim]")
+        # Debug: Check if tool calls were detected (suppress in quiet mode)
+        if not quiet:
+            if tool_calls:
+                self.console.print(f"[dim cyan]🔧 Detected {len(tool_calls)} tool call(s)[/dim cyan]")
+            elif response_text and ("builtin." in response_text or "arguments" in response_text):
+                self.console.print(f"[yellow]⚠️  Model generated tool-like text but no tool_calls detected[/yellow]")
+                self.console.print(f"[dim]Response preview: {response_text[:200]}...[/dim]")
 
         # Add assistant response to messages
         messages.append({
