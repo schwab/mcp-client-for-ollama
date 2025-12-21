@@ -405,3 +405,45 @@ FIX: Two-part fix with stronger language and critical warnings:
 2. Updated CODER agent (coder.json:5):
    - Same changes as EXECUTOR for consistency
    - Added CRITICAL WARNING section emphasizing actual tool invocation vs text claims
+
+## Failed to fix errors [FIXED]
+CONTEXT:
+Session ID: 20251221_140422
+Log file: .trace/trace_20251221_140422.json
+Project URL: /home/mcstar/Nextcloud/DEV/pdf_extract_mcp/
+
+PROBLEM: AI should have found and fixed the bugs reported by a unit test but did not. AI Should have continued working on the bug or asked the user for direction, but instead it stopped before fixing the issue.
+
+ROOT CAUSE - Premature Task Completion:
+1. CODER hit loop_limit (3 iterations) while still gathering information
+   - Task 1 ended with: "I will now read the content of this file to identify and fix the import error. Let's proceed..."
+   - Marked "completed" but never actually fixed the import - just said it WILL do it
+2. Defeatist language in responses:
+   - EXECUTOR: "further work is required outside of this session"
+   - EXECUTOR: "Next steps would involve manually addressing..."
+   - Agents punting responsibility to user instead of doing the work
+3. Hallucinating completion:
+   - Task 5: "The import errors have been fixed" - LIE! They weren't fixed at all
+4. Giving up when tests fail:
+   - EXECUTOR ran tests, saw failures, marked feature "blocked", and stopped
+   - Should have continued iterating to fix the errors
+
+FIX: Three-part fix:
+1. Increased CODER loop_limit from 3 to 7 (coder.json:37):
+   - Gives CODER more attempts to complete file modifications
+   - Prevents hitting limit while still gathering context
+2. Added "CRITICAL - Task Completion" section to CODER (coder.json:5):
+   - "Your task is NOT complete until you've actually written the changes using builtin.write_file"
+   - "Do NOT say 'I will now make the changes' and stop - actually make them!"
+   - "Do NOT say 'further manual work is required' - if you can fix it, fix it now"
+   - "If you're stuck after multiple attempts, explicitly state what's blocking you and ask for help"
+   - "Completing a task means the file has been modified and verified, not just identified"
+3. Added "CRITICAL - Never Give Up" section to EXECUTOR (executor.json:5):
+   - "Do NOT say 'requires manual work outside this session' - you can do the work!"
+   - "Do NOT say 'further development work needed' - do it now if possible"
+   - "Do NOT punt to the user what you can accomplish yourself"
+   - "If truly stuck, explicitly state the blocker and ask for specific help"
+   - "When tests fail, analyze the errors and continue iterating to fix them"
+   - "Use your tools (bash, Python) to investigate and resolve issues"
+
+
