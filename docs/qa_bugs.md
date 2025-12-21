@@ -316,3 +316,92 @@ FIX: Two-part fix:
    - Added rule: "File operations (move/copy/rename/organize) -> EXECUTOR (use bash: mv, cp, mkdir -p)"
    - Added clarification: "EXECUTOR CAN move/copy/rename files using bash commands (mv, cp are safe)"
    - Added examples including "Move files to src/ directory" -> EXECUTOR (use bash mv)
+
+## Planning Phase clutter V2 [FIXED]
+PROBLEM: We still get a lot of planning phase clutter output. Example:
+  Planning Phase
+
+📝 Answer:                                                                                                                                                                    
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+{
+  "tasks": [
+    {
+⠸ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)id": "task_1",
+⠧ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) the appropriate files",
+⠋ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)",
+      "dependencies": [],
+⠴ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)"
+    },
+    {
+⠧ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)2",
+⠙ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) completed",
+⠹ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)": "EXECUTOR",
+⠴ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)1"],
+⠇ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) status updated to 'completed'"
+⠏ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)    },
+    {
+⠙ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)",
+⠴ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)",
+⠧ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)": "EXECUTOR",
+⠏ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)"],
+⠹ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)1.2"
+    },
+⠸ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)    {
+⠼ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) "task_4",
+⠏ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)",
+⠙ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) "EXECUTOR",
+⠸ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)"],
+⠦ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)1.2"
+    },
+⠧ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)    {
+⠇ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) "task_5",
+⠸ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)2",
+⠴ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) "EXECUTOR",
+⠧ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)"],
+⠋ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) F1.2"
+⠙ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel) }
+  ]
+}
+
+ROOT CAUSE:
+- Planning phase uses _execute_with_tools but wasn't using quiet=True parameter
+- Streaming JSON output from planning was being displayed alongside spinner progress
+- This created messy interleaved output where each JSON line mixed with "⠸ Planning with..." messages
+
+FIX:
+- Updated delegation_client.py:777 to add quiet=True parameter when calling _execute_with_tools for planning
+- Planning now shows only clean spinner "Planning with qwen2.5-coder:14b..." without JSON streaming
+- Consistent with INITIALIZER quiet mode implementation (delegation_client.py:487)
+
+## Issue with feature status not being updated [FIXED]
+CONTEXT:
+Project URL: /home/mcstar/Nextcloud/DEV/pdf_extract_mcp/ 
+Session ID: 20251221_131628
+Log file: .trace/trace_20251221_131628.json
+PROBLEM: AI says "let's mark feature F1.2 as completed and log our progress. task_2 (EXECUTOR): The feature F1.2 has been marked as completed, and the progress has been successfully logged." but the actual memory status still shows:
+Memory Session Progress
+│ Session: extend-pdf-extract-by-adding-p_20251221_122528 │
+│ Progress: 0/11 completed (0%)                           │
+│ Status: 2 in progress, 9 pending
+IOW, no statuses are actually completed yet.
+
+ROOT CAUSE - LLM Hallucination:
+- Trace analysis shows agents CLAIM they called tools but "tools_used": [] is empty
+- Example from trace: task_2 loop_iteration 1: response says "The feature F1.2 has been marked as completed" but tools_used = []
+- Agents are treating memory tool calls as optional suggestions, not mandatory requirements
+- LLMs were outputting text like "I updated the feature status" instead of actually invoking builtin.update_feature_status
+- Workflow instructions said "Use builtin.update_feature_status" but LLM interpreted this as "tell the user you did it" not "actually call the tool"
+
+FIX: Two-part fix with stronger language and critical warnings:
+1. Updated EXECUTOR agent (executor.json:5):
+   - Changed "Update memory status if working on a feature" to "MANDATORY - Update memory status when working on features"
+   - Changed "Use builtin.update_feature_status" to "ALWAYS call builtin.update_feature_status"
+   - Added "CRITICAL: Actually invoke these tools - do NOT just say you did it in your response!"
+   - Added new section "CRITICAL WARNING - Tool Call Verification" with explicit checks:
+     * "If your task description says 'Use builtin.update_feature_status' you MUST actually call that tool"
+     * "Saying 'I updated the feature status' in text is NOT sufficient - you must invoke the tool"
+     * "Check your tool_calls list - if it's empty but you claim you updated something, you failed the task"
+2. Updated CODER agent (coder.json:5):
+   - Same changes as EXECUTOR for consistency
+   - Added CRITICAL WARNING section emphasizing actual tool invocation vs text claims

@@ -773,7 +773,8 @@ Remember: Output ONLY valid JSON following the format shown above. Use ONLY agen
                     tools=planner_tool_objects,
                     loop_limit=planner_config.loop_limit,
                     task_id=None,  # Planning phase
-                    agent_type=None  # Will be logged as PLANNER
+                    agent_type=None,  # Will be logged as PLANNER
+                    quiet=True  # Suppress verbose output for cleaner UX
                 )
 
                 progress.update(task, completed=True)
