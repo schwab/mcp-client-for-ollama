@@ -893,6 +893,74 @@ class BuiltinToolManager:
         sys.stderr = redirected_output
 
         try:
+            exec(code)  # Execute the code in the current environment
+            output = redirected_output.getvalue()
+            if output:
+                return f"✓ Python code executed successfully.\n\nOutput:\n{output}"
+            else:
+                return "✓ Python code executed successfully (no output)."
+        except SyntaxError as e:
+            output = redirected_output.getvalue()
+            return (
+                f"✗ Python syntax error on line {e.lineno}:\n{e.msg}\n"
+                f"Code snippet: {e.text}\n"
+                "💡 Tips:\n"
+                "  - Check for missing colons, parentheses, or quotes\n"
+                "  - Verify proper indentation\n"
+                "  - Ensure all brackets are balanced"
+            )
+        except NameError as e:
+            output = redirected_output.getvalue()
+            return (
+                f"✗ Python execution failed - NameError: {e}\n"
+                "💡 Possible causes:\n"
+                "  - Variable or function not defined\n"
+                "  - Typo in variable/function name\n"
+                "  - Module not imported (ensure the module is installed in your venv)"
+            )
+        except ImportError as e:
+            output = redirected_output.getvalue()
+            return (
+                f"✗ Python execution failed - ImportError: {e}\n"
+                "💡 Possible causes:\n"
+                "  - The module is not installed in your virtual environment.\n"
+                "  - Ensure you have activated the correct venv and the package is installed."
+            )
+        except Exception as e:
+            output = redirected_output.getvalue()
+            error_type = type(e).__name__
+            error_msg = f"✗ Python execution failed - {error_type}: {e}\n"
+            if output:
+                error_msg += f"\nOutput before error:\n{output}\n"
+            error_msg += (
+                "\n💡 Troubleshooting tips:\n"
+                "  - Check the error message for specific issues\n"
+                "  - Verify variable types match expected operations\n"
+                "  - Use print() statements to debug intermediate values\n"
+                "  - Consider breaking complex code into smaller parts"
+            )
+            return error_msg
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            
+    def _handle_execute_python_code_sandbox(self, args: Dict[str, Any]) -> str:
+        """Handles the 'execute_python_code' tool call."""
+        code = args.get("code")
+        if code is None:
+            return (
+                "Error: 'code' argument is required for execute_python_code.\n"
+                "Example: {\"code\": \"print('Hello, World!')\"}"
+            )
+
+        # Capture stdout and stderr
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        redirected_output = io.StringIO()
+        sys.stdout = redirected_output
+        sys.stderr = redirected_output
+
+        try:
             # Create a restricted execution environment
             # Only built-in functions and a few safe modules are available
             # This is a basic sandbox and can be bypassed by malicious code.

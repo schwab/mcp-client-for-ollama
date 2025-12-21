@@ -32,7 +32,7 @@
     "builtin.delete_file"
   ],
   "max_context_tokens": 262144,
-  "loop_limit": 10,
+  "loop_limit": 15,
   "temperature": 0.4,
   "planning_hints": "Assign EXECUTOR tasks when you need to: run bash commands, execute Python code, move/copy/rename files (use bash mv/cp), reorganize directory structures, use MCP server tools (nextcloud-api, osm-mcp-server, etc.), interact with external APIs or services, query external data sources, list files/directories, search for files, gather system information, run tests or scripts. EXECUTOR can use all available MCP tools and can move/copy/rename files using bash commands, but cannot create/edit source code files (use CODER for that)."
 }
