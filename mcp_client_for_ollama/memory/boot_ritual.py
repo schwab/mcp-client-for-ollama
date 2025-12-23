@@ -8,6 +8,8 @@ current memory state.
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import os
+import subprocess
 
 from .base_memory import DomainMemory, Feature, FeatureStatus
 
@@ -19,6 +21,83 @@ class BootRitual:
     Following the Anthropic pattern: Every agent run must begin by
     reading memory to understand the current state before taking action.
     """
+
+    @staticmethod
+    def _build_project_context() -> Dict[str, Any]:
+        """
+        Build project context by analyzing the current directory structure.
+
+        Returns:
+            Dictionary with project structure information
+        """
+        cwd = os.getcwd()
+        context = {
+            "working_directory": cwd,
+            "key_folders": [],
+            "project_type": "unknown",
+            "important_files": []
+        }
+
+        # Check for common project folders
+        common_folders = ["src", "tests", "docs", "lib", "bin", "config", "scripts", "data"]
+        for folder in common_folders:
+            folder_path = os.path.join(cwd, folder)
+            if os.path.isdir(folder_path):
+                try:
+                    # Count files in folder
+                    file_count = sum(1 for _ in os.scandir(folder_path) if _.is_file())
+                    context["key_folders"].append({
+                        "name": folder,
+                        "path": folder_path,
+                        "file_count": file_count
+                    })
+                except (PermissionError, OSError):
+                    pass
+
+        # Detect project type
+        if os.path.exists(os.path.join(cwd, "pyproject.toml")):
+            context["project_type"] = "Python package"
+            context["important_files"].append("pyproject.toml")
+        elif os.path.exists(os.path.join(cwd, "setup.py")):
+            context["project_type"] = "Python package (legacy)"
+            context["important_files"].append("setup.py")
+        elif os.path.exists(os.path.join(cwd, "package.json")):
+            context["project_type"] = "Node.js/JavaScript"
+            context["important_files"].append("package.json")
+        elif os.path.exists(os.path.join(cwd, "Cargo.toml")):
+            context["project_type"] = "Rust"
+            context["important_files"].append("Cargo.toml")
+
+        # Check for common config files
+        config_files = ["README.md", ".gitignore", "requirements.txt", "Makefile", "docker-compose.yml"]
+        for config in config_files:
+            if os.path.exists(os.path.join(cwd, config)) and config not in context["important_files"]:
+                context["important_files"].append(config)
+
+        return context
+
+    @staticmethod
+    def get_project_context(memory: DomainMemory) -> Dict[str, Any]:
+        """
+        Get or build project context, caching it in memory state.
+
+        Args:
+            memory: The domain memory to store context in
+
+        Returns:
+            Project context dictionary
+        """
+        # Check if already cached
+        if memory.state and "project_context" in memory.state:
+            return memory.state["project_context"]
+
+        # Build and cache
+        context = BootRitual._build_project_context()
+        if memory.state is None:
+            memory.state = {}
+        memory.state["project_context"] = context
+
+        return context
 
     @staticmethod
     def build_memory_context(
@@ -55,6 +134,19 @@ class BootRitual:
         lines.append(f"Domain: {memory.metadata.domain}")
         lines.append(f"Description: {memory.metadata.description}")
         lines.append(f"Last Updated: {memory.metadata.updated_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("")
+
+        # Project context (cached)
+        project_ctx = BootRitual.get_project_context(memory)
+        lines.append("PROJECT CONTEXT:")
+        lines.append(f"  Working Directory: {project_ctx['working_directory']}")
+        lines.append(f"  Project Type: {project_ctx['project_type']}")
+        if project_ctx["key_folders"]:
+            lines.append("  Key Folders:")
+            for folder in project_ctx["key_folders"]:
+                lines.append(f"    - {folder['name']}/ ({folder['file_count']} files)")
+        if project_ctx["important_files"]:
+            lines.append(f"  Important Files: {', '.join(project_ctx['important_files'])}")
         lines.append("")
 
         # Progress summary
