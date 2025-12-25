@@ -987,3 +987,109 @@ class MemoryTools:
 
         except Exception as e:
             return f"Error moving feature: {e}"
+
+    def get_project_context(self) -> str:
+        """
+        Get the cached project context.
+
+        Tool for agents to view the current project structure without re-scanning.
+
+        Returns:
+            Formatted project context information
+        """
+        if not self.current_session_id or not self.current_domain:
+            return "Error: No active memory session. Memory tools not available."
+
+        try:
+            # Load memory
+            memory = self.storage.load_memory(self.current_session_id, self.current_domain)
+            if not memory:
+                return f"Error: Could not load memory for session {self.current_session_id}"
+
+            # Check if project context exists in state
+            if not memory.state or "project_context" not in memory.state:
+                return (
+                    "Project context not yet scanned.\n"
+                    "It will be automatically built on the first agent call.\n"
+                    "Use builtin.rescan_project_context to force a scan now."
+                )
+
+            ctx = memory.state["project_context"]
+            lines = []
+            lines.append("=" * 70)
+            lines.append("PROJECT CONTEXT")
+            lines.append("=" * 70)
+            lines.append("")
+            lines.append(f"Working Directory: {ctx['working_directory']}")
+            lines.append(f"Project Type: {ctx['project_type']}")
+            lines.append("")
+
+            if ctx["key_folders"]:
+                lines.append("Key Folders:")
+                for folder in ctx["key_folders"]:
+                    lines.append(f"  • {folder['name']}/ ({folder['file_count']} files)")
+                lines.append("")
+
+            if ctx["important_files"]:
+                lines.append(f"Important Files: {', '.join(ctx['important_files'])}")
+                lines.append("")
+
+            lines.append("=" * 70)
+            return "\n".join(lines)
+
+        except Exception as e:
+            return f"Error getting project context: {e}"
+
+    def rescan_project_context(self) -> str:
+        """
+        Force a rescan of the project structure.
+
+        Tool for agents to update the project context cache when the
+        project structure has changed during a session.
+
+        Returns:
+            Confirmation message with updated context
+        """
+        if not self.current_session_id or not self.current_domain:
+            return "Error: No active memory session. Memory tools not available."
+
+        try:
+            # Load memory
+            memory = self.storage.load_memory(self.current_session_id, self.current_domain)
+            if not memory:
+                return f"Error: Could not load memory for session {self.current_session_id}"
+
+            # Import and rebuild project context
+            from .boot_ritual import BootRitual
+            new_context = BootRitual._build_project_context()
+
+            # Update memory state
+            if memory.state is None:
+                memory.state = {}
+            memory.state["project_context"] = new_context
+            memory.metadata.updated_at = datetime.now()
+
+            # Save
+            self.storage.save_memory(memory)
+
+            # Format response showing what was found
+            lines = []
+            lines.append("✓ Project context rescanned successfully")
+            lines.append("")
+            lines.append(f"Working Directory: {new_context['working_directory']}")
+            lines.append(f"Project Type: {new_context['project_type']}")
+            lines.append("")
+
+            if new_context["key_folders"]:
+                lines.append(f"Found {len(new_context['key_folders'])} key folders:")
+                for folder in new_context["key_folders"]:
+                    lines.append(f"  • {folder['name']}/ ({folder['file_count']} files)")
+
+            if new_context["important_files"]:
+                lines.append("")
+                lines.append(f"Important files: {', '.join(new_context['important_files'])}")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            return f"Error rescanning project context: {e}"

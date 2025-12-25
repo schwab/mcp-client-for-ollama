@@ -301,7 +301,7 @@ class TraceLogger:
 
         return {
             "session_id": self.session_id,
-            "log_file": str(self.log_file),
+            "log_file": str(self.log_file.absolute()),
             "total_entries": len(self.entries),
             "llm_calls": len(llm_calls),
             "tool_calls": len(tool_calls),

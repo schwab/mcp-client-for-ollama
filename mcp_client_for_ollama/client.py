@@ -2616,6 +2616,11 @@ Please analyze this project and create an initial memory structure with:
             expand=False
         ))
 
+        # Display trace summary right after memory summary (if tracing enabled)
+        if self.delegation_client and hasattr(self.delegation_client, 'trace_logger') and \
+           self.delegation_client.trace_logger.is_enabled():
+            self.delegation_client.trace_logger.print_summary(self.console)
+
     async def enable_memory(self):
         """Enable the memory system"""
         # Load current config

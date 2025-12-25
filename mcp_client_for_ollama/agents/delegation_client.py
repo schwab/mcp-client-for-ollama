@@ -74,7 +74,7 @@ class DelegationClient:
             # Default to current client's Ollama instance
             model_pool_config = [{
                 'url': mcp_client.host,
-                'model': mcp_client.model_manager.current_model or 'qwen2.5:7b',
+                'model': mcp_client.model_manager.get_current_model() or 'qwen2.5:7b',
                 'max_concurrent': 1
             }]
         self.model_pool = ModelPool(model_pool_config)
@@ -285,20 +285,14 @@ class DelegationClient:
             self.console.print("\n[bold yellow]📊 Aggregation Phase[/bold yellow]")
             final_answer = await self.aggregate_results(user_query, results)
 
-            # Print trace summary if tracing is enabled
-            if self.trace_logger.is_enabled():
-                self.trace_logger.print_summary(self.console)
-
+            # Note: Trace summary is now printed at the end with memory progress summary
             return final_answer
 
         except Exception as e:
             self.console.print(f"[bold red]❌ Delegation failed: {e}[/bold red]")
             self.console.print("[yellow]Falling back to direct execution...[/yellow]")
 
-            # Still print trace summary on failure
-            if self.trace_logger.is_enabled():
-                self.trace_logger.print_summary(self.console)
-
+            # Note: Trace summary is printed at the end with memory progress summary
             return await self._fallback_direct_execution(user_query)
 
     async def process_with_memory(
@@ -1182,9 +1176,46 @@ Remember: Output ONLY valid JSON following the format shown above. Use ONLY agen
         if not successful_results:
             return "No tasks completed successfully. Unable to provide a response."
 
-        # For MVP: Simple concatenation
-        # Future: Use an aggregator agent to synthesize
-        aggregated = f"""
+        # Use AGGREGATOR agent to synthesize results into a coherent answer
+        try:
+            aggregator_config = self.agent_configs["AGGREGATOR"]
+
+            # Build prompt for aggregator
+            results_text = "\n\n".join(successful_results)
+            aggregator_prompt = f"""
+USER'S ORIGINAL QUESTION:
+{original_query}
+
+TASK RESULTS TO SYNTHESIZE:
+{results_text}
+
+Please synthesize these task results into a clear, direct answer to the user's original question.
+"""
+
+            # Execute aggregator with no tools
+            messages = [
+                {"role": "system", "content": aggregator_config.system_prompt},
+                {"role": "user", "content": aggregator_prompt}
+            ]
+
+            synthesized_response = await self._execute_with_tools(
+                messages=messages,
+                model=aggregator_config.model or self.mcp_client.model_manager.get_current_model(),
+                temperature=aggregator_config.temperature,
+                tools=[],  # No tools for aggregator
+                loop_limit=aggregator_config.loop_limit,
+                task_id="aggregation",
+                agent_type="AGGREGATOR",
+                quiet=True
+            )
+
+            self.console.print("[green]✓[/green] Results synthesized by AGGREGATOR")
+            return synthesized_response
+
+        except (KeyError, Exception) as e:
+            # Fallback to simple concatenation if AGGREGATOR fails
+            self.console.print(f"[yellow]⚠[/yellow] Aggregator failed ({e}), using fallback")
+            aggregated = f"""
 Based on the delegated task execution, here are the results:
 
 {chr(10).join(successful_results)}
@@ -1192,9 +1223,7 @@ Based on the delegated task execution, here are the results:
 ---
 Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
 """
-
-        self.console.print("[green]✓[/green] Results aggregated")
-        return aggregated
+            return aggregated
 
     def _build_task_context(self, task: Task, agent_config: AgentConfig, available_tools: List = None) -> List[Dict[str, str]]:
         """

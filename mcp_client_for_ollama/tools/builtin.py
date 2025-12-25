@@ -33,6 +33,7 @@ class BuiltinToolManager:
             "get_system_prompt": self._handle_get_system_prompt,
             "execute_python_code": self._handle_execute_python_code,
             "execute_bash_command": self._handle_execute_bash_command,
+            "run_pytest": self._handle_run_pytest,
             "read_file": self._handle_read_file,
             "write_file": self._handle_write_file,
             "patch_file": self._handle_patch_file,
@@ -66,6 +67,8 @@ class BuiltinToolManager:
             "remove_feature": self._handle_remove_feature,
             "update_session_description": self._handle_update_session_description,
             "move_feature": self._handle_move_feature,
+            "get_project_context": self._handle_get_project_context,
+            "rescan_project_context": self._handle_rescan_project_context,
         }
 
     def set_memory_tools(self, memory_tools: Any) -> None:
@@ -137,6 +140,33 @@ class BuiltinToolManager:
                     }
                 },
                 "required": ["command"]
+            }
+        )
+
+        run_pytest_tool = Tool(
+            name="builtin.run_pytest",
+            description="Run pytest tests with automatic virtualenv detection. More reliable than execute_bash_command for running tests. Returns test results directly without file I/O.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Optional path/directory to test. Defaults to current directory if not specified."
+                    },
+                    "verbose": {
+                        "type": "boolean",
+                        "description": "Run pytest in verbose mode (-v). Default: false"
+                    },
+                    "markers": {
+                        "type": "string",
+                        "description": "Pytest marker expression to filter tests (e.g., 'unit', 'not slow')"
+                    },
+                    "extra_args": {
+                        "type": "string",
+                        "description": "Additional pytest arguments as a single string (e.g., '-x --tb=short')"
+                    }
+                },
+                "required": []
             }
         )
 
@@ -815,9 +845,29 @@ class BuiltinToolManager:
             }
         )
 
+        get_project_context_tool = Tool(
+            name="builtin.get_project_context",
+            description="View the cached project context including working directory, project type, key folders, and important files. Use this to understand the project structure without re-scanning. Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
+        rescan_project_context_tool = Tool(
+            name="builtin.rescan_project_context",
+            description="Force a rescan of the project structure to update the cached context. Use this when the project structure has changed during the session (new files/folders added, etc.). Only available when memory system is active.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
         # Build the tool list - include memory tools only if memory_tools is available
         tools = [
-            set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool,
+            set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool, run_pytest_tool,
             read_file_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
             create_directory_tool, delete_file_tool, file_exists_tool, get_file_info_tool,
             read_image_tool, open_file_tool, get_config_tool, update_config_section_tool,
@@ -843,6 +893,9 @@ class BuiltinToolManager:
                 remove_feature_tool,
                 update_session_description_tool,
                 move_feature_tool,
+                # Project context tools
+                get_project_context_tool,
+                rescan_project_context_tool,
             ])
 
         return tools
@@ -1067,6 +1120,28 @@ class BuiltinToolManager:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
+    def _detect_virtualenv(self) -> Optional[str]:
+        """
+        Detect if a Python virtualenv exists in the working directory.
+
+        Returns:
+            Path to the virtualenv directory, or None if not found
+        """
+        common_venv_names = ['.venv', 'venv', 'env', '.virtualenv', 'virtualenv']
+
+        for venv_name in common_venv_names:
+            venv_path = os.path.join(self.working_directory, venv_name)
+            # Check if venv exists and has a bin/activate or Scripts/activate.bat
+            if os.path.isdir(venv_path):
+                # Unix-like systems
+                if os.path.exists(os.path.join(venv_path, 'bin', 'activate')):
+                    return venv_path
+                # Windows
+                if os.path.exists(os.path.join(venv_path, 'Scripts', 'activate.bat')):
+                    return venv_path
+
+        return None
+
     def _handle_execute_bash_command(self, args: Dict[str, Any]) -> str:
         """Handles the 'execute_bash_command' tool call."""
         import subprocess
@@ -1076,6 +1151,36 @@ class BuiltinToolManager:
                 "Error: 'command' argument is required for execute_bash_command.\n"
                 "Example: {\"command\": \"ls -la\"}"
             )
+
+        # Detect virtualenv and modify command if needed
+        venv_path = self._detect_virtualenv()
+        if venv_path:
+            # Commands that should use virtualenv
+            venv_commands = ['pytest', 'python', 'pip', 'python3', 'pip3']
+            command_parts = command.strip().split()
+
+            if command_parts and command_parts[0] in venv_commands:
+                # Check platform
+                if os.name == 'nt':  # Windows
+                    venv_bin_dir = os.path.join(venv_path, 'Scripts')
+                else:  # Unix-like
+                    venv_bin_dir = os.path.join(venv_path, 'bin')
+
+                # Replace command with venv version
+                cmd = command_parts[0]
+                venv_cmd = os.path.join(venv_bin_dir, cmd)
+
+                # For Python commands, use -m for better compatibility
+                if cmd in ['python', 'python3'] and len(command_parts) > 1 and command_parts[1] == '-m':
+                    # Already using -m, just replace python path
+                    command = f"{venv_cmd} {' '.join(command_parts[1:])}"
+                elif cmd == 'pytest':
+                    # Use python -m pytest for better venv compatibility
+                    python_path = os.path.join(venv_bin_dir, 'python')
+                    command = f"{python_path} -m pytest {' '.join(command_parts[1:])}"
+                else:
+                    # Just replace the command with venv version
+                    command = f"{venv_cmd} {' '.join(command_parts[1:])}"
 
         try:
             result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
@@ -1110,6 +1215,95 @@ class BuiltinToolManager:
                 f"Error executing command: {type(e).__name__}: {e}\n"
                 f"Command: {command}\n"
                 "💡 Tip: Verify the command syntax is valid for bash/sh."
+            )
+
+    def _handle_run_pytest(self, args: Dict[str, Any]) -> str:
+        """Handles the 'run_pytest' tool call with automatic virtualenv detection."""
+        import subprocess
+
+        # Build pytest command
+        pytest_args = []
+
+        # Add path if specified
+        path = args.get("path", "")
+        if path:
+            pytest_args.append(path)
+
+        # Add verbose flag
+        if args.get("verbose", False):
+            pytest_args.append("-v")
+
+        # Add markers
+        markers = args.get("markers")
+        if markers:
+            pytest_args.extend(["-m", markers])
+
+        # Add extra args
+        extra_args = args.get("extra_args")
+        if extra_args:
+            pytest_args.extend(extra_args.split())
+
+        # Detect virtualenv
+        venv_path = self._detect_virtualenv()
+
+        if venv_path:
+            # Use venv's python to run pytest
+            if os.name == 'nt':  # Windows
+                python_path = os.path.join(venv_path, 'Scripts', 'python')
+            else:  # Unix-like
+                python_path = os.path.join(venv_path, 'bin', 'python')
+
+            command_parts = [python_path, '-m', 'pytest'] + pytest_args
+        else:
+            # No venv detected, use system pytest
+            command_parts = ['pytest'] + pytest_args
+
+        try:
+            # Run pytest with check=False to capture both success and failure
+            result = subprocess.run(
+                command_parts,
+                capture_output=True,
+                text=True,
+                cwd=self.working_directory,
+                check=False  # Don't raise on non-zero exit code
+            )
+
+            # Build result message
+            output = result.stdout
+            if result.stderr:
+                output += "\n" + result.stderr
+
+            # Parse test results from output
+            exit_code = result.returncode
+
+            # Exit codes: 0 = all passed, 1 = tests failed, 2 = interrupted/error, 3+ = internal error
+            if exit_code == 0:
+                status_msg = "✓ All tests passed"
+            elif exit_code == 1:
+                status_msg = "⚠ Some tests failed"
+            elif exit_code == 2:
+                status_msg = "✗ Test execution interrupted or collection errors"
+            else:
+                status_msg = f"✗ Pytest error (exit code {exit_code})"
+
+            venv_msg = f" (using virtualenv: {venv_path})" if venv_path else " (using system pytest)"
+
+            return f"{status_msg}{venv_msg}\n\nCommand: {' '.join(command_parts)}\n\nOutput:\n{output}"
+
+        except FileNotFoundError:
+            return (
+                "✗ Error: pytest not found.\n"
+                f"Virtualenv detected: {venv_path if venv_path else 'No'}\n"
+                "💡 Troubleshooting:\n"
+                "  - Ensure pytest is installed: pip install pytest\n"
+                "  - If using a venv, ensure it's activated or contains pytest\n"
+                "  - Check that you're in the correct project directory"
+            )
+        except Exception as e:
+            return (
+                f"✗ Error running pytest: {type(e).__name__}: {e}\n"
+                f"Virtualenv detected: {venv_path if venv_path else 'No'}\n"
+                "💡 Tip: Use builtin.execute_bash_command for custom test commands"
             )
 
     def _validate_path(self, path: str, allow_absolute: bool = False, require_permission: bool = True) -> tuple[bool, str]:
@@ -2806,4 +3000,28 @@ class BuiltinToolManager:
             feature_id=feature_id,
             target_goal_id=target_goal_id
         )
+
+    def _handle_get_project_context(self, args: Dict[str, Any]) -> str:
+        """Handles the 'get_project_context' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        return self.memory_tools.get_project_context()
+
+    def _handle_rescan_project_context(self, args: Dict[str, Any]) -> str:
+        """Handles the 'rescan_project_context' tool call."""
+        if not self.memory_tools:
+            return (
+                "Error: Memory system is not enabled or no active memory session.\n"
+                "💡 To use memory tools:\n"
+                "  1. Enable memory system: type 'memory-enable' or 'me'\n"
+                "  2. Create or resume a memory session: 'memory-new' or 'memory-resume'"
+            )
+
+        return self.memory_tools.rescan_project_context()
 

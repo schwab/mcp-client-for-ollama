@@ -35,7 +35,8 @@ class BootRitual:
             "working_directory": cwd,
             "key_folders": [],
             "project_type": "unknown",
-            "important_files": []
+            "important_files": [],
+            "python_packages": []
         }
 
         # Check for common project folders
@@ -67,6 +68,32 @@ class BootRitual:
         elif os.path.exists(os.path.join(cwd, "Cargo.toml")):
             context["project_type"] = "Rust"
             context["important_files"].append("Cargo.toml")
+
+        # Detect Python packages (directories with __init__.py)
+        if context["project_type"].startswith("Python"):
+            for entry in os.scandir(cwd):
+                if entry.is_dir() and not entry.name.startswith('.'):
+                    # Check if it's a Python package
+                    init_file = os.path.join(entry.path, "__init__.py")
+                    if os.path.exists(init_file):
+                        # Found a package, scan its structure
+                        package_info = {
+                            "name": entry.name,
+                            "path": entry.name,  # Relative path from cwd
+                            "submodules": []
+                        }
+                        # Scan for submodules
+                        try:
+                            for subentry in os.scandir(entry.path):
+                                if subentry.is_dir() and not subentry.name.startswith('.'):
+                                    sub_init = os.path.join(subentry.path, "__init__.py")
+                                    if os.path.exists(sub_init):
+                                        package_info["submodules"].append(subentry.name)
+                                elif subentry.is_file() and subentry.name.endswith('.py') and subentry.name != '__init__.py':
+                                    package_info["submodules"].append(subentry.name[:-3])  # Remove .py
+                        except (PermissionError, OSError):
+                            pass
+                        context["python_packages"].append(package_info)
 
         # Check for common config files
         config_files = ["README.md", ".gitignore", "requirements.txt", "Makefile", "docker-compose.yml"]
@@ -147,6 +174,13 @@ class BootRitual:
                 lines.append(f"    - {folder['name']}/ ({folder['file_count']} files)")
         if project_ctx["important_files"]:
             lines.append(f"  Important Files: {', '.join(project_ctx['important_files'])}")
+        if project_ctx.get("python_packages"):
+            lines.append("  Python Packages:")
+            for pkg in project_ctx["python_packages"]:
+                if pkg["submodules"]:
+                    lines.append(f"    - {pkg['path']}/ (modules: {', '.join(pkg['submodules'][:5])}{'...' if len(pkg['submodules']) > 5 else ''})")
+                else:
+                    lines.append(f"    - {pkg['path']}/")
         lines.append("")
 
         # Progress summary

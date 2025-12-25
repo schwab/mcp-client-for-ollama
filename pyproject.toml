@@ -1,6 +1,6 @@
 [project]
 name = "mcp-client-for-ollama"
-version = "0.26.8"
+version = "0.26.21"
 description = "MCP Client for Ollama - A client for connecting to Model Context Protocol servers using Ollama"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,7 +10,7 @@ authors = [
     {name = "Michael Schwab", email="mcstar@gmail.com"}
 ]
 dependencies = [
-    "mcp~=1.21.0",
+    "mcp>=1.21.0",
     "ollama~=0.6.0",
     "prompt-toolkit~=3.0.52",
     "rich~=14.2.0",
@@ -22,20 +22,15 @@ mcp-client-for-ollama = "mcp_client_for_ollama.cli:run_cli"
 ollmcp = "mcp_client_for_ollama.cli:run_cli"
 
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project.urls]
 Homepage = "https://github.com/jonigl/mcp-client-for-ollama"
 Issues = "https://github.com/jonigl/mcp-client-for-ollama/issues"
 
-[tool.setuptools]
-# Use find to automatically discover all Python packages
-packages = {find = {}}
-
-[tool.setuptools.package-data]
-# Include JSON files from agents subdirectories
-"mcp_client_for_ollama.agents" = ["definitions/*.json", "examples/*.json"]
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_client_for_ollama"]
 
 [dependency-groups]
 dev = [

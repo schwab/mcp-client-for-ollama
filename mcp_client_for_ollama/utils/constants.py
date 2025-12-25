@@ -1,9 +1,16 @@
 """Constants used throughout the MCP Client for Ollama application."""
 
 import os
+import platform
 
-# Default Claude config file location
-DEFAULT_CLAUDE_CONFIG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
+# Default Claude config file location (platform-specific)
+_system = platform.system()
+if _system == "Darwin":  # macOS
+    DEFAULT_CLAUDE_CONFIG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
+elif _system == "Windows":
+    DEFAULT_CLAUDE_CONFIG = os.path.expanduser("~/AppData/Roaming/Claude/claude_desktop_config.json")
+else:  # Linux and other Unix-like systems
+    DEFAULT_CLAUDE_CONFIG = os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
 
 # Default config directory and filename for MCP client for Ollama
 DEFAULT_CONFIG_DIR = ".config"

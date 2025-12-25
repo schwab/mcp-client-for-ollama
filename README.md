@@ -5,7 +5,13 @@
 <p align="center">
 <i>A simple yet powerful Python client for interacting with Model Context Protocol (MCP) servers using Ollama, allowing local LLMs to use tools.</i>
 </p>
+<p>
+This fork of the MCP Client for Ollama is an attempt to overcome the limitations of context windows size of the OLLAMA models by introducing a full Agent Planning system and memory context to support long running problems that span multiple sessions. To accomplish this, claude is leverged heavily and the result is an async code base that has diverted greatly form the original project. 
 
+</p>
+<p>
+
+</p>
 ---
 
 # MCP Client for Ollama (ollmcp)

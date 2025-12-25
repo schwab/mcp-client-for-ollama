@@ -447,3 +447,911 @@ FIX: Three-part fix:
    - "Use your tools (bash, Python) to investigate and resolve issues"
 
 
+## Failure to run Unit tests
+CONTEXT:
+🔍 Trace Session Summary
+Session ID: 20251221_142116
+Log file: .trace/trace_20251221_142116.json
+The system attempted to run unit tests to verify code change but failed multiple times to get the results from unit tests.
+Analyze why the system could not make progress by running unit test and recomened/fix any issues.
+
+
+## FIXED - Failure to run Unit tests (v0.26.7)
+ROOT CAUSE: EXECUTOR loop_limit (10) hit before completing test execution. Task 3 stopped at iteration 10 with "I will run: pytest..." but never executed the command. Also tried using Python open()/write() for files, which sandbox prevents.
+
+FIX:
+1. Increased EXECUTOR loop_limit: 10 → 15 (executor.json:35)
+2. Increased DEBUGGER loop_limit: 5 → 10 (debugger.json:38)  
+3. Added file writing delegation guidance to EXECUTOR
+4. Added iteration limit notification to explicitly state when limit is reached
+
+## Python sandbox prevents running unit test effectively
+- code has been added to _handle_execute_python_code to allow python to run in the current project directories venv
+
+## Project context failure  (v0.26.7)
+- When run against in a memory session, each new call seems to be unware of the project directory and folder structure causing agents to have to re-explore the file system when the user mentions a file by partial or relative path. For claude, there is a claude init function that builds a context file about the current project. Something similar to this should be available in the memory context to reduce the number of AI tool calls needed to rebuild a basic knowledge of the project's folders and other important common details
+## FIXED - Project context failure (v0.26.8)
+PROBLEM: Each new call in memory session was unaware of project directory and folder structure. Agents had to re-explore filesystem every time user mentioned files by partial/relative path. Wasted tool calls rebuilding basic project knowledge.
+
+ROOT CAUSE: Memory context included goals/features/progress but NO project structure information. Each agent started fresh without knowing:
+- Working directory
+- Key folders (src/, tests/, docs/, etc.)
+- Project type (Python package, Node.js, etc.)
+- Important files (pyproject.toml, README.md, etc.)
+
+SOLUTION (v0.26.8):
+Added project context caching to memory system (boot_ritual.py):
+
+1. Created _build_project_context() function:
+   - Scans working directory for common folders (src, tests, docs, lib, bin, config, scripts, data)
+   - Detects project type (Python package, Node.js, Rust, etc.) from config files
+   - Identifies important files (README.md, .gitignore, requirements.txt, etc.)
+   - Returns structured project context dictionary
+
+2. Created get_project_context() function:
+   - Checks if project_context already cached in memory.state
+   - If cached, returns immediately (no filesystem scanning)
+   - If not cached, builds context and stores in memory.state["project_context"]
+   - Context persists across all agent calls in same memory session
+
+3. Updated build_memory_context() to include PROJECT CONTEXT section:
+   - Shows working directory, project type, key folders, important files
+   - Appears right after session info, before progress summary
+   - Agents now have project structure knowledge from the start
+
+BENEFITS:
+- Eliminates redundant filesystem exploration
+- Agents immediately know project structure
+- Reduces tool calls for file location queries
+- Context built once, used many times
+- Faster agent responses, less wasted iterations
+
+Example output agents now see:
+```
+PROJECT CONTEXT:
+  Working Directory: /home/user/project
+  Project Type: Python package
+  Key Folders:
+    - src/ (15 files)
+    - tests/ (8 files)
+    - docs/ (5 files)
+  Important Files: pyproject.toml, README.md, .gitignore
+```
+
+FILES MODIFIED:
+- boot_ritual.py: Added project context building and caching functions
+- boot_ritual.py:139-150: Integrated PROJECT CONTEXT into memory context output
+
+
+## FIXED - Failure to run unit tests in current folder (v0.26.9)
+CONTEXT:
+Session ID: 20251222_191907
+Log file: .trace/trace_20251222_191907.json
+
+ROOT CAUSE:
+The user runs pytest from within an activated virtualenv (pdf_extract_mcp-hozd), but the AI's bash command execution via `subprocess.run()` runs in the system Python environment without access to the project's virtualenv. When AI tried to run `pytest`, it failed with ModuleNotFoundError because pytest was installed in the venv, not system-wide.
+
+User experience:
+(pdf_extract_mcp-hozd) ┌─(~/Nextcloud/DEV/pdf_extract_mcp)─┐
+└─(19:17:56)──> pytest
+================================================================== test session starts ===================================================================
+platform linux -- Python 3.10.12, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/mcstar/Nextcloud/DEV/pdf_extract_mcp
+configfile: pyproject.toml
+plugins: playwright-0.3.3, cov-4.1.0, hypothesis-6.82.4, mock-3.11.1, asyncio-0.24.0, anyio-4.12.0, base-url-2.0.0
+asyncio: mode=strict, default_loop_scope=None
+collected 2 items / 5 errors
+
+AI experience: Failed to find pytest module (see trace file)
+
+SOLUTION (v0.26.9):
+Modified `_handle_execute_bash_command()` in builtin.py to detect and use the project's virtualenv when executing Python-related commands:
+
+1. Added `_detect_virtualenv()` helper method:
+   - Checks for common virtualenv directory names (.venv, venv, env, .virtualenv, virtualenv)
+   - Validates virtualenv by checking for bin/activate (Unix) or Scripts/activate.bat (Windows)
+   - Returns path to virtualenv if found
+
+2. Modified `_handle_execute_bash_command()`:
+   - Detects virtualenv before executing commands
+   - For Python-related commands (pytest, python, pip, python3, pip3):
+     - Determines platform (Windows vs Unix-like)
+     - Replaces command with venv's binary path
+     - For pytest specifically, uses `python -m pytest` for better compatibility
+   - Commands now run in the same context as the user's activated virtualenv
+
+This ensures AI can run pytest and other Python tools exactly as the user can from within their virtualenv.
+
+FILES MODIFIED:
+- builtin.py:1070-1090: Added _detect_virtualenv() method
+- builtin.py:1092-1165: Modified _handle_execute_bash_command() to use virtualenv for Python commands
+
+
+## ENHANCEMENT - Project Context Visibility and Interaction (v0.26.10)
+
+MOTIVATION:
+The project context caching feature (v0.26.8) had no way for users or agents to view or interact with the cached context. Agents couldn't verify what was scanned, and there was no mechanism to force a rescan when project structure changed during a session.
+
+ENHANCEMENT (v0.26.10):
+Added two new builtin tools to view and manage project context:
+
+1. **builtin.get_project_context**:
+   - View the cached project context without re-scanning
+   - Shows working directory, project type, key folders with file counts, and important files
+   - Helps agents understand project structure
+   - Useful for debugging why agents can't find certain files
+
+2. **builtin.rescan_project_context**:
+   - Force a rescan of the project structure
+   - Updates the cached context when project structure changes during session
+   - Returns confirmation with updated context details
+
+These tools are only available when the memory system is active.
+
+FILES MODIFIED:
+- memory/tools.py:991-1041: Added get_project_context() method to MemoryTools class
+- memory/tools.py:1043-1095: Added rescan_project_context() method to MemoryTools class
+- builtin.py:69-70: Added handlers to _tool_handlers dictionary
+- builtin.py:820-838: Added tool definitions for get_project_context and rescan_project_context
+- builtin.py:868-870: Added tools to memory tools list
+- builtin.py:2887-2909: Added _handle_get_project_context() and _handle_rescan_project_context() handlers
+- pyproject.toml: Updated version to 0.26.10
+- __init__.py: Updated version to 0.26.10
+
+USAGE EXAMPLE:
+```
+# Agent can view current project context
+builtin.get_project_context()
+
+# Agent can force a rescan if project structure changed
+builtin.rescan_project_context()
+```                                                                                                                             
+
+## FIXED - Pytest runs, but final answer not very useful (v0.26.11)
+CONTEXT:
+Session trace: .trace/trace_20251222_194853.json
+
+ROOT CAUSE:
+The `aggregate_results()` method in delegation_client.py:1164-1197 was using simple concatenation of task results instead of synthesizing them into a coherent answer. The user asked "run the unit tests and tell me which ones are failing" but received raw task outputs rather than a direct answer to their question.
+
+The actual pytest results showed:
+- 3 test files with collection errors (ImportError)
+- No tests actually ran
+
+But the final answer only mentioned 2 specific test results from memory (test_concurrent_requests_handling FAIL, test_error_handling PASS) without clearly listing all the failing test files.
+
+The method comment even acknowledged this: "For MVP: Simple concatenation. Future: Use an aggregator agent to synthesize"
+
+SOLUTION (v0.26.11):
+1. Created new AGGREGATOR agent (definitions/aggregator.json):
+   - Specialized in synthesizing multiple agent outputs into coherent answers
+   - No tool access (pure synthesis only)
+   - Low temperature (0.2) for focused output
+   - System prompt emphasizes directly answering the user's specific question
+
+2. Modified `aggregate_results()` in delegation_client.py:1164-1229:
+   - Now calls AGGREGATOR agent to synthesize results
+   - Provides user's original question + all task results to AGGREGATOR
+   - AGGREGATOR extracts relevant information and formats a direct answer
+   - Fallback to simple concatenation if AGGREGATOR fails
+   - Runs in quiet mode to avoid cluttering output
+
+This ensures users get clear, direct answers instead of raw task dumps.
+
+FILES MODIFIED:
+- agents/definitions/aggregator.json: New agent for results synthesis
+- delegation_client.py:1164-1229: Modified aggregate_results() to use AGGREGATOR agent
+- pyproject.toml: Updated version to 0.26.11
+- __init__.py: Updated version to 0.26.11
+
+EXAMPLE:
+User asks: "which tests are failing?"
+Old behavior: Dumps all task results
+New behavior: "The following 3 test files have collection errors: test_base.py (ImportError: BaseProcessor), test_image.py (ImportError: ImageProcessor), test_text.py (ImportError: TextProcessor). No tests were able to run."
+
+
+## FIXED - AI struggles to add features to the Goal list (v0.26.12)
+TRACE: .trace/trace_20251223_195016.json
+
+ROOT CAUSE:
+Two distinct bugs were discovered:
+
+1. **Aggregator AttributeError**: In delegation_client.py:1187, the code accessed `self.agents["AGGREGATOR"]` but the correct attribute is `self.agent_configs`. This caused the aggregator to fail with error: 'DelegationClient' object has no attribute 'agents'
+
+2. **PLANNER Misassigning INITIALIZER**: When asked to add features to a goal, PLANNER assigned the task "Create new feature entries for goal G1" to INITIALIZER. However, INITIALIZER is only for session bootstrap and outputs JSON that isn't processed to create memory structures. The proper agents for memory operations are EXECUTOR or CODER using builtin.add_feature tool.
+
+The trace showed:
+- PLANNER created task for INITIALIZER to add features
+- INITIALIZER returned JSON output
+- EXECUTOR then tried to update feature status but got "Feature with ID 'F1' not found"
+- Features were never actually created in memory
+
+SOLUTION (v0.26.12):
+1. Fixed aggregator attribute name in delegation_client.py:1187:
+   - Changed `self.agents["AGGREGATOR"]` to `self.agent_configs["AGGREGATOR"]`
+
+2. Updated PLANNER agent assignment rules in planner.json:5-19:
+   - Added explicit rule: "INITIALIZER is ONLY for session bootstrap - NEVER assign tasks to INITIALIZER for adding/updating features during execution"
+   - Clarified: "Memory operations (add/update features, goals, progress) -> EXECUTOR or CODER"
+   - Added examples: "Add features to goal" -> EXECUTOR (use builtin.add_feature)
+
+FILES MODIFIED:
+- delegation_client.py:1187: Fixed aggregator attribute reference
+- agents/definitions/planner.json:5-19: Updated agent assignment rules to prevent INITIALIZER misuse
+- pyproject.toml: Updated version to 0.26.12
+- __init__.py: Updated version to 0.26.12
+
+RESULT:
+- Aggregator now works correctly when synthesizing results
+- PLANNER assigns memory operations to EXECUTOR/CODER, not INITIALIZER
+- Features are properly created and persisted in memory
+
+
+## FIXED - AI fails to find correct files (v0.26.13)
+TRACE: .trace/trace_20251224_101315.json
+
+ROOT CAUSE:
+Two distinct bugs causing file finding failures:
+
+1. **Aggregator Parameter Error**: In delegation_client.py:1207-1216, `_execute_with_tools()` was called with unexpected keyword argument `agent_config`. The method signature doesn't accept this parameter, causing aggregator to crash.
+
+2. **Missing Python Package Structure in Context**: The project context didn't show Python package structure (directories with __init__.py and their submodules). This caused CODER to create duplicate files in wrong locations:
+   - Example: Created `src/pdf_extract/processors/base.py` when actual file was at `pdf_extract/processors/base.py`
+   - CODER had no way to know the actual package structure from the context
+
+The trace showed:
+- AI created new `src/` folder with duplicate package structure
+- Existing `pdf_extract/` package with processors/ submodule was not visible in context
+- Tests were running from actual location but AI couldn't infer file locations
+
+SOLUTION (v0.26.13):
+1. Fixed aggregator call in delegation_client.py:1207-1216:
+   - Replaced `agent_config=aggregator_config` with correct parameters
+   - Used: `messages`, `model`, `temperature`, `tools`, `loop_limit`, `task_id`, `agent_type`, `quiet`
+
+2. Enhanced project context detection in boot_ritual.py:26-104:
+   - Added `python_packages` field to context dictionary
+   - Added Python package detection: scans for directories with __init__.py
+   - For each package, scans submodules (both .py files and subdirectories with __init__.py)
+   - Example output: `{"name": "pdf_extract", "path": "pdf_extract", "submodules": ["processors", "core"]}`
+
+3. Updated memory context display in boot_ritual.py:177-184:
+   - Added "Python Packages:" section showing detected packages
+   - Format: "- pdf_extract/ (modules: processors, core, utils...)"
+   - Shows first 5 submodules with "..." if more exist
+
+4. Added file search guidance to CODER in coder.json:
+   - New "CRITICAL - Find Files Before Creating" section
+   - Instructions to check PROJECT CONTEXT for Python Packages
+   - Step-by-step workflow: use builtin.file_exists, check context, use builtin.list_files
+   - Example: If context shows "Python Packages: pdf_extract/ (modules: processors, ...)", the file is at `pdf_extract/processors/base.py` NOT `src/pdf_extract/processors/base.py`
+   - Warning: "Creating duplicate files in wrong locations wastes time and creates confusion"
+
+FILES MODIFIED:
+- delegation_client.py:1207-1216: Fixed aggregator _execute_with_tools() call
+- memory/boot_ritual.py:26-104: Enhanced _build_project_context() to detect Python packages
+- memory/boot_ritual.py:177-184: Updated build_memory_context() to display Python packages
+- agents/definitions/coder.json: Added "CRITICAL - Find Files Before Creating" guidance
+- pyproject.toml: Updated version to 0.26.13
+- __init__.py: Updated version to 0.26.13
+
+RESULT:
+- Aggregator no longer crashes when synthesizing results
+- CODER sees actual Python package structure in PROJECT CONTEXT
+- CODER has explicit guidance to search for existing files before creating new ones
+- Duplicate file creation in wrong locations should be prevented
+
+NOTE:
+The trace also mentioned "multiple calls to requests.post" reported as an issue by the AI. This is actually correct behavior - the code intentionally calls POST twice with different prompts (once to get document type, once to interpret content). This is not a bug.
+
+## FIXED - Pytest execution inconsistent and unreliable (v0.26.14)
+TRACE:
+Session ID: 20251224_113623
+Log file: .trace/trace_20251224_113623.json
+
+ROOT CAUSE:
+The AI struggled to run pytest consistently and reported stale/incorrect errors. Three issues identified:
+
+1. **Inefficient Planning**: PLANNER created 2 tasks (run pytest + save to file, then read file + summarize) instead of 1 direct execution
+2. **Stale Results**: When pytest execution failed or timed out, READER read a stale pytest_results.txt from a previous run, reporting outdated errors
+3. **Shell Redirection Complexity**: Using `pytest > file.txt 2>&1` added failure points and wasted EXECUTOR loops
+
+The virtualenv detection from v0.26.9 worked correctly, but the multi-step workflow prevented successful completion.
+
+**User's result**: `python3 -m pytest` → 1 failed, 8 passed (FAILED tests/processors/test_text.py::TestTextProcessor::test_get_document_json)
+**AI's result**: Read stale file showing import errors from previous run (BaseProcessor, ImageProcessor, TextProcessor not found)
+
+SOLUTION (v0.26.14):
+Created dedicated `builtin.run_pytest` tool for reliable test execution:
+
+1. **New Tool**: builtin.run_pytest in builtin.py:1220-1307
+   - Automatically detects and uses virtualenv (reuses _detect_virtualenv())
+   - Runs pytest directly and returns stdout (no file I/O)
+   - Accepts optional parameters: path, verbose, markers, extra_args
+   - Returns structured output with status, command, and full test results
+   - Exit code interpretation: 0=passed, 1=failed, 2=collection errors, 3+=internal error
+
+2. **EXECUTOR Integration**: executor.json:7-8, system prompt
+   - Added builtin.run_pytest to default_tools list
+   - Added "Test Execution" section with guidance to ALWAYS use builtin.run_pytest
+   - Examples: `builtin.run_pytest({"verbose": true})`, `builtin.run_pytest({"path": "tests/processors"})`
+   - Instruction to only use execute_bash_command for pytest if unsupported flags needed
+
+3. **PLANNER Guidance**: planner.json:16
+   - Updated Agent Assignment Rules: "Testing with pytest: Create ONE task for EXECUTOR using builtin.run_pytest (NOT two tasks - no file I/O needed)"
+   - Updated example: "Run pytest and summarize results" → EXECUTOR (single task: use builtin.run_pytest)
+
+FILES MODIFIED:
+- mcp_client_for_ollama/tools/builtin.py:36,146-171,870,1220-1307: Added run_pytest tool handler and definition
+- mcp_client_for_ollama/agents/definitions/executor.json:7-8,system_prompt: Added tool and guidance
+- mcp_client_for_ollama/agents/definitions/planner.json:16: Updated planning rules for pytest
+- pyproject.toml: Updated version to 0.26.14
+- __init__.py: Updated version to 0.26.14
+
+RESULT:
+- Pytest execution now completes in single tool call (no file I/O overhead)
+- Automatic virtualenv detection ensures correct environment
+- No stale results from previous runs
+- PLANNER creates efficient 1-task plans for pytest
+- Consistent, reliable test execution across different projects 
+
+
+
+## FIXED - Aggregator ModelManager attribute error (v0.26.15)
+TRACE:
+Session ID: 20251224_120050
+Log file: .trace/trace_20251224_120050.json
+
+ROOT CAUSE:
+Two locations in delegation_client.py incorrectly accessed `ModelManager.current_model` as a property instead of calling the `get_current_model()` method:
+1. Line 77: Model pool initialization used `mcp_client.model_manager.current_model`
+2. Line 1209: Aggregator execution used `self.mcp_client.model_manager.current_model`
+
+ModelManager only provides a `get_current_model()` method, not a `current_model` property. This caused AttributeError during aggregation.
+
+**Error message**: `'ModelManager' object has no attribute 'current_model'`
+
+SOLUTION (v0.26.15):
+Changed both occurrences to use the correct method call:
+- Line 77: `mcp_client.model_manager.get_current_model() or 'qwen2.5:7b'`
+- Line 1209: `self.mcp_client.model_manager.get_current_model()`
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/delegation_client.py:77,1209: Changed .current_model to .get_current_model()
+- pyproject.toml: Updated version to 0.26.15
+- __init__.py: Updated version to 0.26.15
+
+RESULT:
+- Aggregator no longer crashes when synthesizing results
+- Model pool initialization works correctly
+- Proper fallback to default model when no current model set
+
+
+## FIXED - EXECUTOR wastes loops trying to fix tests (v0.26.15)
+TRACE:
+Session ID: 20251224_120050
+Log file: .trace/trace_20251224_120050.json
+
+ROOT CAUSE:
+EXECUTOR spent 15 loops (292 seconds, almost 5 minutes) trying to fix failing unit tests using `builtin.execute_python_code` to modify test files. This violates separation of concerns:
+- EXECUTOR's job: RUN tests and report results
+- CODER/DEBUGGER's job: FIX test code
+
+The "Never Give Up" guidance in executor.json said "When tests fail, analyze the errors and continue iterating to fix them", which EXECUTOR interpreted as "modify test files yourself using Python code."
+
+**Inefficient behavior**:
+- Loop 0: Ran pytest, tests failed
+- Loops 1-14: Used execute_python_code to modify test file, reran pytest, still failed
+- Created new test files in wrong locations
+- Never delegated back to CODER for proper file modification
+
+SOLUTION (v0.26.15):
+Updated executor.json system prompt with clear test failure handling guidance:
+
+1. **Modified "Never Give Up" section**:
+   - Changed: "When tests fail, analyze the errors and continue iterating to fix them"
+   - To: "When tests fail: Report the failures clearly and stop - do NOT try to fix test code yourself"
+
+2. **Added "Test Failure Handling" section**:
+   - "If pytest shows test FAILURES: Report them clearly and complete your task (the failure IS the result)"
+   - "Do NOT use builtin.execute_python_code to modify test files - that's CODER's job"
+   - "Do NOT create new test files to replace existing ones"
+   - "Your job is to RUN tests, not FIX them"
+   - "Test fixes require CODER or DEBUGGER - state this explicitly if tests fail"
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/definitions/executor.json: Updated system prompt with test failure guidance
+- pyproject.toml: Updated version to 0.26.15
+- __init__.py: Updated version to 0.26.15
+
+RESULT:
+- EXECUTOR will run tests and report failures without trying to fix them
+- Test file modifications delegated to appropriate agents (CODER/DEBUGGER)
+- Reduced wasted loops and API calls
+- Clearer separation of responsibilities
+
+
+## FALSE POSITIVE - builtin.log_progress availability
+TRACE: Session ID: 20251224_120050
+
+INVESTIGATION:
+QA report claimed "builtin.log_progress is not a valid tool" but investigation showed:
+- Tool IS defined in builtin.py:532 as `log_progress_tool`
+- Tool IS added to tools list in builtin.py:882
+- Tool IS successfully called in trace entries 13 and 43
+- Tool IS in EXECUTOR default_tools list (executor.json:20)
+- Tool IS in CODER default_tools list (coder.json:22)
+
+The error message was likely from a different issue or misinterpreted output. The tool exists and functions correctly.
+
+CONCLUSION:
+No fix needed - builtin.log_progress is a valid, working tool.
+
+
+## FIXED - False positive claiming tests fixed when they failed (v0.26.16)
+TRACE:
+Session ID: 20251224_122247
+Log file: .trace/trace_20251224_122247.json
+
+ROOT CAUSE:
+The AI falsely claimed to have fixed 2 unit tests, but a manual run showed they were still failing. Analysis of the trace revealed a critical logic flaw in task planning and execution:
+
+**What happened** (trace entries 1-29):
+1. **Task 2 (CODER)**: Modified test file to handle 2 POST calls - SUCCEEDED
+2. **Task 3 (EXECUTOR)**: Ran pytest multiple times:
+   - Loop 0: pytest → **2 tests FAILED** (test_get_doc_type, test_get_document_json)
+   - Loop 4: Correctly updated feature status to `in_progress`
+   - Loop 6: Reported "feature status for F1.3 remains in_progress"
+3. **Task 4 (EXECUTOR)**:
+   - Task description: "Use builtin.update_feature_status to mark Feature F1.3 as **completed**"
+   - Blindly followed instruction and marked F1.3 as COMPLETED
+   - **Falsely claimed**: "All tests are passing after fixing the unit test issues"
+4. **Task 5 (EXECUTOR)**: Logged completion of F1.3
+
+**The problem**:
+The PLANNER created a rigid, sequential plan that assumed success:
+```
+Task 3: Run pytest to verify tests pass
+Task 4: Mark feature as completed  ← ALWAYS executed, even when Task 3 showed failures
+```
+
+Task 4's description was prescriptive ("mark as completed"), not conditional ("mark as completed IF tests pass"). The EXECUTOR literally followed the instruction despite having just witnessed 2 test failures in its recent actions.
+
+**Why this is a critical bug**:
+- Breaks trust: AI reports success when it failed
+- Masks real issues: Features marked complete when broken
+- Wastes user time: User must manually verify AI claims
+- False confidence: Memory system shows feature as completed when it's not
+
+SOLUTION (v0.26.16):
+Implemented two-layer defense against false positives:
+
+1. **EXECUTOR Feature Completion Validation** (executor.json):
+   Added "CRITICAL - Feature Completion Validation" section:
+   - "NEVER mark a feature as 'completed' if you just ran tests and they FAILED"
+   - "If task says 'mark feature as completed' but you just saw test failures: REFUSE and explain why"
+   - Before calling builtin.update_feature_status with status='completed', check recent actions:
+     * Did you run pytest? What was the result?
+     * Did tests pass? If NO, do NOT mark as completed
+     * Are there failing test results in your recent tool calls? If YES, feature is NOT complete
+   - If tests failed: Update status to 'failed' or 'in_progress', NOT 'completed'
+   - Example refusal: "Cannot mark feature as completed - pytest shows 2 tests failing. Feature status should remain 'in_progress' until tests pass."
+   - "Do NOT lie about test results - if tests failed, say so clearly"
+
+2. **PLANNER Conditional Planning** (planner.json):
+   Added Planning Guideline #9 "Conditional Planning":
+   - "Do NOT assume tasks will succeed - make task descriptions conditional"
+   - WRONG: "Task 3: Run tests" → "Task 4: Mark feature as completed"
+   - RIGHT: "Task 3: Run tests" → "Task 4: If all tests pass, mark feature as completed; otherwise keep as in_progress"
+   - Include IF/THEN logic in task descriptions when success is uncertain
+   - Example: "Use builtin.update_feature_status to mark F1 as 'completed' ONLY IF pytest shows all tests passing"
+   - This allows agents to make intelligent decisions based on actual results
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/definitions/executor.json: Added "Feature Completion Validation" section
+- mcp_client_for_ollama/agents/definitions/planner.json: Added "Conditional Planning" guideline
+- pyproject.toml: Updated version to 0.26.16
+- __init__.py: Updated version to 0.26.16
+
+RESULT:
+- EXECUTOR will refuse to mark features as completed when tests just failed
+- EXECUTOR will validate recent test results before claiming completion
+- PLANNER will create conditional task descriptions instead of assuming success
+- False positives prevented: No more "All tests passing" when they're failing
+- Improved reliability and trustworthiness of AI claims
+
+
+## Executor struggles with the correct memory state
+- the executor often assumes an incorrect or invalid memory feature id and then has to make calls to figure out which memory state should be updated
+- the planner and initiazlizer should be more explicit about which features the exectuor and other agents are supposed to be using so they do not have to interupt their work to figure out which memory states should be updated, alteratively we could consider haveing another agent that would handlt the memory status changes. Consider alternatives to having the agents need to figure out which memory features they are currently working on
+- Also, updating the state of a memory status while there are still test failures seems like a waste as well. Memory states that are currently in progress or failing should not need to be updated until they are fixed except to add notes
+
+
+## FIXED - AI struggles to fix unit test with mock (v0.26.17)
+TRACE:
+Session ID: 20251224_134848
+Log file: .trace/trace_20251224_134848.json
+
+ROOT CAUSE:
+The DEBUGGER agent was modifying TEST CODE instead of analyzing the IMPLEMENTATION being tested. This violated fundamental debugging principles:
+
+**What happened** (trace analysis):
+1. **Task 1 (DEBUGGER)** - Entry 3-8:
+   - Loop 2: Added debugging print statements to the test file using builtin.write_file
+   - Never read the implementation file (pdf_extract/processors/text.py)
+   - Marked completed without identifying root cause
+
+2. **Task 2 (CODER)** - Entry 9-18:
+   - Spent 7 loops modifying the test mock setup
+   - Loop 6: Prematurely marked feature F1.3 as "completed"
+   - Never analyzed the implementation to understand why only 1 POST call was made
+
+3. **Task 3-5 (EXECUTOR)** - Entry 19-32:
+   - Ran pytest multiple times showing the test still fails (call_count = 1 vs expected 2)
+   - Correctly updated feature status back to "in_progress"
+   - But damage was done - agents wasted loops on wrong approach
+
+**The actual problem**:
+The test expects 2 calls to requests.post:
+1. First call: get_doc_type() to determine document type
+2. Second call: Extract JSON data based on doc type
+
+The implementation (text.py:66-100) only makes the second POST call if `page_text` exists (line 75: `if page_text:`). The test doesn't mock `get_page_text()` to return text, so the implementation never reaches the second POST call.
+
+**What agents did WRONG**:
+1. Modified TEST CODE trying to make it pass instead of understanding why it fails
+2. Never read the IMPLEMENTATION file being tested
+3. Violated user's instruction: "UNLESS it requires changing the code under test. In that case ask the user what they want to do"
+4. Treated test as the problem instead of as the specification
+
+**What agents SHOULD have done**:
+1. Read BOTH test file AND implementation file
+2. Identified: "Test expects 2 POST calls, but implementation only makes second call if page_text exists"
+3. Identified: "Test doesn't mock get_page_text() to return text"
+4. Asked user:
+   "The test expects 2 POST calls, but the implementation only makes the second call if page_text exists. The test doesn't mock get_page_text() to return text. Should I:
+   a. Add a mock for get_page_text() in the test?
+   b. Modify the implementation logic?
+   c. Something else?"
+
+SOLUTION (v0.26.17):
+Updated DEBUGGER agent (debugger.json:5) with "CRITICAL - Debugging Test Failures" section:
+
+1. **Mandatory workflow for test failures**:
+   - Read BOTH the test file AND the implementation file being tested
+   - Understand test expectations (specification) vs actual implementation behavior
+   - Identify where the mismatch occurs
+
+2. **Tests are specifications**:
+   - Tests define correct behavior (what SHOULD happen)
+   - If test fails, implementation is usually wrong (95% of cases)
+   - Only modify test if test expectations themselves are incorrect (rare)
+
+3. **Ask user before changing implementation**:
+   - "The test expects X, but the implementation does Y. Should I modify the implementation to do X?"
+   - Wait for user confirmation before changing code under test
+   - DO NOT modify test code to make it pass
+
+4. **Example guidance added**:
+   - "Test expects 2 API calls but implementation only makes 1"
+   - WRONG: Modify test to expect 1 call
+   - RIGHT: Ask user if implementation should make 2 calls, or if test expectations are wrong
+
+5. **Mock debugging guidance**:
+   - Understand what the mock is testing (expected behavior)
+   - Check if implementation actually exhibits that behavior
+   - Don't fix the mock unless the mock setup is incorrect
+   - If implementation doesn't match test expectations, ask user before changing
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/definitions/debugger.json:5: Added "CRITICAL - Debugging Test Failures" section with mandatory workflow
+- pyproject.toml: Updated version to 0.26.17
+- __init__.py: Updated version to 0.26.17
+
+RESULT:
+- DEBUGGER will now read BOTH test and implementation files when debugging test failures
+- DEBUGGER will identify whether bug is in test or implementation
+- DEBUGGER will ask user before modifying implementation code
+- DEBUGGER will NOT modify test code to make it pass
+- Proper separation: tests are specifications, implementation should match them
+- Prevents wasted loops modifying the wrong code
+
+
+
+
+
+I will read the file src/pdf_extract/processors/text.py to understand how get_document_json() is implemented.                                             
+
+
+📝 Answer:                                                                                                                                                
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+The file `src/pdf_extract/processors/text.py` does not exist. This suggests that there might be an issue with the directory structure or the path provided.
+
+Let's list all the files under the `src/pdf_extract/processors` directory to verify the correct location of the implementation file.
+
+- As it shows, the confusion causes the ai to struggle to do basic things
+
+
+## FIXED - EXECUTOR struggles with correct memory feature IDs (v0.26.18)
+CONTEXT:
+QA bug report stated: "the executor often assumes an incorrect or invalid memory feature id and then has to make calls to figure out which memory state should be updated"
+
+ROOT CAUSE:
+PLANNER was creating task descriptions without explicit feature IDs or goal IDs, forcing EXECUTOR and other agents to make extra calls to figure out which memory feature/goal they should update.
+
+**Example of the problem**:
+PLANNER creates task: "Update feature status to completed"
+EXECUTOR receives this task and must:
+1. Call builtin.get_memory_state() to see all features
+2. Guess which feature the task refers to
+3. Call builtin.get_feature_details(feature_id) to verify
+4. Finally call builtin.update_feature_status(feature_id, status)
+
+This wastes 2-3 tool calls that could have been avoided if the task description specified the feature ID upfront.
+
+**What should happen**:
+PLANNER creates task: "Use builtin.update_feature_status(feature_id='F1.3', status='completed') to update Feature F1.3"
+EXECUTOR receives this task and can immediately:
+1. Call builtin.update_feature_status(feature_id='F1.3', status='completed')
+
+No wasted calls, no guessing.
+
+**Related to previous fixes**:
+- v0.26.12: Fixed PLANNER from assigning memory operations to INITIALIZER
+- Similar to guideline #2: "Include Tool Names" which required exact tool names in descriptions
+- This fix extends that concept to memory IDs
+
+SOLUTION (v0.26.18):
+Updated PLANNER agent (planner.json:5) with new Planning Guideline #3a "Include Feature/Goal IDs":
+
+**Guideline added**:
+```
+3a. Include Feature/Goal IDs: When working with memory features or goals, ALWAYS include explicit IDs in task descriptions:
+   - WRONG: "Update feature status to completed" (agent must guess which feature)
+   - RIGHT: "Use builtin.update_feature_status(feature_id='F1.3', status='completed') to update Feature F1.3"
+   - WRONG: "Add features to the goal" (agent must query to find goal ID)
+   - RIGHT: "Use builtin.add_feature(goal_id='G1', ...) to add features to Goal G1"
+   - This prevents agents from making extra calls to figure out which feature/goal they're working on
+   - Always specify the exact feature ID (e.g., F1.3) or goal ID (e.g., G1) from the memory context
+```
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/definitions/planner.json:5: Added guideline #3a for explicit feature/goal IDs
+- pyproject.toml: Updated version to 0.26.18
+- __init__.py: Updated version to 0.26.18
+
+RESULT:
+- PLANNER will now include explicit feature IDs (e.g., F1.3) and goal IDs (e.g., G1) in task descriptions
+- EXECUTOR and other agents can immediately work with the correct feature/goal without guessing
+- Eliminates 2-3 wasted tool calls per memory operation
+- Reduces confusion and iteration loops
+- Faster task completion with fewer API calls
+
+NOTES ON REMAINING ISSUES:
+The QA bug also mentioned:
+1. "updating the state of a memory status while there are still test failures seems like a waste"
+   - This was already addressed in v0.26.16 with "Feature Completion Validation"
+   - EXECUTOR now refuses to mark features as completed when tests fail
+
+2. "consider having another agent that would handle the memory status changes"
+   - This is a design consideration for future improvement
+   - Current fix (explicit IDs in task descriptions) addresses the immediate pain point
+   - A dedicated memory agent could be considered for v0.27+ if needed
+
+
+
+## Assumption of wrong file path and could not fix unit test with call count issues
+- The AI is assuming that the source files are in a src/ directory when this is not the case. What is causing it to assume this when there is supposed to be a project context to tell it where the actual files are?
+- since the test code has imports that point to from pdf_extract.processors.text import TextToJson for instance, the AI should be able to infer the correct path based on the import for local project files
+- here's an example of the wrong assumption of src/... Let's investigate further by checking the implementation of TextToJson.get_document_json() in pdf_extract.processors.text.               
+- 🔍 Trace Session Summary
+Session ID: 20251224_170706
+Log file: .trace/trace_20251224_170706.json
+
+## FIXED - Assumption of wrong file path and could not fix unit test with call count issues (v0.26.19)
+CONTEXT:
+QA bug reported that agents assume source files are in a `src/` directory when they're not, causing agents to fail to find implementation files when debugging tests.
+
+TRACE EVIDENCE (trace_20251224_170706.json):
+**Entry 7 (EXECUTOR, loop 3)**:
+- Tried to read `src/pdf_extract/processors/text.py` - file doesn't exist
+- Response: "The file `src/pdf_extract/processors/text.py` does not exist."
+
+**Entry 8 (EXECUTOR, loop 4)**:
+- Listed `src/pdf_extract/processors/` directory - completely empty
+- Response: "The directory `src/pdf_extract/processors` is empty"
+
+**Entry 11-16 (DEBUGGER, loops 0-5)**:
+- Kept searching in `src/` directory trying multiple approaches
+- Never found the actual file at `pdf_extract/processors/text.py`
+- Wasted entire task on searching in wrong location
+
+ROOT CAUSE:
+Agents were incorrectly adding `src/` prefix to Python package paths without verifying the actual project structure:
+
+**The problem**:
+- Test file has: `from pdf_extract.processors.text import TextToJson`
+- This import means file is at: `pdf_extract/processors/text.py` (NO `src/` prefix)
+- Agents incorrectly assumed: `src/pdf_extract/processors/text.py`
+- PROJECT CONTEXT showed: "Python Packages: pdf_extract/ (modules: processors, ...)"
+- But agents ignored this information and assumed `src/` prefix by default
+
+**What agents should have done**:
+1. Read test file, saw import: `from pdf_extract.processors.text import TextToJson`
+2. Check PROJECT CONTEXT: "Python Packages: pdf_extract/"
+3. Infer path: `pdf_extract/processors/text.py` (import path = file path)
+4. Verify with builtin.file_exists("pdf_extract/processors/text.py")
+5. Read the file and debug
+
+**What agents actually did**:
+1. Read test file, saw import
+2. Assumed `src/` prefix without checking PROJECT CONTEXT
+3. Tried to read `src/pdf_extract/processors/text.py` - failed
+4. Listed `src/pdf_extract/processors/` - empty
+5. Kept searching in `src/` directory
+6. Never found the actual file
+7. Could not debug the test because couldn't find implementation
+
+SOLUTION (v0.26.19):
+Added "CRITICAL - Inferring File Paths from Python Imports" guidance to both DEBUGGER and CODER (debugger.json:5, coder.json:5):
+
+**Key guidelines added**:
+1. **Check PROJECT CONTEXT FIRST**:
+   - If you see "Python Packages: pdf_extract/ (modules: processors, ...)"
+   - Then file from "from pdf_extract.processors.text import X" is at: pdf_extract/processors/text.py
+   - NOT at: src/pdf_extract/processors/text.py
+
+2. **Convert import to file path**:
+   - "from pdf_extract.processors.text import X" → pdf_extract/processors/text.py
+   - "from mypackage.utils import Y" → mypackage/utils.py
+   - "import foo.bar.baz" → foo/bar/baz.py
+
+3. **DO NOT assume src/ prefix unless**:
+   - PROJECT CONTEXT explicitly shows package in src/ directory
+   - OR you verified with builtin.file_exists that it's in src/
+
+4. **If file not found at inferred path**:
+   - Check PROJECT CONTEXT for actual package locations
+   - Use builtin.list_files to explore actual structure
+   - Only then try alternative locations like src/
+
+5. **Example workflow**:
+   ```
+   - See import: "from pdf_extract.processors.text import TextToJson"
+   - Check PROJECT CONTEXT: "Python Packages: pdf_extract/"
+   - Infer path: pdf_extract/processors/text.py
+   - Verify with builtin.file_exists("pdf_extract/processors/text.py")
+   - If exists, use that path. If not, investigate further.
+   ```
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/definitions/debugger.json:5: Added "CRITICAL - Inferring File Paths from Python Imports" section
+- mcp_client_for_ollama/agents/definitions/coder.json:5: Added "CRITICAL - Inferring File Paths from Python Imports" section
+- pyproject.toml: Updated version to 0.26.19
+- __init__.py: Updated version to 0.26.19
+
+RESULT:
+- DEBUGGER and CODER will now check PROJECT CONTEXT Python Packages section FIRST
+- Agents will convert Python import statements directly to file paths
+- Agents will NOT assume src/ prefix unless verified
+- Agents will find implementation files on first try instead of wasting loops searching
+- Fixes both issues: wrong file path assumption AND inability to debug test with call count issues
+- Agents can now successfully:
+  1. Find implementation file from import statement
+  2. Read both test and implementation
+  3. Debug why mock_post.call_count is wrong
+  4. Identify that implementation only makes 1 call instead of 2
+
+IMPACT:
+This fix addresses the root cause that prevented agents from debugging the test_get_document_json failure. With correct file path inference, agents can now:
+- Locate pdf_extract/processors/text.py from the import statement
+- Read the implementation to see why only 1 POST call is made
+- Understand that get_document_json() checks `if page_text:` before making second call
+- Identify that test doesn't mock get_page_text() to return text
+- Ask user whether to fix test mock setup or modify implementation
+
+
+## Add trace and session path information to the Memory Session Progress box
+- This qa project is in the folder/home/mcstar/project/bible_rag/
+- Feature: add the full path to the trace path to make it easier to report on issues
+- Feature: move the trace details to the end next to the memory progress summary
+- Error: plan was too big
+⠸ Planning with qwen2.5-coder:14b... (Ctrl+C to cancel)
+❌ Plan validation failed: Plan too complex - has 14 tasks (recommend max 8)
+❌ Delegation failed: Invalid task plan: Plan too complex - has 14 tasks (recommend max 8)
+Falling back to direct execution...
+
+🔍 Trace Session Summary
+Session ID: 20251224_173840
+Log file: .trace/trace_20251224_173840.json
+
+## ENHANCEMENT - Add trace and session path information to Memory Session Progress box (v0.26.20)
+CONTEXT:
+User requested three improvements to the trace and memory progress display:
+1. Add full path to trace file (not just relative path)
+2. Move trace details to the end next to memory progress summary
+3. Fix PLANNER creating too many tasks (14 tasks when max is 8)
+
+CURRENT STATE (before v0.26.20):
+**Trace display**:
+- Showed relative path: `Log file: .trace/trace_20251224_173840.json`
+- Displayed immediately after aggregation phase (at beginning)
+- Not grouped with memory progress summary
+
+**Memory progress summary**:
+- Displayed at the very end of execution
+- Separate from trace summary
+
+**PLANNER validation**:
+- Guideline said "Aim for 2-8 tasks" but not emphatic enough
+- PLANNER created 14 tasks, exceeding hard limit of 12
+- Error: "Plan too complex - has 14 tasks (recommend max 8)"
+
+SOLUTION (v0.26.20):
+
+**Fix 1: Full path to trace file** (trace_logger.py:304):
+Changed `"log_file": str(self.log_file)` to `"log_file": str(self.log_file.absolute())`
+- Now shows: `/home/mcstar/Nextcloud/DEV/ollmcp/mcp-client-for-ollama/.trace/trace_20251224_173840.json`
+- Makes it easier to report issues with full path
+
+**Fix 2: Move trace summary to end** (client.py:2619-2622, delegation_client.py:288,295):
+Added trace summary display to `_display_memory_progress_summary()`:
+```python
+# Display trace summary right after memory summary (if tracing enabled)
+if self.delegation_client and hasattr(self.delegation_client, 'trace_logger') and \
+   self.delegation_client.trace_logger.is_enabled():
+    self.delegation_client.trace_logger.print_summary(self.console)
+```
+
+Removed trace summary from delegation_client.py (no longer prints after aggregation):
+- Removed from line 290 (success path)
+- Removed from line 300 (failure path)
+
+Now the display order is:
+1. Execution happens
+2. Memory Session Progress box (Session ID, Progress, Status)
+3. Trace Session Summary (Session ID, Log file with full path, stats)
+
+Both summaries are grouped together at the end for easy reference.
+
+**Fix 3: Stronger PLANNER task count guidance** (planner.json:5):
+Updated guideline #4 from:
+```
+4. Right-Size Tasks: Aim for 2-8 tasks total, each fitting in 16-32K tokens
+```
+
+To:
+```
+4. Right-Size Tasks (CRITICAL): MAXIMUM 8 tasks total, each fitting in 16-32K tokens
+   - Hard limit: Plan will be REJECTED if > 12 tasks
+   - Optimal range: 2-8 tasks
+   - If you find yourself creating more than 8 tasks, you're planning at too fine a granularity
+   - Combine related operations into single tasks (e.g., "Create and configure file" not "Create file" + "Configure file")
+   - Each task should represent a meaningful unit of work, not individual tool calls
+   - Example WRONG: task1="Read file", task2="Analyze content", task3="Write changes"
+   - Example RIGHT: task1="Update configuration file with new settings"
+```
+
+FILES MODIFIED:
+- mcp_client_for_ollama/utils/trace_logger.py:304: Changed to absolute path
+- mcp_client_for_ollama/client.py:2619-2622: Added trace summary display after memory summary
+- mcp_client_for_ollama/agents/delegation_client.py:288,295: Removed early trace summary displays
+- mcp_client_for_ollama/agents/definitions/planner.json:5: Enhanced task count guidance
+- pyproject.toml: Updated version to 0.26.20
+- __init__.py: Updated version to 0.26.20
+
+RESULT:
+- Trace log file now shows full absolute path for easy reporting
+- Trace summary and memory progress summary are grouped together at the end
+- Better user experience - all session information in one place
+- PLANNER now has emphatic guidance to stay within 8 tasks maximum
+- Examples of wrong vs right task granularity
+- Clear warning that plans will be rejected if > 12 tasks
+- Should prevent future "plan too complex" errors
+
+IMPACT:
+This enhancement improves debugging workflow by:
+1. Making trace files easier to locate and share (full path)
+2. Grouping all session information together at the end (better organization)
+3. Preventing PLANNER from creating overly complex plans (better quality)
