@@ -585,10 +585,69 @@ Option B: Update existing session
 Expected: LORE_KEEPER successfully creates features under goal G_LORE_KEEPER with priority field
 
 
-## File loading is not working again.
-TRACE: 
-🔍 Trace Session Summary
-Session ID: 20251227_112659
-Log file: /home/mcstar/Vault/Journal/.trace/trace_20251227_112659.json
-- now it's back to failing to load the relative files again.
-- USER_QUERY: read the content in the file notes/20251027_dream_anchor_chains.md and create a lore
+## ✅ FIXED in v0.33.7: PLANNER Path Conversion Regression & Task Mutation
+
+**Trace**: 20251227_112659
+
+**Critical Issues**:
+1. **Path Conversion Ignored**: PLANNER using relative paths despite v0.33.4 fix
+2. **Task Mutation**: PLANNER changing "THE FILE" → "ALL files" (singular → plural)
+
+**User Query**: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+
+**Expected Behavior**:
+- Convert relative path to absolute: `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
+- Create ONE task to read THAT ONE FILE
+
+**Actual Behavior (WRONG)**:
+```json
+{
+  "tasks": [
+    {
+      "id": "task_1",
+      "description": "List all .md files in notes/ directory",  // ❌ Relative path, wrong intent
+      "agent_type": "FILE_EXECUTOR"
+    }
+  ]
+}
+```
+
+**Root Cause Analysis**:
+1. Prompt too long (~15K tokens) - instructions buried deep
+2. Temperature too high (0.7) - allowed creative reinterpretation
+3. Critical path conversion rules in middle of prompt
+4. LLM ignored instructions, changed user's task
+
+**Fix Applied in v0.33.7**:
+
+1. **Restructured Prompt** - Added unmissable rules at TOP:
+```
+🚨🚨🚨 CRITICAL PATH CONVERSION RULE 🚨🚨🚨
+
+BEFORE creating ANY task, MUST convert relative → absolute paths!
+
+IF user query has "notes/file.md":
+  1. Get Working Directory from context
+  2. Convert: "notes/file.md" → "/working_dir/notes/file.md"
+  3. Use ONLY absolute path in tasks
+
+🚨 SECOND CRITICAL RULE: DO NOT CHANGE USER'S TASK 🚨
+
+IF user says "read THE FILE notes/X.md":
+  ✅ Create task for THAT ONE FILE
+  ❌ DO NOT change to "list ALL files"
+```
+
+2. **Reduced Temperature**: 0.7 → 0.3 for stricter adherence
+
+**Testing**: ⏳ NEEDS USER VERIFICATION
+- Rebuild package with v0.33.7
+- Test same query: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+- Verify PLANNER uses absolute path: `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
+- Verify PLANNER creates task for ONE file, not ALL files
+
+**Files Modified**:
+- `mcp_client_for_ollama/agents/definitions/planner.json` - Restructured prompt, reduced temperature
+- Version bumped to 0.33.7
+
+**GitHub Release**: https://github.com/schwab/mcp-client-for-ollama/releases/tag/v0.33.7
