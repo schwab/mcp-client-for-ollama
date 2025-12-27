@@ -651,3 +651,135 @@ IF user says "read THE FILE notes/X.md":
 - Version bumped to 0.33.7
 
 **GitHub Release**: https://github.com/schwab/mcp-client-for-ollama/releases/tag/v0.33.7
+
+
+## ⚠️ G_LORE_KEEPER Goal Created But Not Persisting in Memory State
+
+**TRACE**: 20251227_153111
+
+**Issue**:
+G_LORE_KEEPER goal is successfully created by LORE_KEEPER agent, but disappears from the memory state on subsequent queries.
+
+**Evidence**:
+
+From the memory context, **Recent Progress shows successful creation**:
+```
+2025-12-27 10:04:58 ✓ LORE_KEEPER: Initialized goal G_LORE_KEEPER and stored extracted lore in memory for Dream with Anchor Chains
+2025-12-27 10:04:47 ✓ LORE_KEEPER: Stored extracted lore in memory for Dream with Anchor Chains
+```
+
+**BUT** the **GOALS AND FEATURES section** shows:
+- ✓ Goal G1: Establish the foundational structure...
+- ✓ Goal G2: Document and organize personal spiritual experiences...
+- ✓ Goal G3: Develop content writing standards...
+- ✓ Goal G4: Prepare the book for publication...
+- **❌ G_LORE_KEEPER is MISSING!**
+
+**Root Cause Analysis**:
+
+1. **Creation Succeeded**: Progress log confirms `builtin.add_goal(goal_id='G_LORE_KEEPER', ...)` executed successfully
+2. **Persistence Failed**: Goal not appearing when `builtin.get_memory_state` is called later
+3. **Storage Issue**: Either:
+   - Goal created but not saved to JSON file, OR
+   - Goal saved but not loaded back from JSON file, OR
+   - Goal filtered out during memory state retrieval
+
+**Possible Causes**:
+
+**Hypothesis 1: Session ID Mismatch**
+- LORE_KEEPER creates goal under session: `book-about-spritual-experience_20251226_200149`
+- Memory loaded from different session or session not properly saving G_LORE_KEEPER
+
+**Hypothesis 2: Goal Storage Path Issue**
+- G_LORE_KEEPER stored in different location than G1-G4
+- Memory file corruption or incomplete save
+
+**Hypothesis 3: Goal Filtering**
+- Memory retrieval filters out G_LORE_KEEPER for some reason
+- Special characters in goal ID causing issues
+
+**Testing Required**:
+
+1. **Check memory file directly**:
+```bash
+cat /home/mcstar/.mcp-memory/content/book-about-spritual-experience_20251226_200149/memory.json | jq '.goals[] | {id, description}' | grep -A 1 "G_LORE_KEEPER"
+```
+
+2. **Verify goal exists in storage**:
+```python
+from mcp_client_for_ollama.memory.storage import MemoryStorage
+storage = MemoryStorage()
+memory = storage.load_session("book-about-spritual-experience_20251226_200149")
+print([g.id for g in memory.goals])
+```
+
+3. **Check if goal is transient** (created in memory but not persisted):
+- Add debug logging to `memory/storage.py` save operations
+- Verify `save()` is called after `add_goal()`
+
+**Expected Behavior**:
+- LORE_KEEPER creates goal G_LORE_KEEPER
+- Goal persists in memory.json
+- Goal appears in memory state for all future queries
+- LORE_KEEPER can add features under G_LORE_KEEPER
+
+**Actual Behavior**:
+- Goal created (progress logged)
+- Goal disappears from memory state
+- Subsequent attempts to use G_LORE_KEEPER fail with "not found"
+
+**Impact**:
+- LORE_KEEPER cannot maintain persistent lore database
+- Each run recreates goal (if creation logic runs) or fails
+- Lore features lost between sessions
+
+**Investigation Results**:
+
+Checked memory file directly:
+```bash
+$ cat memory.json | python3 -m json.tool | grep goal IDs
+
+Total goals: 6
+  - G1: Establish the foundational structure...
+  - G2: Document and organize personal spiritual experiences...
+  - G3: Develop content writing standards...
+  - G4: Prepare the book for publication...
+  - G5: Maintain world-building consistency... (LORE goal)
+  - G6: Maintain world-building consistency... (LORE goal duplicate)
+
+G_LORE_KEEPER exists: FALSE
+```
+
+**ROOT CAUSE IDENTIFIED**: ✅
+
+**The Problem**:
+`builtin.add_goal(goal_id='G_LORE_KEEPER', ...)` is **ignoring the goal_id parameter** and auto-generating numeric IDs instead!
+
+1. LORE_KEEPER calls `builtin.add_goal(goal_id='G_LORE_KEEPER', description='Maintain world-building consistency...')`
+2. Memory system creates goal with ID **"G5"** (not "G_LORE_KEEPER")
+3. Progress log incorrectly reports "Created goal G_LORE_KEEPER"
+4. LORE_KEEPER tries to add features to "G_LORE_KEEPER"
+5. Fails: "Goal 'G_LORE_KEEPER' not found" (because actual ID is "G5")
+6. LORE_KEEPER retries, creates duplicate goal "G6"
+
+**Bug Location**: `mcp_client_for_ollama/memory/tools.py` - `add_goal()` function
+
+**Expected Behavior**:
+```python
+add_goal(goal_id='G_LORE_KEEPER', description='...')
+→ Creates goal with ID 'G_LORE_KEEPER'
+```
+
+**Actual Behavior**:
+```python
+add_goal(goal_id='G_LORE_KEEPER', description='...')
+→ Creates goal with ID 'G5' (auto-generated)
+→ Ignores the goal_id parameter!
+```
+
+**Fix Required**:
+Modify `memory/tools.py` `add_goal()` to respect the `goal_id` parameter when provided:
+- If `goal_id` provided → use it
+- If `goal_id` not provided or None → auto-generate (G1, G2, etc.)
+
+**Status**: ⚠️ **CRITICAL BUG** - `add_goal()` ignores custom goal IDs
