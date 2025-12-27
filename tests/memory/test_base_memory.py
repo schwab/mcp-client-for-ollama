@@ -341,6 +341,29 @@ class TestDomainMemory:
         not_found = memory.get_feature_by_id("F99")
         assert not_found is None
 
+    def test_get_goal_by_id(self):
+        """Test finding goal by ID."""
+        metadata = MemoryMetadata(
+            session_id="test",
+            domain="coding",
+            description="Test",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        memory = DomainMemory(metadata=metadata)
+
+        goal1 = Goal(id="G1", description="Goal 1")
+        goal2 = Goal(id="G2", description="Goal 2")
+        memory.goals = [goal1, goal2]
+
+        goal = memory.get_goal_by_id("G2")
+        assert goal is not None
+        assert goal.id == "G2"
+        assert goal.description == "Goal 2"
+
+        not_found = memory.get_goal_by_id("G99")
+        assert not_found is None
+
     def test_get_pending_features(self):
         """Test getting pending/failed features."""
         metadata = MemoryMetadata(

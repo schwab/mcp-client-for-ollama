@@ -399,3 +399,69 @@ The examples now show "right vs wrong" for VALIDATION, not a pattern to copy.
 
 **Testing Required**: User should retry: "read the content in the file notes/20251027_dream_anchor_chains.md"
 Expected: PLANNER uses `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
+
+## ✅ FIXED in v0.33.5: Memory Storage Failures - Missing get_goal_by_id() Method
+
+**User Query**: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+
+**Issue** (TRACE: 20251226_213919):
+- ✅ LORE_KEEPER successfully read the correct file path (v0.33.4 path fix worked!)
+- ❌ LORE_KEEPER failed to store lore in memory
+- Error: `'DomainMemory' object has no attribute 'get_goal_by_id'`
+- Multiple failures trying to add features to goal G5
+- Goal created but no features stored, no details saved
+
+**Root Cause**:
+The `DomainMemory` class in `base_memory.py` was missing the `get_goal_by_id()` method!
+
+The class had:
+- ✅ `get_feature_by_id(feature_id)` - worked fine
+- ❌ `get_goal_by_id(goal_id)` - **MISSING!**
+
+Memory tools that needed `get_goal_by_id()`:
+- `builtin.add_feature()` - calls `get_goal_by_id()` to verify goal exists before adding feature
+- `builtin.get_goal_details()` - calls `get_goal_by_id()` directly
+- `builtin.update_goal()` - calls `get_goal_by_id()` to find goal
+
+**Error Pattern**:
+```
+Error adding feature: 'DomainMemory' object has no attribute 'get_goal_by_id'
+Error adding feature: 'DomainMemory' object has no attribute 'get_goal_by_id'
+Error adding feature: 'DomainMemory' object has no attribute 'get_goal_by_id'
+...repeated multiple times...
+```
+
+**Fix Applied** (v0.33.5):
+
+Added the missing `get_goal_by_id()` method to `DomainMemory` class:
+
+```python
+def get_goal_by_id(self, goal_id: str) -> Optional[Goal]:
+    """Find a goal by its ID."""
+    for goal in self.goals:
+        if goal.id == goal_id:
+            return goal
+    return None
+```
+
+**Testing**:
+- Added comprehensive test `test_get_goal_by_id()` to test suite
+- Tests both found and not-found cases
+- All 87 memory tests pass
+
+**Result**:
+- ✅ `builtin.add_feature()` now works correctly
+- ✅ `builtin.get_goal_details()` now works correctly
+- ✅ `builtin.update_goal()` now works correctly
+- ✅ LORE_KEEPER can now store lore in memory
+- ✅ All ghost writer agents can now use memory features
+
+**Files Modified**:
+- mcp_client_for_ollama/memory/base_memory.py - Added `get_goal_by_id()` method
+- tests/memory/test_base_memory.py - Added test for new method
+- mcp_client_for_ollama/__init__.py - Version 0.33.5
+- pyproject.toml - Version 0.33.5
+- docs/qa_bugs.md - Bug documentation
+
+**Testing Required**: User should retry: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+Expected: LORE_KEEPER reads file and successfully stores lore in memory under goal G_LORE_KEEPER
