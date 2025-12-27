@@ -1134,6 +1134,15 @@ class MCPClient:
                     await self.disable_memory()
                     continue
 
+                # VSCode Integration commands
+                if query.lower() in ['vscode-file', 'vf']:
+                    self.load_vscode_file()
+                    continue
+
+                if query.lower() in ['vscode-status', 'vs']:
+                    self.show_vscode_status()
+                    continue
+
                 if query.lower() in ['execute-python-code', 'epc']:
                     self.clear_console()
                     self.console.print(Panel("[bold]Execute Python Code[/bold]", border_style="blue"))
@@ -1307,6 +1316,11 @@ class MCPClient:
             "• Type [bold]memory-status[/bold] or [bold]mst[/bold] to show current memory session status\n"
             "• Type [bold]memory-enable[/bold] or [bold]me[/bold] to enable the memory system\n"
             "• Type [bold]memory-disable[/bold] or [bold]md[/bold] to disable the memory system\n\n"
+
+            "[bold cyan]VSCode Integration:[/bold cyan] [bold magenta](Beta)[/bold magenta]\n"
+            "• Type [bold]vscode-file[/bold] or [bold]vf[/bold] to load the currently active VSCode file into context\n"
+            "• Type [bold]vscode-status[/bold] or [bold]vs[/bold] to show VSCode integration status and active file\n"
+            "• Works when running in VSCode's integrated terminal\n\n"
 
             "[bold cyan]Auto-Loading (on startup):[/bold cyan]\n"
             "• Create [bold].config/CLAUDE.md[/bold] to automatically load project context\n"
@@ -2559,6 +2573,111 @@ Please analyze this project and create an initial memory structure with:
         progress_pct = (completed / total * 100) if total > 0 else 0
 
         self.console.print(f"\n[bold green]Progress:[/bold green] {completed}/{total} features completed ({progress_pct:.0f}%)")
+
+    def show_vscode_status(self):
+        """Show VSCode integration status"""
+        from .integrations.vscode import VSCodeIntegration
+        from rich.panel import Panel
+        from rich.table import Table
+
+        is_vscode, active_file, error_msg = VSCodeIntegration.get_status()
+
+        # Create status table
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("Label", style="bold cyan")
+        table.add_column("Value", style="white")
+
+        # Add rows
+        status_emoji = "✓" if is_vscode else "✗"
+        status_text = "Yes" if is_vscode else "No"
+        table.add_row(f"{status_emoji} Running in VSCode", status_text)
+
+        if is_vscode:
+            if active_file:
+                table.add_row("📄 Active File", active_file)
+
+                # Get file info
+                file_info = VSCodeIntegration.get_file_info(active_file)
+                if file_info and file_info.exists:
+                    size_kb = file_info.size / 1024
+                    table.add_row("   File Size", f"{size_kb:.1f} KB")
+                    table.add_row("   Exists", "✓ Yes")
+                else:
+                    table.add_row("   Exists", "✗ No")
+            else:
+                table.add_row("📄 Active File", error_msg or "None detected")
+
+        self.console.print(Panel(table, title="VSCode Integration Status", border_style="blue"))
+
+        if is_vscode and active_file:
+            self.console.print("\n[dim]Tip: Use 'vscode-file' or 'vf' to load this file into context[/dim]")
+
+    def load_vscode_file(self):
+        """Load the currently active VSCode file into context"""
+        from .integrations.vscode import VSCodeIntegration
+        from rich.panel import Panel
+
+        # Check if running in VSCode
+        if not VSCodeIntegration.is_running_in_vscode():
+            self.console.print("[yellow]Not running in VSCode terminal[/yellow]")
+            self.console.print("[dim]This command only works when running inside VSCode's integrated terminal[/dim]")
+            return
+
+        # Get active file
+        active_file = VSCodeIntegration.get_active_file()
+        if not active_file:
+            self.console.print("[yellow]Could not detect active VSCode file[/yellow]")
+            self.console.print("[dim]Make sure you have a file open in VSCode[/dim]")
+            return
+
+        # Check if file exists
+        file_info = VSCodeIntegration.get_file_info(active_file)
+        if not file_info or not file_info.exists:
+            self.console.print(f"[red]File not found:[/red] {active_file}")
+            return
+
+        # Check file size (warn if > 100KB)
+        size_kb = file_info.size / 1024
+        if size_kb > 100:
+            self.console.print(f"[yellow]⚠ Large file:[/yellow] {size_kb:.1f} KB")
+            self.console.print("[dim]Loading large files may impact performance[/dim]")
+
+        # Load file contents
+        try:
+            with open(active_file, 'r', encoding='utf-8') as f:
+                contents = f.read()
+
+            # Add to chat history as system context
+            file_name = active_file.split('/')[-1]
+            context_message = f"# File: {active_file}\n\n```\n{contents}\n```"
+
+            # Add to conversation history
+            self.chat_history.append({
+                "role": "user",
+                "content": f"[Context: Loaded file {file_name}]\n\n{context_message}"
+            })
+
+            # Display success
+            self.console.print(f"\n[bold green]✓ Loaded:[/bold green] {active_file}")
+            self.console.print(f"[dim]({len(contents)} chars, {len(contents.splitlines())} lines)[/dim]")
+
+            # Show preview (first 5 lines)
+            lines = contents.splitlines()
+            preview_lines = min(5, len(lines))
+            self.console.print(f"\n[dim]Preview (first {preview_lines} lines):[/dim]")
+            for i, line in enumerate(lines[:preview_lines], 1):
+                self.console.print(f"[dim]{i:3d}[/dim]  {line[:80]}")
+
+            if len(lines) > preview_lines:
+                self.console.print(f"[dim]     [+{len(lines) - preview_lines} more lines][/dim]")
+
+            self.console.print(f"\n[cyan]The file content is now in your chat context.[/cyan]")
+            self.console.print(f"[dim]Use 'clear' or 'cc' to remove it from context[/dim]\n")
+
+        except UnicodeDecodeError:
+            self.console.print(f"[red]✗ Error:[/red] File appears to be binary (not text)")
+        except Exception as e:
+            self.console.print(f"[red]✗ Error loading file:[/red] {e}")
 
     def _display_memory_progress_summary(self):
         """Display a compact summary of memory session progress after task completion"""
