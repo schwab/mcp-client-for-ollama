@@ -803,3 +803,41 @@ Modified `memory/tools.py` `add_goal()` function:
 
 **Result**:
 LORE_KEEPER can now successfully create goal with ID "G_LORE_KEEPER" instead of getting auto-generated "G5".
+
+
+## NEW Feature Request - auto detect vscode opened file path
+- when the app is running inside a vscode terminal, it should detect the currently open/selected file and load its contents into the chat context.
+- also display the detected file so they user knows they have that file as context before they enter their query
+
+## ✅ FIXED in v0.34.1: LORE_KEEPER Still Referencing Magic Systems
+
+**TRACE**: 20251227_161825
+
+**Issue**:
+LORE_KEEPER agent definition still contained references to magic systems in:
+- Goal description
+- Category 1 examples
+- Hard rule examples
+- Feature ID examples
+
+**Root Cause**:
+The LORE_KEEPER changes from earlier work (removing magic references and replacing with religious systems) were never committed to the repository. The modified lore_keeper.json file remained uncommitted.
+
+**Changes Applied**:
+All magic system references replaced with religious systems:
+- Goal: "magic systems" → "religious systems"
+- Category 1: "Magic Systems" → "Religious Systems"
+- Example: "Elena conjured a fireball" → "Elena prayed to the Harvest Goddess"
+- Feature ID: `F_LORE_MAGIC_SYSTEM` → `F_LORE_RELIGION_NORTHERN`
+- Hard rule: "Magic requires sacrifice" → "Priests must never shed blood"
+
+**Files Modified**:
+- mcp_client_for_ollama/agents/definitions/lore_keeper.json - All magic → religious systems
+- mcp_client_for_ollama/__init__.py - Version 0.34.1
+- pyproject.toml - Version 0.34.1
+- docs/qa_bugs.md - Documentation
+
+**Result**:
+✅ LORE_KEEPER now consistently references religious systems
+✅ No magic system references remain in agent definition
+✅ Examples updated to reflect religious themes
