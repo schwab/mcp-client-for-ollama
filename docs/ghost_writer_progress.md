@@ -522,12 +522,232 @@ Action: Added to memory as historical event F_LORE_HISTORY_DRAGON_WAR
 
 ---
 
-## 🚀 Status: v0.30.0 Released!
+## 🚀 Status: v0.32.0 Released - Phase 3 Complete!
 
-**Version**: 0.30.0
-**Agents Implemented**:
-- ACCENT_WRITER (v0.29.0)
-- LORE_KEEPER (v0.30.0)
+**Version**: 0.32.0
+**Agents Implemented**: 6 of 9 (67% complete)
+- ✅ ACCENT_WRITER (v0.29.0) - Priority 1
+- ✅ LORE_KEEPER (v0.30.0) - Core agent
+- ✅ CHARACTER_KEEPER (v0.31.0) - Core agent
+- ✅ STYLE_MONITOR (v0.32.0) - Phase 3
+- ✅ QUALITY_MONITOR (v0.32.0) - Phase 3
+- ✅ DETAIL_CONTRIVER (v0.32.0) - Phase 3
 
 **Documentation**: Complete
-**Next Step**: Continue with CHARACTER_KEEPER agent
+**Next Steps**:
+- Implement PROMPT_SPECIALIST (Priority 2)
+- Implement RESEARCHER (Priority 3)
+- Consider additional agents (IDEA_NUDGER, BETA_READER)
+
+---
+
+## ✅ Phase 3: Core Agents - Complete!
+
+### Implementation Summary (v0.32.0)
+
+**Date**: December 26, 2025
+
+Successfully completed Phase 3 by implementing the three remaining core ghost writer agents for comprehensive story quality and consistency.
+
+### What Was Created
+
+1. **STYLE_MONITOR Agent** (`style_monitor.json`):
+   - Self-managed memory via goal G_STYLE_MONITOR
+   - Tracks 7 style categories: POV, Tense, Dialogue Format, Thought Representation, Paragraph Structure, Typography, Narrative Voice
+   - Comprehensive style guideline templates
+   - Consistency checking for formatting and stylistic elements
+   - Cross-agent collaboration with CHARACTER_KEEPER (voice matching personality) and LORE_KEEPER (term capitalization)
+   - Emoji: ✍️📐
+
+2. **QUALITY_MONITOR Agent** (`quality_monitor.json`):
+   - Self-managed memory via goal G_QUALITY_MONITOR
+   - Tracks 5 quality categories: Grammar & Mechanics, Clarity & Readability, Plot & Logic, Pre-Publishing Checklist, Recurring Patterns
+   - Comprehensive pre-publishing checklist management
+   - Severity classification (Critical/Important/Minor/Suggestion)
+   - Pattern recognition for recurring issues and strengths
+   - Plot hole detection and logic verification
+   - Cross-agent verification with all other ghost writers
+   - Emoji: ⭐📝
+
+3. **DETAIL_CONTRIVER Agent** (`detail_contriver.json`):
+   - Self-managed memory via goal G_DETAIL_CONTRIVER
+   - Tracks 5 detail categories: Place Names, Minor Character Names, Object Details, Atmospheric Details, Naming Conventions
+   - Generates plausible minor details that fit story setting
+   - Ensures consistency of invented details across sessions
+   - Coordinates with LORE_KEEPER (world conventions), CHARACTER_KEEPER (avoid name conflicts), STYLE_MONITOR (formatting)
+   - Higher temperature (0.5) for creative detail generation
+   - Emoji: 🎨🔧
+
+4. **PLANNER Integration**:
+   - Added all Phase 3 agents to Ghost Writer Agents section
+   - Updated Task Assignment Decision Tree with new agent recognition
+   - Now recognizes: style/formatting, grammar/quality, minor detail generation tasks
+
+5. **Version Update**:
+   - Built and released v0.32.0
+   - Package includes all 6 implemented ghost writer agents
+
+### Agent Capabilities
+
+**STYLE_MONITOR** - Formatting & Stylistic Consistency:
+- **POV Tracking**: First/third person, limited/omniscient, POV character management
+- **Tense Consistency**: Past/present/future tense, flashback handling
+- **Dialogue Formatting**: Quote marks, attribution style, action beats, interruptions
+- **Thought Representation**: Italics/quotes/plain text, direct vs indirect thoughts
+- **Paragraph Structure**: Length patterns, break rules, white space management
+- **Typography**: Em-dashes, ellipses, capitalization rules, number formatting
+- **Narrative Voice**: Formality level, vocabulary complexity, sentence structure patterns
+
+**QUALITY_MONITOR** - Writing Quality Assurance:
+- **Grammar & Mechanics**: Spelling, grammar errors, punctuation, fragments, run-ons
+- **Clarity**: Confusing sentences, unclear antecedents, vague descriptions, awkward phrasing
+- **Plot & Logic**: Plot holes, missing motivation, timeline issues, logic gaps, deus ex machina
+- **Pre-Publishing Checklist**: Comprehensive checklist tracking for publication readiness
+- **Pattern Recognition**: Identifies recurring issues and writing strengths
+- **Cross-Agent Validation**: Coordinates quality checks with all other ghost writers
+
+**DETAIL_CONTRIVER** - Minor Detail Generation:
+- **Place Names**: Inns, taverns, shops, streets, buildings (e.g., "The Salt & Barrel")
+- **Minor Characters**: Guards, shopkeepers, servants (e.g., "Guard Torvin")
+- **Object Details**: Food, drinks, furniture, tools (e.g., "Thornberry wine")
+- **Atmospheric Details**: Sounds, smells, weather, background activity
+- **Naming Conventions**: Tracks and follows established naming patterns
+- **Consistency Memory**: Remembers invented details for reuse across story
+
+### Example Usage
+
+**STYLE_MONITOR Query**:
+```
+Review this text for style consistency:
+
+"Elena walked to the door. She opens it and peers outside."
+```
+
+**STYLE_MONITOR Response**:
+```
+=== NARRATIVE TENSE ===
+Status: ✗ INCONSISTENT
+
+Problem: Tense shift from past to present
+Original: "Elena walked (past) ... She opens (present) and peers (present)"
+Corrected: "Elena walked to the door. She opened it and peered outside."
+
+Explanation: Story is written in past tense. The shift to present tense breaks consistency.
+```
+
+**QUALITY_MONITOR Query**:
+```
+Review this scene for quality issues:
+
+"Marcus told John that he needed to leave. The guard drew his revolver."
+```
+
+**QUALITY_MONITOR Response**:
+```
+✗ CRITICAL - Unclear Antecedent:
+Problem: "he needed to leave" - Who? Marcus or John?
+Suggestion: Use dialogue for clarity: Marcus told John, "You need to leave."
+
+✗ IMPORTANT - Possible Anachronism:
+Problem: "revolver" in medieval setting (check LORE_KEEPER)
+Suggestion: Change to "drew his sword" if medieval
+```
+
+**DETAIL_CONTRIVER Query**:
+```
+The characters need to stay at an inn in the port district. It should be rough but respectable.
+```
+
+**DETAIL_CONTRIVER Response**:
+```
+Generated: "The Salt & Barrel"
+
+Reasoning:
+- "Salt" references port/sea trade (fits location)
+- "Barrel" suggests cargo/shipping (working-class vibe)
+- Practical, unpretentious tone (appropriate for rough but respectable)
+- Saved to memory as F_DETAIL_INN_SALT_BARREL for consistency
+
+Description: A sturdy two-story inn of weathered wood. Common room smells of fish stew.
+Clean if worn. Popular with ship's officers and merchants.
+```
+
+### Technical Details
+
+**Common Configuration** (all Phase 3 agents):
+- Model: qwen2.5:32b (high quality analysis)
+- Temperature: 0.3 (consistent, focused) - except DETAIL_CONTRIVER: 0.5 (more creative)
+- Max context: 262,144 tokens
+- Memory-only tool access (read across agents, write to own goal)
+- Self-initialization on first run
+
+**Cross-Agent Collaboration Network**:
+```
+STYLE_MONITOR ↔ CHARACTER_KEEPER (narrative voice matches character personality)
+STYLE_MONITOR ↔ LORE_KEEPER (capitalization of world terms)
+
+QUALITY_MONITOR → ALL AGENTS (validates all other agents' findings)
+QUALITY_MONITOR ↔ CHARACTER_KEEPER (verify behavior is logical)
+QUALITY_MONITOR ↔ LORE_KEEPER (verify plot logic against world rules)
+
+DETAIL_CONTRIVER → LORE_KEEPER (follow world naming conventions)
+DETAIL_CONTRIVER → CHARACTER_KEEPER (avoid name conflicts)
+DETAIL_CONTRIVER → STYLE_MONITOR (match formatting style)
+```
+
+### Files Modified/Created
+
+**New Files**:
+- `mcp_client_for_ollama/agents/definitions/style_monitor.json` - STYLE_MONITOR agent
+- `mcp_client_for_ollama/agents/definitions/quality_monitor.json` - QUALITY_MONITOR agent
+- `mcp_client_for_ollama/agents/definitions/detail_contriver.json` - DETAIL_CONTRIVER agent
+
+**Modified Files**:
+- `mcp_client_for_ollama/agents/definitions/planner.json` - Added Phase 3 agent recognition
+- `mcp_client_for_ollama/__init__.py` - Version bump to 0.32.0
+- `pyproject.toml` - Version bump to 0.32.0
+- `docs/ghost_writer_progress.md` - Documentation update
+
+### Progress Summary
+
+**Completed Agents** (6 of 9 - 67%):
+- ✅ Phase 1: ACCENT_WRITER (Priority 1)
+- ✅ Phase 2: LORE_KEEPER, CHARACTER_KEEPER (Core agents)
+- ✅ Phase 3: STYLE_MONITOR, QUALITY_MONITOR, DETAIL_CONTRIVER (Core agents)
+
+**Remaining Agents** (3 of 9 - 33%):
+- 📋 PROMPT_SPECIALIST (Priority 2) - Media prompt generation
+- 📋 RESEARCHER (Priority 3) - Realism verification
+- 📋 Additional agents (IDEA_NUDGER, BETA_READER) - Optional enhancements
+
+### Next Steps
+
+**Phase 4: Advanced Agents**
+- Implement PROMPT_SPECIALIST for generating image/music/video prompts from story context
+- Implement RESEARCHER for verifying realism and suggesting real-world alternatives
+- Consider IDEA_NUDGER (creativity sparking) and BETA_READER (story review)
+
+**Testing & Refinement**:
+- Create comprehensive multi-agent test scenarios
+- Test cross-agent collaboration workflows
+- Refine system prompts based on real-world usage
+- Document best practices for authors
+
+**Integration Enhancements**:
+- Create meta-agent for coordinating full story reviews
+- Develop batch review capabilities for complete chapters
+- Export functionality for style guides and character bibles
+
+---
+
+## 🎉 Phase 3 Complete - 67% of Ghost Writer System Implemented!
+
+The core ghost writer infrastructure is now complete with 6 specialized agents covering:
+- ✅ Character speech patterns (ACCENT_WRITER)
+- ✅ World-building consistency (LORE_KEEPER)
+- ✅ Character consistency (CHARACTER_KEEPER)
+- ✅ Style & formatting (STYLE_MONITOR)
+- ✅ Quality & grammar (QUALITY_MONITOR)
+- ✅ Minor details (DETAIL_CONTRIVER)
+
+Authors now have a comprehensive AI writing assistant that maintains consistency across all major story elements!
