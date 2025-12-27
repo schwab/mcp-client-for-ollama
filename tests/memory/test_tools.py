@@ -264,3 +264,97 @@ class TestMemoryTools:
         loaded = storage.load_memory("test_session", "coding")
         goal = loaded.goals[0]
         assert goal.status.value in ["completed", "in_progress"]  # Could be either depending on auto-update logic
+
+    def test_add_goal_with_custom_id(self, setup):
+        """Test adding goal with custom ID (e.g., G_LORE_KEEPER)."""
+        storage, tools, memory = setup
+
+        # Add goal with custom ID
+        result = tools.add_goal(
+            goal_id="G_LORE_KEEPER",
+            description="Maintain world-building consistency",
+            constraints=["Must track all lore elements"]
+        )
+
+        assert "✓ Added new goal G_LORE_KEEPER" in result
+        assert "Features: 0" in result
+
+        # Verify goal was created with correct ID
+        loaded = storage.load_memory("test_session", "coding")
+        goal_ids = [g.id for g in loaded.goals]
+        assert "G_LORE_KEEPER" in goal_ids
+
+        lore_goal = next(g for g in loaded.goals if g.id == "G_LORE_KEEPER")
+        assert lore_goal.description == "Maintain world-building consistency"
+        assert len(lore_goal.constraints) == 1
+        assert lore_goal.features == []
+
+    def test_add_goal_auto_generate_id(self, setup):
+        """Test adding goal without custom ID auto-generates numeric ID."""
+        storage, tools, memory = setup
+
+        # Add goal without custom ID
+        result = tools.add_goal(
+            description="Another test goal",
+            constraints=["Test constraint"]
+        )
+
+        assert "✓ Added new goal G2" in result  # G1 already exists, so should be G2
+
+        # Verify goal was created
+        loaded = storage.load_memory("test_session", "coding")
+        goal_ids = [g.id for g in loaded.goals]
+        assert "G2" in goal_ids
+
+    def test_add_goal_duplicate_id_error(self, setup):
+        """Test that adding goal with duplicate ID returns error."""
+        storage, tools, memory = setup
+
+        # Try to add goal with existing ID
+        result = tools.add_goal(
+            goal_id="G1",  # This ID already exists
+            description="Duplicate goal"
+        )
+
+        assert "Error: Goal ID 'G1' already exists" in result
+
+        # Verify no duplicate was created
+        loaded = storage.load_memory("test_session", "coding")
+        g1_goals = [g for g in loaded.goals if g.id == "G1"]
+        assert len(g1_goals) == 1  # Only the original
+
+    def test_add_goal_custom_and_auto_ids_coexist(self, setup):
+        """Test that custom and auto-generated IDs can coexist."""
+        storage, tools, memory = setup
+
+        # Add custom ID goal
+        tools.add_goal(
+            goal_id="G_CUSTOM_1",
+            description="Custom goal 1"
+        )
+
+        # Add auto-generated ID goal
+        # Note: Auto-gen counts ALL goals (G1 + G_CUSTOM_1 = 2), so next is G3
+        result = tools.add_goal(description="Auto goal")
+        assert "✓ Added new goal G3" in result
+
+        # Add another custom ID goal
+        tools.add_goal(
+            goal_id="G_CUSTOM_2",
+            description="Custom goal 2"
+        )
+
+        # Add another auto-generated ID goal
+        # Now we have G1, G_CUSTOM_1, G3, G_CUSTOM_2 = 4 goals, so next is G5
+        result = tools.add_goal(description="Another auto goal")
+        assert "✓ Added new goal G5" in result
+
+        # Verify all goals exist
+        loaded = storage.load_memory("test_session", "coding")
+        goal_ids = [g.id for g in loaded.goals]
+        assert "G1" in goal_ids  # Original
+        assert "G_CUSTOM_1" in goal_ids
+        assert "G3" in goal_ids  # Auto-generated (skipped G2 due to count)
+        assert "G_CUSTOM_2" in goal_ids
+        assert "G5" in goal_ids  # Auto-generated (skipped G4 due to count)
+        assert len(goal_ids) == 5

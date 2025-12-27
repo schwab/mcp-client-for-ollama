@@ -782,4 +782,24 @@ Modify `memory/tools.py` `add_goal()` to respect the `goal_id` parameter when pr
 - If `goal_id` provided → use it
 - If `goal_id` not provided or None → auto-generate (G1, G2, etc.)
 
-**Status**: ⚠️ **CRITICAL BUG** - `add_goal()` ignores custom goal IDs
+**Status**: ✅ **FIXED in v0.33.8** - `add_goal()` now respects custom goal IDs
+
+**Fix Applied**:
+
+Modified `memory/tools.py` `add_goal()` function:
+- Added `goal_id: Optional[str] = None` parameter
+- If `goal_id` provided: validates it's not duplicate and uses it
+- If `goal_id` is None: auto-generates numeric ID (G1, G2, etc.)
+- Returns error if custom ID already exists
+
+**Testing**:
+- Added 4 comprehensive tests for custom goal IDs
+- All 91 memory tests pass
+- Tests cover:
+  - Custom ID creation (G_LORE_KEEPER)
+  - Auto-generated ID creation
+  - Duplicate ID error handling
+  - Coexistence of custom and auto IDs
+
+**Result**:
+LORE_KEEPER can now successfully create goal with ID "G_LORE_KEEPER" instead of getting auto-generated "G5".

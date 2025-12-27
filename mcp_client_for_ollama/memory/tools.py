@@ -461,7 +461,8 @@ class MemoryTools:
 
     def add_goal(
         self,
-        description: str,
+        goal_id: Optional[str] = None,
+        description: str = "",
         constraints: Optional[list] = None,
     ) -> str:
         """
@@ -470,6 +471,7 @@ class MemoryTools:
         Tool for users to add new goals as plans evolve.
 
         Args:
+            goal_id: Optional custom goal ID (e.g., 'G_LORE_KEEPER'). If not provided, auto-generates numeric ID.
             description: Clear description of the goal
             constraints: Optional list of constraints or requirements
 
@@ -487,12 +489,20 @@ class MemoryTools:
             if not memory:
                 return f"Error: Could not load memory for session {self.current_session_id}"
 
-            # Generate next goal ID
             existing_ids = [g.id for g in memory.goals]
-            next_num = len(existing_ids) + 1
-            while f"G{next_num}" in existing_ids:
-                next_num += 1
-            new_goal_id = f"G{next_num}"
+
+            # Determine goal ID
+            if goal_id:
+                # Custom goal ID provided - validate it's not already taken
+                if goal_id in existing_ids:
+                    return f"Error: Goal ID '{goal_id}' already exists. Use a different ID or omit to auto-generate."
+                new_goal_id = goal_id
+            else:
+                # Auto-generate next numeric goal ID
+                next_num = len(existing_ids) + 1
+                while f"G{next_num}" in existing_ids:
+                    next_num += 1
+                new_goal_id = f"G{next_num}"
 
             # Create new goal
             new_goal = Goal(
