@@ -583,3 +583,12 @@ Option B: Update existing session
 3. Retry: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
 
 Expected: LORE_KEEPER successfully creates features under goal G_LORE_KEEPER with priority field
+
+
+## File loading is not working again.
+TRACE: 
+🔍 Trace Session Summary
+Session ID: 20251227_112659
+Log file: /home/mcstar/Vault/Journal/.trace/trace_20251227_112659.json
+- now it's back to failing to load the relative files again.
+- USER_QUERY: read the content in the file notes/20251027_dream_anchor_chains.md and create a lore
