@@ -60,6 +60,13 @@ def default_config() -> dict:
             "session_ttl_days": 30,
             "auto_cleanup": False,
             "default_domain": "coding"
+        },
+        "vscode": {
+            "auto_load_active_file": False,  # Don't auto-load by default
+            "show_file_preview": True,       # Show first few lines when loading
+            "max_file_size": 100000,         # Max file size to auto-load (100KB)
+            "file_preview_lines": 5,         # Lines to show in preview
+            "show_on_startup": True          # Show VSCode status on startup
         }
     }
 

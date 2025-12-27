@@ -960,6 +960,9 @@ class MCPClient:
         self.print_auto_load_default_config_status()
         await self.display_check_for_updates()
 
+        # VSCode integration - auto-load active file if enabled
+        self.auto_load_vscode_file_on_startup()
+
         while True:
             try:
                 # Use await to call the async method
@@ -2617,6 +2620,11 @@ Please analyze this project and create an initial memory structure with:
         from .integrations.vscode import VSCodeIntegration
         from rich.panel import Panel
 
+        # Get config settings
+        vscode_config = self.config.get('vscode', {})
+        max_file_size = vscode_config.get('max_file_size', 100000)  # 100KB default
+        preview_lines = vscode_config.get('file_preview_lines', 5)
+
         # Check if running in VSCode
         if not VSCodeIntegration.is_running_in_vscode():
             self.console.print("[yellow]Not running in VSCode terminal[/yellow]")
@@ -2636,9 +2644,10 @@ Please analyze this project and create an initial memory structure with:
             self.console.print(f"[red]File not found:[/red] {active_file}")
             return
 
-        # Check file size (warn if > 100KB)
+        # Check file size (warn if exceeds config limit)
         size_kb = file_info.size / 1024
-        if size_kb > 100:
+        max_kb = max_file_size / 1024
+        if file_info.size > max_file_size:
             self.console.print(f"[yellow]⚠ Large file:[/yellow] {size_kb:.1f} KB")
             self.console.print("[dim]Loading large files may impact performance[/dim]")
 
@@ -2661,15 +2670,15 @@ Please analyze this project and create an initial memory structure with:
             self.console.print(f"\n[bold green]✓ Loaded:[/bold green] {active_file}")
             self.console.print(f"[dim]({len(contents)} chars, {len(contents.splitlines())} lines)[/dim]")
 
-            # Show preview (first 5 lines)
+            # Show preview (first N lines from config)
             lines = contents.splitlines()
-            preview_lines = min(5, len(lines))
-            self.console.print(f"\n[dim]Preview (first {preview_lines} lines):[/dim]")
-            for i, line in enumerate(lines[:preview_lines], 1):
+            preview_count = min(preview_lines, len(lines))
+            self.console.print(f"\n[dim]Preview (first {preview_count} lines):[/dim]")
+            for i, line in enumerate(lines[:preview_count], 1):
                 self.console.print(f"[dim]{i:3d}[/dim]  {line[:80]}")
 
-            if len(lines) > preview_lines:
-                self.console.print(f"[dim]     [+{len(lines) - preview_lines} more lines][/dim]")
+            if len(lines) > preview_count:
+                self.console.print(f"[dim]     [+{len(lines) - preview_count} more lines][/dim]")
 
             self.console.print(f"\n[cyan]The file content is now in your chat context.[/cyan]")
             self.console.print(f"[dim]Use 'clear' or 'cc' to remove it from context[/dim]\n")
@@ -2678,6 +2687,91 @@ Please analyze this project and create an initial memory structure with:
             self.console.print(f"[red]✗ Error:[/red] File appears to be binary (not text)")
         except Exception as e:
             self.console.print(f"[red]✗ Error loading file:[/red] {e}")
+
+    def auto_load_vscode_file_on_startup(self):
+        """Auto-load VSCode active file on startup based on config settings"""
+        from .integrations.vscode import VSCodeIntegration
+        from rich.panel import Panel
+
+        # Check if VSCode integration is enabled in config
+        vscode_config = self.config.get('vscode', {})
+        auto_load = vscode_config.get('auto_load_active_file', False)
+        show_on_startup = vscode_config.get('show_on_startup', True)
+        max_file_size = vscode_config.get('max_file_size', 100000)  # 100KB default
+        preview_lines = vscode_config.get('file_preview_lines', 5)
+        show_preview = vscode_config.get('show_file_preview', True)
+
+        # Check if running in VSCode
+        is_vscode = VSCodeIntegration.is_running_in_vscode()
+
+        # Show status if enabled and running in VSCode
+        if is_vscode and show_on_startup:
+            active_file = VSCodeIntegration.get_active_file()
+            if active_file:
+                self.console.print(f"[cyan]📄 VSCode:[/cyan] {active_file}")
+                if not auto_load:
+                    self.console.print("[dim]   Tip: Use 'vscode-file' or 'vf' to load this file into context[/dim]\n")
+
+        # Auto-load if enabled
+        if not auto_load or not is_vscode:
+            return
+
+        # Get active file
+        active_file = VSCodeIntegration.get_active_file()
+        if not active_file:
+            return
+
+        # Check if file exists
+        file_info = VSCodeIntegration.get_file_info(active_file)
+        if not file_info or not file_info.exists:
+            self.console.print(f"[yellow]⚠ VSCode file not found:[/yellow] {active_file}\n")
+            return
+
+        # Check file size limit
+        if file_info.size > max_file_size:
+            size_kb = file_info.size / 1024
+            max_kb = max_file_size / 1024
+            self.console.print(f"[yellow]⚠ VSCode file too large:[/yellow] {size_kb:.1f} KB (limit: {max_kb:.1f} KB)")
+            self.console.print(f"[dim]   Use 'vscode-file' to load it manually, or increase vscode.max_file_size in config[/dim]\n")
+            return
+
+        # Load file contents
+        try:
+            with open(active_file, 'r', encoding='utf-8') as f:
+                contents = f.read()
+
+            # Add to chat history as system context
+            file_name = active_file.split('/')[-1]
+            context_message = f"# File: {active_file}\n\n```\n{contents}\n```"
+
+            # Add to conversation history
+            self.chat_history.append({
+                "role": "user",
+                "content": f"[Context: Auto-loaded file {file_name}]\n\n{context_message}"
+            })
+
+            # Display success (more compact than manual load)
+            size_kb = file_info.size / 1024
+            line_count = len(contents.splitlines())
+            self.console.print(f"[bold green]✓ Auto-loaded:[/bold green] {file_name} [dim]({size_kb:.1f} KB, {line_count} lines)[/dim]")
+
+            # Show preview if enabled
+            if show_preview:
+                lines = contents.splitlines()
+                preview_count = min(preview_lines, len(lines))
+                self.console.print(f"[dim]Preview:[/dim]")
+                for i, line in enumerate(lines[:preview_count], 1):
+                    self.console.print(f"[dim]{i:3d}[/dim]  {line[:80]}")
+
+                if len(lines) > preview_count:
+                    self.console.print(f"[dim]     [+{len(lines) - preview_count} more lines][/dim]")
+
+            self.console.print(f"[dim]File content is in chat context. Use 'clear' or 'cc' to remove.[/dim]\n")
+
+        except UnicodeDecodeError:
+            self.console.print(f"[yellow]⚠ VSCode file appears to be binary:[/yellow] {active_file}\n")
+        except Exception as e:
+            self.console.print(f"[yellow]⚠ Error auto-loading VSCode file:[/yellow] {e}\n")
 
     def _display_memory_progress_summary(self):
         """Display a compact summary of memory session progress after task completion"""
