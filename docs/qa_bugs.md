@@ -841,3 +841,157 @@ All magic system references replaced with religious systems:
 ✅ LORE_KEEPER now consistently references religious systems
 ✅ No magic system references remain in agent definition
 ✅ Examples updated to reflect religious themes
+
+
+## ✅ FIXED in v0.35.1: Startup Error - AttributeError 'config'
+
+**Issue**: Startup error on v0.35.0
+
+╭─────────────────────────────────────────────────────── Traceback (most recent call last) ────────────────────────────────────────────────────────╮
+│ /home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp_client_for_ollama/client.py:3009 in main                                 │
+│                                                                                                                                                  │
+│   3006 │   │   │   auto_discovery = True                                                                                                         │
+│   3007 │                                                                                                                                         │
+│   3008 │   # Run the async main function                                                                                                         │
+│ ❱ 3009 │   asyncio.run(async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, mod                                                  │
+│   3010                                                                                                                                           │
+│   3011 async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, ho                                                  │
+│   3012 │   """Asynchronous main function to run the MCP Client for Ollama"""                                                                     │
+│                                                                                                                                                  │
+│ ╭─────────────────── locals ────────────────────╮                                                                                                │
+│ │ auto_discovery = False                        │                                                                                                │
+│ │           host = 'https://vicunaapi.ngrok.io' │                                                                                                │
+│ │     mcp_server = None                         │                                                                                                │
+│ │ mcp_server_url = None                         │                                                                                                │
+│ │          model = 'qwen2.5:32b'                │                                                                                                │
+│ │          query = None                         │                                                                                                │
+│ │          quiet = False                        │                                                                                                │
+│ │   servers_json = None                         │                                                                                                │
+│ │      trace_dir = None                         │                                                                                                │
+│ │  trace_enabled = None                         │                                                                                                │
+│ │    trace_level = None                         │                                                                                                │
+│ │        version = None                         │                                                                                                │
+│ ╰───────────────────────────────────────────────╯                                                                                                │
+│                                                                                                                                                  │
+│ /usr/lib/python3.10/asyncio/runners.py:44 in run                                                                                                 │
+│                                                                                                                                                  │
+│   41 │   │   events.set_event_loop(loop)                                                                                                         │
+│   42 │   │   if debug is not None:                                                                                                               │
+│   43 │   │   │   loop.set_debug(debug)                                                                                                           │
+│ ❱ 44 │   │   return loop.run_until_complete(main)                                                                                                │
+│   45 │   finally:                                                                                                                                │
+│   46 │   │   try:                                                                                                                                │
+│   47 │   │   │   _cancel_all_tasks(loop)                                                                                                         │
+│                                                                                                                                                  │
+│ ╭──────────────────────────────── locals ────────────────────────────────╮                                                                       │
+│ │ debug = None                                                           │                                                                       │
+│ │  loop = <_UnixSelectorEventLoop running=False closed=True debug=False> │                                                                       │
+│ │  main = <coroutine object async_main at 0x7f34ef4a9930>                │                                                                       │
+│ ╰────────────────────────────────────────────────────────────────────────╯                                                                       │
+│                                                                                                                                                  │
+│ /usr/lib/python3.10/asyncio/base_events.py:649 in run_until_complete                                                                             │
+│                                                                                                                                                  │
+│    646 │   │   if not future.done():                                                                                                             │
+│    647 │   │   │   raise RuntimeError('Event loop stopped before Future completed.')                                                             │
+│    648 │   │                                                                                                                                     │
+│ ❱  649 │   │   return future.result()                                                                                                            │
+│    650 │                                                                                                                                         │
+│    651 │   def stop(self):                                                                                                                       │
+│    652 │   │   """Stop running the event loop.                                                                                                   │
+│                                                                                                                                                  │
+│ ╭─────────────────────────────────────────────────────────────────── locals ───────────────────────────────────────────────────────────────────╮ │
+│ │   future = <Task finished name='Task-1' coro=<async_main() done, defined at                                                                  │ │
+│ │            /home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp_client_for_ollama/client.py:3011>                         │ │
+│ │            exception=AttributeError("'MCPClient' object has no attribute 'config'")>                                                         │ │
+│ │ new_task = True                                                                                                                              │ │
+│ │     self = <_UnixSelectorEventLoop running=False closed=True debug=False>                                                                    │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                                                                  │
+│ /home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp_client_for_ollama/client.py:3147 in async_main                           │
+│                                                                                                                                                  │
+│   3144 │   │   │   │   console.print("\n[green]Query completed successfully.[/green]")                                                           │
+│   3145 │   │   else:                                                                                                                             │
+│   3146 │   │   │   # Interactive mode - enter chat loop                                                                                          │
+│ ❱ 3147 │   │   │   await client.chat_loop()                                                                                                      │
+│   3148 │   finally:                                                                                                                              │
+│   3149 │   │   await client.cleanup()                                                                                                            │
+│   3150                                                                                                                                           │
+│                                                                                                                                                  │
+│ ╭───────────────────────────────────────── locals ─────────────────────────────────────────╮                                                     │
+│ │       auto_discovery = False                                                             │                                                     │
+│ │ auto_discovery_final = False                                                             │                                                     │
+│ │               client = <mcp_client_for_ollama.client.MCPClient object at 0x7f34ef53d240> │                                                     │
+│ │          config_path = '.config/config.json'                                             │                                                     │
+│ │              console = <console width=148 ColorSystem.TRUECOLOR>                         │                                                     │
+│ │  default_config_json = '.config/config.json'                                             │                                                     │
+│ │                 host = 'https://vicunaapi.ngrok.io'                                      │                                                     │
+│ │           mcp_server = None                                                              │                                                     │
+│ │       mcp_server_url = None                                                              │                                                     │
+│ │                model = 'qwen2.5:32b'                                                     │                                                     │
+│ │                query = None                                                              │                                                     │
+│ │                quiet = False                                                             │                                                     │
+│ │         servers_json = None                                                              │                                                     │
+│ │            trace_dir = None                                                              │                                                     │
+│ │        trace_enabled = None                                                              │                                                     │
+│ │          trace_level = None                                                              │                                                     │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────╯                                                     │
+│                                                                                                                                                  │
+│ /home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp_client_for_ollama/client.py:964 in chat_loop                             │
+│                                                                                                                                                  │
+│    961 │   │   await self.display_check_for_updates()                                                                                            │
+│    962 │   │                                                                                                                                     │
+│    963 │   │   # VSCode integration - auto-load active file if enabled                                                                           │
+│ ❱  964 │   │   self.auto_load_vscode_file_on_startup()                                                                                           │
+│    965 │   │                                                                                                                                     │
+│    966 │   │   while True:                                                                                                                       │
+│    967 │   │   │   try:                                                                                                                          │
+│                                                                                                                                                  │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮                                                                     │
+│ │ self = <mcp_client_for_ollama.client.MCPClient object at 0x7f34ef53d240> │                                                                     │
+│ ╰──────────────────────────────────────────────────────────────────────────╯                                                                     │
+│                                                                                                                                                  │
+│ /home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp_client_for_ollama/client.py:2697 in auto_load_vscode_file_on_startup     │
+│                                                                                                                                                  │
+│   2694 │   │   from rich.panel import Panel                                                                                                      │
+│   2695 │   │                                                                                                                                     │
+│   2696 │   │   # Check if VSCode integration is enabled in config                                                                                │
+│ ❱ 2697 │   │   vscode_config = self.config.get('vscode', {})                                                                                     │
+│   2698 │   │   auto_load = vscode_config.get('auto_load_active_file', False)                                                                     │
+│   2699 │   │   show_on_startup = vscode_config.get('show_on_startup', True)                                                                      │
+│   2700 │   │   max_file_size = vscode_config.get('max_file_size', 100000)  # 100KB default                                                       │
+│                                                                                                                                                  │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮                                                                     │
+│ │ self = <mcp_client_for_ollama.client.MCPClient object at 0x7f34ef53d240> │                                                                     │
+│ ╰──────────────────────────────────────────────────────────────────────────╯
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+AttributeError: 'MCPClient' object has no attribute 'config'
+
+**Root Cause**:
+The VSCode integration methods added in v0.35.0 incorrectly tried to access `self.config` which doesn't exist in MCPClient. The MCPClient class uses `self.config_manager` to handle configuration, not a direct `self.config` attribute.
+
+**Error Location**:
+- Line 2697 in `auto_load_vscode_file_on_startup()`: `vscode_config = self.config.get('vscode', {})`
+- Also in `load_vscode_file()`: Same pattern of accessing `self.config`
+
+**Fix Applied** (v0.35.1):
+Changed both methods to properly load config via config_manager:
+
+```python
+# OLD (broken):
+vscode_config = self.config.get('vscode', {})
+
+# NEW (fixed):
+config_data = self.config_manager.load_configuration("default") or {}
+vscode_config = config_data.get('vscode', {})
+```
+
+**Modified Files**:
+- mcp_client_for_ollama/client.py - Fixed config access in both VSCode methods
+- mcp_client_for_ollama/__init__.py - Version 0.35.1
+- pyproject.toml - Version 0.35.1
+- docs/qa_bugs.md - Documentation
+
+**Result**:
+✅ Application starts without errors
+✅ VSCode integration config properly loaded
+✅ Auto-load and manual load both work correctly        

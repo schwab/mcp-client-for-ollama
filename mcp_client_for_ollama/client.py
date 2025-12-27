@@ -2620,8 +2620,9 @@ Please analyze this project and create an initial memory structure with:
         from .integrations.vscode import VSCodeIntegration
         from rich.panel import Panel
 
-        # Get config settings
-        vscode_config = self.config.get('vscode', {})
+        # Get config settings from config_manager
+        config_data = self.config_manager.load_configuration("default") or {}
+        vscode_config = config_data.get('vscode', {})
         max_file_size = vscode_config.get('max_file_size', 100000)  # 100KB default
         preview_lines = vscode_config.get('file_preview_lines', 5)
 
@@ -2693,8 +2694,9 @@ Please analyze this project and create an initial memory structure with:
         from .integrations.vscode import VSCodeIntegration
         from rich.panel import Panel
 
-        # Check if VSCode integration is enabled in config
-        vscode_config = self.config.get('vscode', {})
+        # Get config settings from config_manager
+        config_data = self.config_manager.load_configuration("default") or {}
+        vscode_config = config_data.get('vscode', {})
         auto_load = vscode_config.get('auto_load_active_file', False)
         show_on_startup = vscode_config.get('show_on_startup', True)
         max_file_size = vscode_config.get('max_file_size', 100000)  # 100KB default
