@@ -215,3 +215,59 @@ Added to decision tree:
 - ✅ "Create the Lore analysis" now triggers LORE_KEEPER
 - ✅ "Extract lore", "Analyze lore", "Generate lore" also trigger LORE_KEEPER
 - ✅ LORE_KEEPER will store in memory itself (no extra MEMORY_EXECUTOR tasks needed)
+
+## ✅ FIXED in v0.33.2: PLANNER Using Placeholder Paths Instead of Real Paths
+
+**User Query**: "read the file in notes/20251027_dream_anchor_chains.md and create a lore for environment and save it to memory"
+
+**Issue** (TRACE: 20251226_210243):
+- User gave relative path: `notes/20251027_dream_anchor_chains.md`
+- PLANNER should have converted to absolute path using working directory
+- Instead, PLANNER literally used placeholder from examples: `/absolute/path/to/notes/20251027_dream_anchor_chains.md`
+- This is a **hallucinated path** that doesn't exist!
+
+**Root Cause**:
+PLANNER guidance examples used placeholder paths like:
+```
+- Read /absolute/path/to/notes/file1.md
+- Read /absolute/path/to/notes/file2.md
+```
+
+PLANNER copied these **literally** instead of understanding they were placeholders to be replaced with actual working directory.
+
+**Fix Applied** (v0.33.2):
+
+1. **Replaced placeholder examples with real examples**:
+```
+Old (caused copying):
+- Read /absolute/path/to/notes/file1.md  ← Copied literally!
+
+New (shows actual conversion):
+Working Directory: /home/user/project
+Relative path: notes
+Absolute path: /home/user/project/notes
+Task: "Read /home/user/project/notes/file.md"
+```
+
+2. **Added critical warning**:
+```
+🚨 CRITICAL: NEVER USE PLACEHOLDER PATHS!
+
+❌ WRONG: "/absolute/path/to/file.md" ← Placeholder!
+✅ CORRECT: "/home/user/project/notes/file.md" ← Real path!
+```
+
+3. **Added path conversion algorithm**:
+```
+1. User provides: "notes/file.md"
+2. Working directory: "/home/user/project"
+3. Check if absolute (starts with /):
+   - If YES: use as-is
+   - If NO: prepend working directory
+4. Result: "/home/user/project/notes/file.md"
+```
+
+**Result**:
+- ✅ PLANNER will now convert relative paths correctly
+- ✅ No more placeholder path copying
+- ✅ Uses actual working directory from session context
