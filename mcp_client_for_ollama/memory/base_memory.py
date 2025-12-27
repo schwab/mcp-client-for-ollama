@@ -86,6 +86,7 @@ class Feature:
     tests: List[str] = field(default_factory=list)
     test_results: List[TestResult] = field(default_factory=list)
     notes: str = ""
+    priority: str = "medium"  # Priority level: high, medium, low
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     assigned_to: Optional[str] = None  # Agent type
@@ -100,6 +101,7 @@ class Feature:
             "tests": self.tests,
             "test_results": [tr.to_dict() for tr in self.test_results],
             "notes": self.notes,
+            "priority": self.priority,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "assigned_to": self.assigned_to,
@@ -116,6 +118,7 @@ class Feature:
             tests=data.get("tests", []),
             test_results=[TestResult.from_dict(tr) for tr in data.get("test_results", [])],
             notes=data.get("notes", ""),
+            priority=data.get("priority", "medium"),  # Default to medium for backward compatibility
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
             assigned_to=data.get("assigned_to"),

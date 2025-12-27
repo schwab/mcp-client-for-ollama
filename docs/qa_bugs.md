@@ -465,3 +465,121 @@ def get_goal_by_id(self, goal_id: str) -> Optional[Goal]:
 
 **Testing Required**: User should retry: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
 Expected: LORE_KEEPER reads file and successfully stores lore in memory under goal G_LORE_KEEPER
+
+
+## ✅ FIXED in v0.33.6: LORE_KEEPER Memory Failures - Missing Priority Field
+
+**User Query**: Testing LORE_KEEPER memory storage after v0.33.5 fix
+
+**Issue** (TRACE: 20251227_100159):
+- ❌ Still not saving memories in goal G_LORE_KEEPER
+- ❌ Error: `Feature.__init__() got an unexpected keyword argument 'priority'`
+- ❌ Error: `'Feature' object has no attribute 'priority'`
+- ❌ Error: `Goal 'G_LORE_KEEPER' not found in memory`
+- Wrong goal created: G6 instead of G_LORE_KEEPER
+- No features stored under the goal
+
+**Root Cause #1: Missing `priority` Field**
+
+The `Feature` dataclass in `base_memory.py` was missing the `priority` field!
+
+**Evidence from trace**:
+```
+Line 23: builtin.add_feature(goal_id="G5", ...)
+         Error: Feature.__init__() got an unexpected keyword argument 'priority'
+
+Line 27: builtin.add_feature(goal_id="G5", ...)
+         Error: Feature.__init__() got an unexpected keyword argument 'priority'
+
+Line 33: builtin.update_feature(feature_id="F5", ...)
+         Error: 'Feature' object has no attribute 'priority'
+```
+
+**The Problem**:
+- `memory/tools.py` uses `feature.priority` (lines 437-440, 650, 703, 806, 826)
+- `memory/tools.py` `add_feature()` accepts `priority` parameter (line 650)
+- But `Feature` dataclass didn't have a `priority` field!
+- This broke all feature creation and updates
+
+**Fix Applied** (v0.33.6):
+
+Added `priority` field to Feature dataclass:
+
+```python
+@dataclass
+class Feature:
+    id: str
+    description: str
+    status: FeatureStatus = FeatureStatus.PENDING
+    criteria: List[str] = field(default_factory=list)
+    tests: List[str] = field(default_factory=list)
+    test_results: List[TestResult] = field(default_factory=list)
+    notes: str = ""
+    priority: str = "medium"  # NEW: Priority level (high, medium, low)
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+    assigned_to: Optional[str] = None
+```
+
+Updated serialization:
+- `to_dict()`: Added `"priority": self.priority`
+- `from_dict()`: Added `priority=data.get("priority", "medium")` for backward compatibility
+
+**Root Cause #2: Goal ID Mismatch**
+
+LORE_KEEPER's system prompt says:
+- **YOUR GOAL ID: G_LORE_KEEPER**
+- Should create/use goal with ID `G_LORE_KEEPER`
+
+But the memory session has:
+- G5: "Maintain world-building consistency..." (created by INITIALIZER?)
+- G6: Same description (duplicate created when LORE_KEEPER failed?)
+
+**Evidence from trace**:
+```
+Line 23, 27: LORE_KEEPER tries goal_id="G5" (gets priority error)
+Line 32: LORE_KEEPER tries goal_id="G_LORE_KEEPER" (gets "not found" error)
+```
+
+**Why This Happened**:
+1. Session initialized with numeric goal IDs (G1, G2, G3, G4, G5)
+2. G5 created for "lore keeping" but with wrong ID format
+3. LORE_KEEPER expects `G_LORE_KEEPER` per its system prompt
+4. LORE_KEEPER confused - tries both G5 and G_LORE_KEEPER
+5. Both fail - creates duplicate G6
+
+**Solution**:
+
+Option A (Recommended): Let LORE_KEEPER create its own goal
+- LORE_KEEPER will call `builtin.add_goal(goal_id='G_LORE_KEEPER', ...)`
+- Now that priority fix is done, this should work
+- Results in cleaner goal ID (G_LORE_KEEPER, not G5)
+
+Option B: Update existing session
+- Manually rename G5 → G_LORE_KEEPER in memory file
+- Or delete G5/G6 and let LORE_KEEPER recreate
+
+**Testing**:
+- All 24 memory tests pass (was 23, now 24 with priority field)
+- Feature creation with priority now works
+- Feature serialization with priority now works
+
+**Result** (v0.33.6):
+- ✅ `builtin.add_feature(..., priority="high")` now works
+- ✅ `feature.priority` attribute exists and is serializable
+- ✅ Backward compatible - old features without priority load as "medium"
+- ✅ LORE_KEEPER can now create features with priority
+- ⚠️ Goal ID mismatch still needs user action (delete G5/G6 or let agent recreate)
+
+**Files Modified**:
+- mcp_client_for_ollama/memory/base_memory.py - Added priority field to Feature
+- mcp_client_for_ollama/__init__.py - Version 0.33.6
+- pyproject.toml - Version 0.33.6
+- docs/qa_bugs.md - Complete analysis
+
+**Testing Required**:
+1. Delete or rename goals G5/G6 in memory file, OR
+2. Let LORE_KEEPER create its own G_LORE_KEEPER goal on next run
+3. Retry: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+
+Expected: LORE_KEEPER successfully creates features under goal G_LORE_KEEPER with priority field
