@@ -271,3 +271,131 @@ Task: "Read /home/user/project/notes/file.md"
 - ✅ PLANNER will now convert relative paths correctly
 - ✅ No more placeholder path copying
 - ✅ Uses actual working directory from session context
+
+## ✅ FIXED in v0.33.3: PLANNER Still Using /path/to/ Placeholders
+
+**User Query**: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore for this content"
+
+**Issue** (TRACE: 20251226_211007):
+- Working directory: `/home/mcstar/Vault/Journal`
+- User provided relative path: `notes/20251027_dream_anchor_chains.md`
+- Expected absolute path: `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
+- PLANNER output: `/path/to/notes/20251027_dream_anchor_chains.md` (STILL a placeholder!)
+- LORE_KEEPER tried to read it: "Error: Permission denied to access file outside working directory."
+
+**Root Cause**:
+v0.33.2 fixed `/absolute/path/to/` placeholders but missed `/path/to/` placeholders!
+
+The PLANNER prompt had more placeholder examples in the "Example Patterns" section:
+```
+✅ Task: "Use ACCENT_WRITER... to read /path/to/story.md"
+files = [f for f in os.listdir('/path/to/notes') if f.endswith('.md')]
+content = tools.call('builtin.read_file', file_path=f'/path/to/notes/{file}')
+1. List all .md files in /path/to/notes
+✅ Task: "Use QUALITY_MONITOR... to read /path/to/chapter1.md"
+```
+
+PLANNER was still copying these `/path/to/` patterns literally!
+
+**Fix Applied** (v0.33.3):
+
+Replaced ALL remaining placeholder paths in PLANNER prompt with realistic working directory examples:
+
+1. `/path/to/story.md` → `/home/user/mybook/story.md`
+2. `/path/to/notes` → `/home/user/mybook/notes` (multiple instances in Python and task examples)
+3. `/path/to/chapter1.md` → `/home/user/mybook/chapter1.md`
+
+Added "Working Directory:" and "Conversion:" labels to make examples explicit:
+```
+**Pattern: Analyze dialogue in file**
+User: "Check dialogue in story.md for accent consistency"
+Working Directory: /home/user/mybook
+Conversion: story.md → /home/user/mybook/story.md
+✅ Task: "Use ACCENT_WRITER with builtin.read_file to read /home/user/mybook/story.md..."
+```
+
+**Result**:
+- ✅ NO MORE placeholders in PLANNER prompt (verified: `/absolute/path/to/` AND `/path/to/` both eliminated)
+- ✅ All examples show actual working directory conversion
+- ✅ PLANNER will now properly convert relative paths to absolute
+
+**Files Modified**:
+- mcp_client_for_ollama/agents/definitions/planner.json - Replaced all `/path/to/` placeholders
+- mcp_client_for_ollama/__init__.py - Version 0.33.3
+- pyproject.toml - Version 0.33.3
+- docs/qa_bugs.md - Bug documentation
+
+**Testing Required**: User should retry: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+
+
+## ✅ FIXED in v0.33.4: PLANNER Copying Example Paths Instead of Converting
+
+**User Query**: "read the content in the file notes/20251027_dream_anchor_chains.md and create a lore"
+
+**Issue** (TRACE: 20251226_212848):
+- Working directory: `/home/mcstar/Vault/Journal`
+- User provided: `notes/20251027_dream_anchor_chains.md`
+- Expected: `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
+- PLANNER output: `/home/user/notes/20251027_dream_anchor_chains.md` (copied from examples!)
+- Result: Permission denied error - `/home/user/` doesn't exist
+
+**Root Cause - FUNDAMENTAL FLAW IN APPROACH**:
+v0.33.3 replaced placeholders with "realistic" examples, but LLM kept copying them!
+
+The problem: Showing EXAMPLES with specific paths teaches the LLM to COPY, not CONVERT
+- Showed `/home/user/mybook/story.md` as example
+- PLANNER copied `/home/user/` pattern instead of using actual working directory
+- No matter what paths we show, LLM pattern-matches and copies them
+
+**Fix Applied** (v0.33.4):
+
+**REMOVED**: Example-based learning (causes copying)
+**ADDED**: Mandatory preprocessing algorithm
+
+Changed from:
+```
+Example: Working Directory: /home/user/mybook
+         User: "read notes"
+         Task: "/home/user/mybook/notes"  ← LLM copies this!
+```
+
+To:
+```
+🚨 MANDATORY PATH CONVERSION PRE-PROCESSING 🚨
+
+STEP 1: EXTRACT paths from user query
+STEP 2: GET working directory from context
+STEP 3: CONVERT each path (if starts with / → use as-is, else prepend working dir)
+STEP 4: USE converted paths in ALL task descriptions
+
+VALIDATION BEFORE OUTPUT:
+- Check EVERY path in task descriptions
+- Does it start with ACTUAL working directory?
+- If you see "/home/user/" but working dir is "/home/mcstar/" → WRONG!
+```
+
+**New Approach Uses VALIDATION Examples** (not copyable):
+```
+Example 1:
+Working Directory: /home/mcstar/Vault/Journal
+User says: "read files in notes"
+YOU MUST OUTPUT: "/home/mcstar/Vault/Journal/notes"
+❌ WRONG: "/home/user/notes" or "/path/to/notes"
+```
+
+The examples now show "right vs wrong" for VALIDATION, not a pattern to copy.
+
+**Result**:
+- ✅ No more copyable path examples in prompt
+- ✅ Mandatory 4-step preprocessing forces correct conversion
+- ✅ Validation checklist catches mistakes before output
+- ✅ PLANNER must use ACTUAL working directory, not example paths
+
+**Files Modified**:
+- mcp_client_for_ollama/agents/definitions/planner.json - Replaced examples with mandatory preprocessing
+- mcp_client_for_ollama/__init__.py - Version 0.33.4
+- pyproject.toml - Version 0.33.4
+- docs/qa_bugs.md - Bug documentation
+
+**Testing Required**: User should retry: "read the content in the file notes/20251027_dream_anchor_chains.md"
+Expected: PLANNER uses `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
