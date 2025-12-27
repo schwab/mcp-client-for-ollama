@@ -900,6 +900,10 @@ class MCPClient:
                 if self.delegation_client and self.delegation_client.memory_enabled and \
                    hasattr(self.delegation_client, 'current_memory') and self.delegation_client.current_memory:
                     self._display_memory_progress_summary()
+                # Show trace summary even if memory is not enabled
+                elif self.delegation_client and hasattr(self.delegation_client, 'trace_logger') and \
+                     self.delegation_client.trace_logger.is_enabled():
+                    self.delegation_client.trace_logger.print_summary(self.console)
 
             except Exception as e:
                 if not self.quiet_mode:

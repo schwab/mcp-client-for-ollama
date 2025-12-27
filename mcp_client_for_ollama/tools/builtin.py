@@ -34,6 +34,7 @@ class BuiltinToolManager:
             "execute_python_code": self._handle_execute_python_code,
             "execute_bash_command": self._handle_execute_bash_command,
             "run_pytest": self._handle_run_pytest,
+            "validate_file_path": self._handle_validate_file_path,
             "read_file": self._handle_read_file,
             "write_file": self._handle_write_file,
             "patch_file": self._handle_patch_file,
@@ -172,13 +173,36 @@ class BuiltinToolManager:
 
         read_file_tool = Tool(
             name="builtin.read_file",
-            description="Read the contents of a file. Path must be relative to the current working directory.",
+            description=(
+                "Read the contents of a file. Path must be relative to the current working directory. "
+                "Supports partial file reading with offset and limit parameters for efficient handling of large files. "
+                "Returns content with line numbers (cat -n format)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
                         "description": "The relative path to the file to read."
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": (
+                            "The line number to start reading from (1-indexed). "
+                            "If not specified, reads from the beginning of the file. "
+                            "Example: offset=50 starts reading from line 50."
+                        ),
+                        "minimum": 1
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "The maximum number of lines to read. "
+                            "If not specified, reads all lines from offset to end of file. "
+                            "Useful for reading large files in chunks. "
+                            "Example: offset=1, limit=100 reads lines 1-100."
+                        ),
+                        "minimum": 1
                     }
                 },
                 "required": ["path"]
@@ -326,6 +350,38 @@ class BuiltinToolManager:
                     }
                 },
                 "required": ["path"]
+            }
+        )
+
+
+        validate_file_path_tool = Tool(
+            name="builtin.validate_file_path",
+            description=(
+                "REQUIRED FIRST STEP for file operations: Extract and validate a file path from your task description. "
+                "This tool locks the path and returns the validated absolute path that you MUST use for all subsequent file operations. "
+                "Call this BEFORE any file operations (read_file, write_file, patch_file, file_exists, process_document, etc.). "
+                "This prevents path hallucination and ensures you use the exact path from your task description."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "The exact file path extracted from your task description. "
+                            "Copy it character-for-character from the task. "
+                            "Can be absolute (starts with /) or relative to working directory."
+                        )
+                    },
+                    "task_description": {
+                        "type": "string",
+                        "description": (
+                            "Your complete task description. "
+                            "This helps verify you extracted the path correctly."
+                        )
+                    }
+                },
+                "required": ["path", "task_description"]
             }
         )
 
@@ -868,7 +924,7 @@ class BuiltinToolManager:
         # Build the tool list - include memory tools only if memory_tools is available
         tools = [
             set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool, run_pytest_tool,
-            read_file_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
+            read_file_tool, validate_file_path_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
             create_directory_tool, delete_file_tool, file_exists_tool, get_file_info_tool,
             read_image_tool, open_file_tool, get_config_tool, update_config_section_tool,
             add_mcp_server_tool, remove_mcp_server_tool, list_mcp_servers_tool, get_config_path_tool
@@ -1536,14 +1592,72 @@ class BuiltinToolManager:
 
         return ignored
 
-    def _handle_read_file(self, args: Dict[str, Any]) -> str:
-        """Handles the 'read_file' tool call."""
+    def _handle_validate_file_path(self, args: Dict[str, Any]) -> str:
+        """Validates and locks a file path from the task description.
+
+        This is a REQUIRED first step for file operations. It:
+        1. Extracts the path from task description
+        2. Validates it's correct (absolute or relative)
+        3. Converts relative to absolute using working directory
+        4. Returns the LOCKED path that must be used for all operations
+        """
         path = args.get("path")
+        task_desc = args.get("task_description", "")
+
+        if not path:
+            return (
+                "Error: 'path' argument is required.\n"
+                "Extract the EXACT file path from your task description and provide it here.\n"
+                "Example: {\"path\": \"/home/user/docs/file.pdf\", \"task_description\": \"...your task...\"}"
+            )
+
+        # Validate the path
+        is_valid, result = self._validate_path(path, allow_absolute=True)
+
+        if not is_valid:
+            return result
+
+        resolved_path = result
+
+        # Check if path exists (informational, not required)
+        exists = os.path.exists(resolved_path)
+        exists_msg = "✓ File exists" if exists else "⚠ File does not exist yet (will be created if you write to it)"
+
+        # Return the locked path
+        return (
+            f"✓ PATH LOCKED: {resolved_path}\n"
+            f"\n"
+            f"Status: {exists_msg}\n"
+            f"\n"
+            f"CRITICAL: You MUST use this EXACT path for ALL subsequent file operations in this task.\n"
+            f"DO NOT modify, shorten, or change this path.\n"
+            f"DO NOT use any other path variations.\n"
+            f"\n"
+            f"For reference, your task was:\n"
+            f"{task_desc[:200]}{'...' if len(task_desc) > 200 else ''}\n"
+            f"\n"
+            f"Next: Use this locked path in your file operations (read_file, write_file, etc.)"
+        )
+
+    def _handle_read_file(self, args: Dict[str, Any]) -> str:
+        """Handles the 'read_file' tool call with optional partial reading support."""
+        path = args.get("path")
+        offset = args.get("offset")  # 1-indexed line number to start from
+        limit = args.get("limit")    # Number of lines to read
+
         if not path:
             return (
                 "Error: 'path' argument is required for read_file.\n"
-                "Example: {\"path\": \"src/main.py\"}"
+                "Example: {\"path\": \"src/main.py\"}\n"
+                "Example with partial read: {\"path\": \"src/main.py\", \"offset\": 50, \"limit\": 100}"
             )
+
+        # Validate offset and limit if provided
+        if offset is not None and offset < 1:
+            return "Error: 'offset' must be a positive integer (1-indexed line number)."
+
+        if limit is not None and limit < 1:
+            return "Error: 'limit' must be a positive integer (number of lines to read)."
 
         # Check for internal-only parameter to allow absolute paths
         allow_absolute = args.get("__internal_allow_absolute", False)
@@ -1583,11 +1697,60 @@ class BuiltinToolManager:
                     "  - Specify the actual file path within the directory"
                 )
 
+            # Read file with partial reading support
             with open(resolved_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+                lines = f.readlines()
 
-            file_size = len(content)
-            return f"✓ File '{path}' read successfully. Size: {file_size} bytes\n\nContent:\n{content}"
+            total_lines = len(lines)
+
+            # Calculate the slice range
+            if offset is None:
+                start_line = 0  # 0-indexed for Python slicing
+            else:
+                start_line = offset - 1  # Convert 1-indexed to 0-indexed
+
+            if limit is None:
+                end_line = total_lines
+            else:
+                end_line = start_line + limit
+
+            # Validate range
+            if start_line >= total_lines:
+                return (
+                    f"Error: offset={offset} is beyond the end of the file.\n"
+                    f"File '{path}' has {total_lines} lines.\n"
+                    f"💡 Tip: Use offset between 1 and {total_lines}"
+                )
+
+            # Extract the requested lines
+            selected_lines = lines[start_line:end_line]
+            actual_end = min(end_line, total_lines)
+
+            # Format output with line numbers (cat -n style)
+            numbered_lines = []
+            for i, line in enumerate(selected_lines, start=start_line + 1):
+                # Remove trailing newline for display, add back for consistent formatting
+                line_content = line.rstrip('\n')
+                numbered_lines.append(f"{i:6d}→{line_content}")
+
+            content_with_numbers = '\n'.join(numbered_lines)
+
+            # Build response message
+            if offset is None and limit is None:
+                # Full file read
+                file_size = sum(len(line) for line in lines)
+                return (
+                    f"✓ File '{path}' read successfully. Size: {file_size} bytes, {total_lines} lines\n\n"
+                    f"Content:\n{content_with_numbers}"
+                )
+            else:
+                # Partial file read
+                display_start = start_line + 1
+                display_end = start_line + len(selected_lines)
+                return (
+                    f"✓ File '{path}' read successfully (lines {display_start}-{display_end} of {total_lines})\n\n"
+                    f"Content:\n{content_with_numbers}"
+                )
         except UnicodeDecodeError:
             return (
                 f"Error: File '{path}' is not a text file or uses an unsupported encoding.\n"

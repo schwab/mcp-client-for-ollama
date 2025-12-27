@@ -1099,8 +1099,10 @@ Remember: Output ONLY valid JSON following the format shown above. Use ONLY agen
             # Use agent-specific model if configured, otherwise use endpoint model
             model_to_use = agent_config.model or endpoint.model
 
-            # Display execution with model info
-            self.console.print(f"\n[cyan]▶️  Executing {task.id} ({task.agent_type}) <{model_to_use}>[/cyan]")
+            # Display execution with model info and emoji
+            agent_emoji = agent_config.emoji if hasattr(agent_config, 'emoji') and agent_config.emoji else ""
+            agent_display = f"{agent_emoji} {task.agent_type}" if agent_emoji else task.agent_type
+            self.console.print(f"\n[cyan]▶️  Executing {task.id} ({agent_display}) <{model_to_use}>[/cyan]")
             self.console.print(f"[dim]   {task.description}[/dim]")
 
             response_text = await self._execute_with_tools(
@@ -1672,9 +1674,16 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         """Display the task plan in a formatted panel."""
         plan_text = ""
         for i, task_def in enumerate(task_plan['tasks'], 1):
+            agent_type = task_def['agent_type']
+            # Get emoji from agent config
+            agent_config = self.agent_configs.get(agent_type)
+            agent_emoji = ""
+            if agent_config and hasattr(agent_config, 'emoji') and agent_config.emoji:
+                agent_emoji = agent_config.emoji + " "
+
             deps = task_def.get('dependencies', [])
             deps_str = f" (depends on: {', '.join(deps)})" if deps else ""
-            plan_text += f"{i}. [{task_def['agent_type']}] {task_def['description']}{deps_str}\n"
+            plan_text += f"{i}. [{agent_emoji}{agent_type}] {task_def['description']}{deps_str}\n"
 
         self.console.print(Panel(
             plan_text.strip(),

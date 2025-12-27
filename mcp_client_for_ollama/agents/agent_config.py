@@ -35,6 +35,7 @@ class AgentConfig:
         model: Ollama model to use for this agent (optional, uses global default if not set)
         planning_hints: Guidance for planner on when to use this agent
         output_format: Expected output format specification (optional)
+        emoji: Visual identifier emoji(s) for this agent (optional)
     """
 
     agent_type: str
@@ -50,6 +51,7 @@ class AgentConfig:
     model: Optional[str] = None  # Ollama model override (e.g., "qwen2.5:7b")
     planning_hints: Optional[str] = None
     output_format: Optional[Dict[str, Any]] = None
+    emoji: Optional[str] = None  # Visual identifier emoji(s)
 
     @classmethod
     def from_json_file(cls, file_path: str) -> 'AgentConfig':
@@ -84,6 +86,7 @@ class AgentConfig:
             model=data.get('model'),  # Optional model override
             planning_hints=data.get('planning_hints'),
             output_format=data.get('output_format'),
+            emoji=data.get('emoji'),  # Optional emoji identifier
         )
 
     @classmethod
@@ -192,6 +195,7 @@ class AgentConfig:
             "model": self.model,
             "planning_hints": self.planning_hints,
             "output_format": self.output_format,
+            "emoji": self.emoji,
         }
 
     def __repr__(self) -> str:

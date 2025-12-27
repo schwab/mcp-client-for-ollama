@@ -1,0 +1,44 @@
+GOAL: Implement a set of agents designed to help an author ghost write a novel or other book
+
+AGENTS: are used to keep track of the various important details in a Memory Context and will be responsible for reviewing each section of text to ensure consistency with various parts of the story.  Each agent keeps a memory of the important details that it has acquired about the story line as the story is being written. This dynamically changing memory allows the agents to make suggestions and recommendations about each new paragraph of text. 
+
+- Agents
+  - Lore keeper
+    - Keeps written documents of the world’s rules, culture, architecture, etc
+    - Cross references new writing with existing lore
+  - Character keeper
+    - Define and model each character’s unique history and preferences as the story develops
+    - Keeps written documents of characters, behaviors, history, story-lines
+    - Cross references new writing with existing characters
+  - Accent writer (Priority 1)
+    - Define and model each character’s accent
+    - Tracks the accents of individual character’s speech patterns
+    - Maintains consistency of accents for each character
+  - Quality monitor
+    - Scans for poor quality, confusing writing, bad grammar, and poor plots
+    - Suggests fixes
+    - Maintains checklist of quality before publishing
+  - Miscellaneous detail contriver
+    - Contrives details that characters need, but that don’t matter
+  - Style monitor
+    - Maintains consistency in formatting
+    - Dialogue is put in quote block, thoughts are italicized, etc 
+  - Researcher (Priority 3)
+    - Questions and researches the realism of the story and details
+    - Suggests possible real-life alternatives to
+  - Prompt specialist (Priority 2)
+    - Creates prompts for images, video, music, audio, etc using its knowledge of the story
+    - User asks for what they want, the prompt specialist researches the project to construct an efficient prompt for generating the user’s requested asset
+  - Idea nudger
+    - Pokes the user with ideas to spark creativity
+    - Not responsible for creative thinking, but poses possibilities to help spark creativity in the user
+  - Beta reader
+    - Reads the story as if for the first time, grading it
+    - Gives human like interpretations and reviews of the story and events in various personifications
+- Have a consistent writing point of view (if in first person, always write in the first person)
+- Hero’s quest:
+  - Man who learns better - overcomes a series of obstacles to reach the story goal
+  - Hero: believable person the reader cares about
+    - characteristics 
+      - age : determines kinds of struggles, what help they will need and their maturity
+      - gender: different situations affect them in different ways

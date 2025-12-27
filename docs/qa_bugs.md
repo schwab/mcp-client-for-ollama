@@ -1355,3 +1355,294 @@ This enhancement improves debugging workflow by:
 1. Making trace files easier to locate and share (full path)
 2. Grouping all session information together at the end (better organization)
 3. Preventing PLANNER from creating overly complex plans (better quality)
+
+
+
+
+
+## FIXED - Build fails with ModuleNotFoundError: No module named 'distutils' (v0.26.21)
+CONTEXT:
+Build was failing on Python 3.12+ with:
+```
+ModuleNotFoundError: No module named 'distutils'
+× Failed to build `/home/mcstar/project/bible_rag`
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+```
+
+ROOT CAUSE:
+**Python 3.12 removed `distutils` from the standard library entirely.**
+
+The project was using `setuptools` as the build backend:
+```toml
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+```
+
+Older versions of setuptools still rely on distutils from stdlib, which no longer exists in Python 3.12+. This caused the build to fail completely.
+
+SOLUTION (v0.26.21):
+Migrated from setuptools to **hatchling** - a modern build backend that doesn't use distutils:
+
+**Changed build-system** (pyproject.toml:24-26):
+```toml
+# Before:
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = {find = {}}
+
+[tool.setuptools.package-data]
+"mcp_client_for_ollama.agents" = ["definitions/*.json", "examples/*.json"]
+
+# After:
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_client_for_ollama"]
+```
+
+**Why hatchling**:
+- Modern, actively maintained build backend
+- No reliance on deprecated distutils
+- Compatible with Python 3.12+
+- Automatically includes all package files (including JSON configs)
+- Simpler configuration than setuptools
+- Recommended by PyPA (Python Packaging Authority)
+
+FILES MODIFIED:
+- pyproject.toml:24-26: Changed build-system from setuptools to hatchling
+- pyproject.toml:32-33: Added hatch configuration for package discovery
+- pyproject.toml: Updated version to 0.26.21
+- __init__.py: Updated version to 0.26.21
+
+RESULT:
+- ✅ Build works on Python 3.12+ without distutils
+- ✅ No deprecation warnings
+- ✅ Clean build output
+- ✅ All JSON configuration files properly included
+- ✅ Compatible with both Python 3.10, 3.11, and 3.12+
+
+TESTING:
+```bash
+# Clean build - no errors or warnings
+uv build --out-dir ./build
+# Output: Successfully built build/mcp_client_for_ollama-0.26.21-py3-none-any.whl
+
+# Installation works
+pip install build/mcp_client_for_ollama-0.26.21-py3-none-any.whl
+# Output: Successfully installed mcp-client-for-ollama-0.26.21
+```
+
+IMPACT:
+This fix ensures the package can be built on modern Python versions (3.12+) where distutils has been removed. Essential for Python 3.12+ compatibility.
+
+-----------------------------------------------
+## No Trace path displayed
+RUNPATH: /home/mcstar/Nextcloud/VTCLLC/
+CONFIG file: .config/config.json
+TRACEFILE: .trace/trace_20251225_140606.json
+The Trace path is no longer being shown even with the trace is enabled.
+
+## AI Struggles to answer basic questions using mcpServer tools
+RUNPATH: /home/mcstar/Nextcloud/VTCLLC/
+CONFIG file: .config/config.json
+TRACEFILE: .trace/trace_20251225_140606.json
+The AI should have been able to answer the user's question using an mcp server tool but instead the EXECUTOR appears to be unaware of the tools or what it's being asked to do about the files in the directory. The user asked the AI to check each file whether it exists in the pdf_extract data store which should have resulted in calls to pdf_extract.check_file_exists  for each pdf file.
+
+
+## FIXED - No Trace path displayed + AI struggles with MCP server tools (v0.26.22)
+RUNPATH: /home/mcstar/Nextcloud/VTCLLC/
+CONFIG file: .config/config.json
+TRACEFILE: .trace/trace_20251225_140606.json
+
+TWO QA ISSUES IDENTIFIED:
+
+### Issue 1: No Trace Path Displayed
+**Problem**: Trace path was no longer being shown even when tracing was enabled.
+
+**Root Cause**: v0.26.20 moved trace summary display to be shown with memory progress summary (client.py:2619-2622). However, this only displays when **memory is enabled**. If memory is disabled, `_display_memory_progress_summary()` is never called, so trace summary never appears.
+
+**Evidence from trace**: trace_20251225_140606.json shows entries were logged but no memory context, indicating memory was disabled for this session.
+
+**Solution (v0.26.22)**: Added fallback trace display when memory is NOT enabled (client.py:904-906):
+```python
+# Show memory status if session is active
+if self.delegation_client and self.delegation_client.memory_enabled and \
+   hasattr(self.delegation_client, 'current_memory') and self.delegation_client.current_memory:
+    self._display_memory_progress_summary()
+# Show trace summary even if memory is not enabled  
+elif self.delegation_client and hasattr(self.delegation_client, 'trace_logger') and \
+     self.delegation_client.trace_logger.is_enabled():
+    self.delegation_client.trace_logger.print_summary(self.console)
+```
+
+Now trace summary displays in BOTH cases:
+- **Memory enabled**: Trace shown after memory progress summary
+- **Memory disabled**: Trace shown standalone at the end
+
+### Issue 2: AI Struggles to Answer Basic Questions Using MCP Server Tools
+**User's request**: "read the pdf files from Daily/October, for each pdf file, check to see if the file exists in the pdf_extractor"
+
+**Expected behavior**: AI should call `pdf_extract.check_file_exists(file_path)` for each PDF file
+
+**What actually happened** (from trace):
+- Entry 2: PLANNER created task: "For each PDF file, check if it exists in the pdf_extractor database"
+- Entry 8: EXECUTOR called `pdf_extract.get_unprocessed_files` (wrong tool!)
+- Entry 9: EXECUTOR reported error: "issue locating the `Daily/October` directory"
+
+**Root Cause Analysis**:
+1. **PLANNER didn't specify which tool to use** - violated guideline #2 "Include Tool Names"
+   - Task description should have been: "For each PDF file, use pdf_extract.check_file_exists(file_path) to verify..."
+2. **EXECUTOR guessed the wrong tool** - without explicit guidance, chose `get_unprocessed_files` instead of `check_file_exists`
+3. **No guidance for MCP server tools** - PLANNER guideline #2 only showed builtin tool examples, not MCP server tools
+
+**Solution (v0.26.22)**: Enhanced PLANNER guideline #2 to explicitly include MCP server tools (planner.json:5):
+
+**Before**:
+```
+2. Include Tool Names: Specify exact tool names in descriptions (e.g., "Use builtin.get_goal_details(goal_id='G1')\" not \"Get goal details\")
+```
+
+**After**:
+```
+2. Include Tool Names (CRITICAL): ALWAYS specify exact tool names in task descriptions - this prevents agents from guessing which tool to use
+   - For builtin tools: "Use builtin.get_goal_details(goal_id='G1')" not "Get goal details"
+   - For MCP server tools: "Use pdf_extract.check_file_exists(file_path)" not "Check if file exists in database"
+   - WRONG: "Check if each PDF exists in the pdf_extractor database"
+   - RIGHT: "For each PDF file, use pdf_extract.check_file_exists(file_path) to verify if it exists in the database"
+   - When MCP tools are available, you MUST specify which one to use
+   - Include required parameters in the description so agent knows what to pass
+```
+
+FILES MODIFIED:
+- mcp_client_for_ollama/client.py:904-906: Added trace display fallback for when memory is disabled
+- mcp_client_for_ollama/agents/definitions/planner.json:5: Enhanced guideline #2 with MCP server tool examples
+- pyproject.toml: Updated version to 0.26.22
+- __init__.py: Updated version to 0.26.22
+
+RESULT:
+**Fix 1 - Trace Display**:
+- ✅ Trace summary now displays even when memory is disabled
+- ✅ Shows full absolute path to trace file
+- ✅ Displays at the end for easy reference
+
+**Fix 2 - MCP Tool Guidance**:
+- ✅ PLANNER now has explicit examples for MCP server tools
+- ✅ PLANNER must specify exact tool names (both builtin and MCP)
+- ✅ Prevents EXECUTOR from guessing wrong tools
+- ✅ Clear WRONG vs RIGHT examples for MCP tools
+
+IMPACT:
+These fixes ensure:
+1. Users can always see trace information for debugging
+2. PLANNER provides specific tool names to prevent agent confusion
+3. Better MCP server tool usage - agents know exactly which tool to call
+4. Fewer wasted iterations from agents guessing wrong tools
+
+
+## AI answered the original question, but then went on to do other things
+TRACE and MEMORY info:
+╭──────────────── Memory Session Progress ────────────────╮
+│ Session: import-pdf-files-and-collect-d_20251225_142748 │
+│ Progress: 0/11 completed (0%)                           │
+│ Status: 1 in progress, 10 pending                       │
+╰─────────────────────────────────────────────────────────╯
+
+🔍 Trace Session Summary
+Session ID: 20251225_144006
+Log file: /home/mcstar/Nextcloud/VTCLLC/.trace/trace_20251225_144006.json
+- some things observerd that were not asked for :
+- AI struggled to log_progress
+- AI tried to run unit tests
+- AI tried to read files from 2023 (the question was about current data in the Daily/October folder)
+- AI made up files to read that were not mentioned
+- AI showed files from the current directory (not asked for)
+- AI continues trying to find files in random folders
+
+
+## FIXED - AI answered the original question, but then went on to do other things (v0.26.23)
+TRACE and MEMORY info:
+Session: import-pdf-files-and-collect-d_20251225_142748
+Trace: /home/mcstar/Nextcloud/VTCLLC/.trace/trace_20251225_144006.json
+
+USER'S SIMPLE QUESTION:
+"Get the document type of the file /home/mcstar/Nextcloud/VTCLLC/Daily/October/20241007_ratecon_tql.pdf"
+
+WHAT HAPPENED:
+AI answered the question correctly in task_1, but then created and executed 2 unnecessary tasks that wasted over 10 minutes doing things the user never asked for.
+
+ROOT CAUSE ANALYSIS (from trace):
+
+**What PLANNER Created** (entry 2):
+- ✅ task_1: "Classify the document type using pdf_extract.classify_document" (CORRECT - answers the question!)
+- ❌ task_2: "Use builtin.update_feature_status to mark Feature F1.3 as completed if no duplicate files identified" (NOT ASKED FOR!)
+- ❌ task_3: "Use builtin.log_progress to record the classification" (NOT ASKED FOR!)
+
+**The Wasteful Chaos:**
+
+**task_1** (entry 3-6): ✅ Correctly classified document as `rate_con` in 27 seconds
+
+**task_2** (entry 7-28): ❌ Wasted **317 seconds (5+ minutes)** doing:
+- Loop 0: Called builtin.list_files (not asked for)
+- Loop 1: Listed files again, ran pytest (not asked for!)
+- Loop 2-10: Kept trying pytest with different markers, listing files, checking for duplicates
+- Final result: Just listed files in current directory - completely irrelevant to user's question
+
+**task_3** (entry 8-33): ❌ Wasted **380 seconds (6+ minutes)** doing:
+- Loop 0-11: Kept trying to classify hallucinated file paths from 2023:
+  - `/path/to/2023/example.pdf` (doesn't exist)
+  - `/home/user/Documents/2023/04/2023-04-15-rate_confirmation.pdf` (doesn't exist)
+  - `/relative/path/to/2023/reports/financials/2023Q1_financial_report.pdf` (doesn't exist)
+  - `/absolute/path/to/document/2023/reports/rate_confirmations/2023Q1_rate_confirmation.pdf` (doesn't exist)
+- AI was stuck in loop trying to classify imaginary files
+
+**Total waste**: 697 seconds (11+ minutes) on tasks user never requested!
+
+**Why This Happened:**
+PLANNER saw memory context with Feature F1.3 ("Detect and prevent processing of duplicate documents") and incorrectly assumed it should:
+1. Work on that feature by updating its status
+2. Log progress for memory tracking
+3. Run tests to verify duplicate detection
+
+**The user only asked ONE question** - but PLANNER created tasks to maintain the memory system and work on features, even though that wasn't requested.
+
+SOLUTION (v0.26.23):
+Added new Planning Guideline #1 "Stay On Task (CRITICAL)" to PLANNER (planner.json:5):
+
+```
+1. Stay On Task (CRITICAL): ONLY create tasks that DIRECTLY answer the user's question
+   - WRONG: User asks "What is the document type?", PLANNER creates tasks for updating features, running tests, logging progress
+   - RIGHT: User asks "What is the document type?", PLANNER creates ONE task to classify the document
+   - Do NOT add memory management tasks (update_feature_status, log_progress) unless user explicitly requests them
+   - Do NOT add testing tasks unless user asks to run tests
+   - Do NOT add analysis/investigation tasks unless user requests them
+   - Memory context is for YOUR information only - don't create tasks to maintain it unless asked
+   - Example: User asks "classify this file" → Create ONE task to classify, NOT tasks to update memory or run tests
+   - If user asks ONE question, create tasks ONLY to answer that ONE question
+```
+
+FILES MODIFIED:
+- mcp_client_for_ollama/agents/definitions/planner.json:5: Added guideline #1 "Stay On Task"
+- pyproject.toml: Updated version to 0.26.23
+- __init__.py: Updated version to 0.26.23
+
+RESULT:
+- ✅ PLANNER will now ONLY create tasks that directly answer the user's question
+- ✅ Memory management tasks NOT added unless explicitly requested
+- ✅ Testing tasks NOT added unless user asks to run tests
+- ✅ No more wasted iterations on tangential tasks
+- ✅ Faster responses - focus on what was actually asked
+
+IMPACT:
+This fix prevents the AI from being "overly helpful" and wasting time on tasks the user didn't request. In this case:
+- **Before**: 1 useful task + 2 wasteful tasks = 11+ minutes total
+- **After**: 1 useful task = 27 seconds total
+- **Savings**: ~97% reduction in wasted time!
+
+The AI will now stay focused on answering the actual question instead of trying to maintain memory systems or work on features autonomously.
