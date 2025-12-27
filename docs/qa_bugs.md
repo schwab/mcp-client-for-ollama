@@ -169,3 +169,49 @@ All 6 ghost writer agents are affected by these bugs:
 - pyproject.toml - Version 0.33.0
 
 **Testing Required**: User should retry: "read files in notes and create lore for the content there, store that in memory"
+
+
+## ✅ FIXED in v0.33.1: LORE_KEEPER Not Recognized by PLANNER
+
+**User Query**: "Create the Lore analysis for the local file notes/20251027_dream_anchor_chains.md and store it in memory"
+
+**Issue** (TRACE: 20251226_205312):
+- PLANNER assigned lore analysis to RESEARCHER instead of LORE_KEEPER
+- PLANNER also violated "STAY ON TASK" rule by creating 3 extra memory tasks:
+  * MEMORY_EXECUTOR - store lore
+  * MEMORY_EXECUTOR - update feature status
+  * MEMORY_EXECUTOR - log progress
+- User said "store it in memory" (one thing), PLANNER created 5 tasks (wrong!)
+
+**Root Cause**:
+PLANNER's LORE_KEEPER trigger keywords didn't include "create lore" or "lore analysis"
+
+Old triggers:
+```
+- Use when: User asks to verify lore, check world consistency, review world-building, validate magic/geography/history/culture
+```
+
+Missing keywords: create, extract, analyze, generate, lore analysis
+
+**Fix Applied** (v0.33.1):
+Updated LORE_KEEPER trigger conditions:
+```
+- Use when: User asks to:
+  * Create/extract/analyze/generate lore
+  * Verify lore, check world consistency
+  * Review world-building
+  * Validate magic/geography/history/culture/technology
+  * Store world-building details in memory
+  * Build lore database or lore analysis
+```
+
+Added to decision tree:
+```
+- Create/extract/analyze lore → LORE_KEEPER
+- Lore analysis/generation → LORE_KEEPER
+```
+
+**Result**:
+- ✅ "Create the Lore analysis" now triggers LORE_KEEPER
+- ✅ "Extract lore", "Analyze lore", "Generate lore" also trigger LORE_KEEPER
+- ✅ LORE_KEEPER will store in memory itself (no extra MEMORY_EXECUTOR tasks needed)
