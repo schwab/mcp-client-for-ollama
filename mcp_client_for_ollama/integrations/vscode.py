@@ -63,11 +63,66 @@ class VSCodeIntegration:
         return None
 
     @staticmethod
-    def find_most_recent_workspace() -> Optional[Path]:
+    def get_workspace_folder(workspace_storage_dir: Path) -> Optional[str]:
         """
-        Find the most recently modified workspace state database.
+        Get the workspace folder path from a workspace storage directory.
 
-        This is likely the currently active VSCode workspace.
+        Args:
+            workspace_storage_dir: Path to workspace storage directory
+
+        Returns:
+            Workspace folder path, or None if not found
+        """
+        # Try workspace.json file first
+        workspace_json = workspace_storage_dir / 'workspace.json'
+        if workspace_json.exists():
+            try:
+                with open(workspace_json, 'r') as f:
+                    data = json.load(f)
+                    # Extract folder URI
+                    if 'folder' in data:
+                        folder_uri = data['folder']
+                        # Handle file:// URI format
+                        if folder_uri.startswith('file://'):
+                            # Decode URL-encoded path
+                            from urllib.parse import unquote
+                            return unquote(folder_uri[7:])
+            except (json.JSONDecodeError, KeyError, IOError):
+                pass
+
+        # Fallback: try to get folder from state database
+        state_db = workspace_storage_dir / 'state.vscdb'
+        if state_db.exists():
+            try:
+                conn = sqlite3.connect(str(state_db))
+                cursor = conn.cursor()
+                # Try to find workspace folder in state
+                cursor.execute(
+                    "SELECT value FROM ItemTable WHERE key = 'workbench.panel.markers.hidden'"
+                )
+                cursor.execute(
+                    "SELECT value FROM ItemTable WHERE key LIKE '%folderUri%' OR key LIKE '%workspace.folder%' LIMIT 1"
+                )
+                row = cursor.fetchone()
+                conn.close()
+
+                if row:
+                    data = json.loads(row[0])
+                    if isinstance(data, str) and data.startswith('file://'):
+                        from urllib.parse import unquote
+                        return unquote(data[7:])
+            except Exception:
+                pass
+
+        return None
+
+    @staticmethod
+    def find_current_workspace() -> Optional[Path]:
+        """
+        Find the workspace state database that matches the current working directory.
+
+        First tries to match workspace folder to current directory, then falls back
+        to most recently modified workspace.
 
         Returns:
             Path to state.vscdb file, or None if not found
@@ -76,8 +131,12 @@ class VSCodeIntegration:
         if not workspace_dir or not workspace_dir.exists():
             return None
 
-        # Find all state.vscdb files and sort by modification time
+        current_dir = os.getcwd()
         workspaces = []
+        matched_workspace = None
+        best_match_len = 0  # Track longest matching path
+
+        # Collect all workspaces and try to match current directory
         for ws in workspace_dir.iterdir():
             if not ws.is_dir():
                 continue
@@ -87,12 +146,40 @@ class VSCodeIntegration:
                 mtime = state_db.stat().st_mtime
                 workspaces.append((mtime, state_db))
 
-        if not workspaces:
-            return None
+                # Try to match workspace folder to current directory
+                ws_folder = VSCodeIntegration.get_workspace_folder(ws)
+                if ws_folder:
+                    # Check if current directory is within this workspace
+                    # Use the most specific match (longest path)
+                    if current_dir.startswith(ws_folder):
+                        match_len = len(ws_folder)
+                        if match_len > best_match_len:
+                            matched_workspace = state_db
+                            best_match_len = match_len
 
-        # Return most recently modified
-        workspaces.sort(reverse=True, key=lambda x: x[0])
-        return workspaces[0][1]
+        # Return matched workspace if found
+        if matched_workspace:
+            return matched_workspace
+
+        # Fallback: return most recently modified workspace
+        if workspaces:
+            workspaces.sort(reverse=True, key=lambda x: x[0])
+            return workspaces[0][1]
+
+        return None
+
+    @staticmethod
+    def find_most_recent_workspace() -> Optional[Path]:
+        """
+        Find the most recently modified workspace state database.
+
+        Deprecated: Use find_current_workspace() instead for better accuracy.
+
+        Returns:
+            Path to state.vscdb file, or None if not found
+        """
+        # Now just calls find_current_workspace for better matching
+        return VSCodeIntegration.find_current_workspace()
 
     @staticmethod
     def get_active_file() -> Optional[str]:

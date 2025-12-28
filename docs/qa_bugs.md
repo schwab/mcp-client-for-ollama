@@ -995,3 +995,59 @@ vscode_config = config_data.get('vscode', {})
 ✅ Application starts without errors
 ✅ VSCode integration config properly loaded
 ✅ Auto-load and manual load both work correctly        
+
+## ✅ FIXED in v0.35.2: VSCode Detecting Wrong Workspace File
+
+**Issue**:
+VSCode integration detects file from wrong workspace:
+- Detected: `/home/mcstar/Nextcloud/DEV/ollmcp/mcp-client-for-ollama/mcp_client_for_ollama/__init__.py`
+- Expected: `/home/mcstar/Vault/Journal/notes/20251027_dream_anchor_chains.md`
+
+**Root Cause**:
+The `find_most_recent_workspace()` method selected the most recently modified workspace state database, not the workspace where the terminal is actually running. With multiple VSCode windows open, it would pick the wrong workspace.
+
+**Problem**:
+1. CLI runs in terminal for workspace: `/home/mcstar/Vault/Journal/`
+2. Another VSCode workspace `/home/mcstar/Nextcloud/DEV/ollmcp/mcp-client-for-ollama/` was modified more recently
+3. Integration read the wrong workspace's state database
+4. Returned file from wrong workspace
+
+**Fix Applied** (v0.35.2):
+
+**New Method**: `find_current_workspace()` - Matches workspace to current working directory
+
+1. **Added `get_workspace_folder()`** - Extracts workspace folder path from workspace storage:
+   - Reads `workspace.json` file in each workspace storage directory
+   - Parses `file://` URI and decodes URL-encoded paths
+   - Fallback: queries state database for folder information
+
+2. **Updated `find_current_workspace()`** - Intelligent workspace matching:
+   - Gets current working directory via `os.getcwd()`
+   - Iterates through all VSCode workspaces
+   - Matches workspace folder to current directory
+   - Uses most specific match (longest matching path)
+   - Fallback: most recently modified workspace if no match
+
+3. **Updated `find_most_recent_workspace()`** - Now calls `find_current_workspace()` for backward compatibility
+
+**Algorithm**:
+```python
+current_dir = "/home/mcstar/Vault/Journal"
+workspace_folder = "/home/mcstar/Vault/Journal"  # From workspace.json
+
+if current_dir.startswith(workspace_folder):
+    # Match! Use this workspace
+    return workspace_state_db
+```
+
+**Modified Files**:
+- mcp_client_for_ollama/integrations/vscode.py - Workspace matching logic
+- mcp_client_for_ollama/__init__.py - Version 0.35.2
+- pyproject.toml - Version 0.35.2
+- docs/qa_bugs.md - Documentation
+
+**Result**:
+✅ Detects correct workspace based on current directory
+✅ Loads file from the workspace where terminal is running
+✅ Handles multiple VSCode windows correctly
+✅ Falls back gracefully if no match found
