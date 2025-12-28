@@ -117,11 +117,15 @@ def parse_server_configs(config_path: str) -> Tuple[List[Dict[str, Any]], Option
             server_type = "config"  # Default type for STDIO servers
 
             # Check for URL-based server types (sse or streamable_http)
+            # Support both "type" and "transport" fields for compatibility
             if "type" in server_config_data:
                 # Type is explicitly specified in config
                 server_type = server_config_data["type"]
+            elif "transport" in server_config_data:
+                # Transport field (alternative to type)
+                server_type = server_config_data["transport"]
             elif "url" in server_config_data:
-                # URL exists but no type, default to streamable_http
+                # URL exists but no type/transport, default to streamable_http
                 server_type = "streamable_http"
 
             # Create server config object

@@ -1051,3 +1051,70 @@ if current_dir.startswith(workspace_folder):
 ✅ Loads file from the workspace where terminal is running
 ✅ Handles multiple VSCode windows correctly
 ✅ Falls back gracefully if no match found
+
+
+## ✅ FIXED in v0.35.3: SSE Client Connection Failure
+
+**Issue**:
+When attempting to connect to an MCP server using SSE transport, the app crashes with error:
+```
+HTTPStatusError: Client error '405 Method Not Allowed' for url 'http://localhost:8010/sse'
+```
+
+**Configuration**:
+```json
+"biblerag": {
+  "enabled": true,
+  "transport": "sse",
+  "url": "http://localhost:8010/sse"
+}
+```
+
+**Root Cause**:
+The server discovery code in `discovery.py` only checked for `"type"` field in config, not `"transport"` field. When `"transport": "sse"` was used, the code didn't recognize it and fell through to the default of "streamable_http" (line 125), causing wrong connection method and 405 error.
+
+**Code Flow (Broken)**:
+```python
+# discovery.py lines 120-125
+if "type" in server_config_data:  # Not found!
+    server_type = server_config_data["type"]
+elif "url" in server_config_data:  # Falls through to here
+    server_type = "streamable_http"  # WRONG! Should be SSE
+```
+
+**Fix Applied** (v0.35.3):
+Added support for both `"type"` and `"transport"` fields:
+
+```python
+# discovery.py lines 120-129 (fixed)
+if "type" in server_config_data:
+    server_type = server_config_data["type"]
+elif "transport" in server_config_data:  # NEW!
+    server_type = server_config_data["transport"]
+elif "url" in server_config_data:
+    server_type = "streamable_http"  # Only if neither type nor transport
+```
+
+**Testing**:
+Created test script that successfully connected to SSE server and called tools.
+Verified with actual MCP client using test config:
+```
+✓ Successfully connected to biblerag with 1 tools
+✓ Tool call successful: get_topic_verses({"topic": "salvation"})
+```
+
+**Modified Files**:
+- mcp_client_for_ollama/server/discovery.py - Added transport field support
+- mcp_client_for_ollama/__init__.py - Version 0.35.3
+- pyproject.toml - Version 0.35.3
+- docs/qa_bugs.md - Documentation
+
+**Result**:
+✅ SSE connections work with both `"type": "sse"` and `"transport": "sse"`
+✅ Backwards compatible with existing configs using "type"
+✅ Compatible with fastmcp-style configs using "transport"
+✅ No more 405 errors for SSE servers
+
+**Reference**:
+- Working client code: /home/mcstar/project/bible_rag/client_mcp.py
+- Server code: /home/mcstar/project/bible_rag/openbible_info_mcp/mcp_openbible_server.py
