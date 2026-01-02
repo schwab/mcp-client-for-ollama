@@ -751,3 +751,236 @@ The core ghost writer infrastructure is now complete with 6 specialized agents c
 - ✅ Minor details (DETAIL_CONTRIVER)
 
 Authors now have a comprehensive AI writing assistant that maintains consistency across all major story elements!
+---
+
+## ✅ Phase 4: PROMPT_SPECIALIST and STORY_RESEARCHER - Implemented! (v0.36.0)
+
+**Version**: 0.36.0
+**Date**: January 1, 2026
+**Agents Implemented**: 8 of 9 (89% complete)
+
+Successfully completed Phase 4 by implementing the two priority ghost writer agents for media prompt generation and story realism verification.
+
+### What Was Created
+
+1. **PROMPT_SPECIALIST Agent** (`prompt_specialist.json`):
+   - Self-managed memory via goal G_PROMPT_SPECIALIST
+   - Creates prompts for: Character portraits, Scene illustrations, Music/audio, Settings, Templates
+   - Temperature: 0.4 (slightly creative for evocative prompt language)
+   - Cross-agent collaboration: Queries CHARACTER_KEEPER, LORE_KEEPER, STYLE_MONITOR
+   - Platform-aware: Adapts prompts for Midjourney, Stable Diffusion, Suno, etc.
+   - Emoji: 🎨🔮
+
+2. **STORY_RESEARCHER Agent** (`story_researcher.json`):
+   - **Agent type**: "STORY_RESEARCHER" (to avoid conflict with existing code RESEARCHER)
+   - Self-managed memory via goal G_RESEARCHER
+   - Verifies: Historical accuracy, Scientific plausibility, Geographic accuracy, Cultural practices, Technology/time period
+   - Temperature: 0.3 (precise analysis)
+   - Web search enabled: Via MCP tools for fact-checking
+   - Cross-agent collaboration: Queries all ghost writers for context
+   - Emoji: 🔬📖
+
+3. **PLANNER Integration**:
+   - Added PROMPT_SPECIALIST to Ghost Writer Agents section
+   - Added STORY_RESEARCHER to Ghost Writer Agents section
+   - Updated Task Assignment Decision Tree with new agent recognition
+
+4. **Version Update**:
+   - Built and released v0.36.0
+   - Package includes 8 implemented ghost writer agents
+
+### How PROMPT_SPECIALIST Works
+
+**Purpose**: Bridge the gap between written story and visual/audio media by creating generation-ready prompts.
+
+**Workflow**:
+1. Understand asset request (character portrait, scene, music, etc.)
+2. Research story context by querying other agents:
+   - CHARACTER_KEEPER for physical descriptions, personality
+   - LORE_KEEPER for world details, settings, cultural aesthetics
+   - STYLE_MONITOR for story tone and aesthetic choices
+3. Build comprehensive prompts with:
+   - Core subject description
+   - Visual/audio elements from research
+   - Composition/structure details
+   - Style and technical requirements
+   - Mood and atmosphere
+   - Negative prompts (what to avoid)
+4. Save successful prompts as templates
+5. Learn and refine based on generation results
+
+**Category Templates**:
+1. Character Portrait Prompts
+2. Scene Illustration Prompts
+3. Music/Audio Prompts
+4. Setting/Location Reference Prompts
+5. Successful Prompt Templates
+6. Cross-Reference Index
+
+### How STORY_RESEARCHER Works
+
+**Purpose**: Help authors create believable stories by verifying real-world accuracy and suggesting plausible alternatives.
+
+**Workflow**:
+1. Read and analyze story text
+2. Identify questionable elements (anachronisms, implausibilities)
+3. Conduct research using web search tools:
+   - Historical accuracy
+   - Scientific principles
+   - Geographic/travel accuracy
+   - Cultural authenticity
+   - Technology for time period
+4. Assess accuracy: Accurate / Inaccurate / Requires Explanation / Fantasy Element
+5. Provide alternatives that balance realism with narrative needs
+6. Save research findings with sources
+7. Respect author's creative choices while providing facts
+
+**Category Templates**:
+1. Historical Accuracy Research
+2. Scientific Plausibility Research
+3. Geographic/Travel Accuracy
+4. Cultural/Social Practices
+5. Technology/Capabilities for Time Period
+6. Fact-Checked Story Elements Index
+
+**Special Capabilities**:
+- Distinguishes intentional fantasy from accidental errors
+- Balances realism with story needs
+- Provides confidence levels (HIGH/MEDIUM/LOW)
+- Cites credible sources
+- Checks LORE_KEEPER before flagging fantasy elements as errors
+
+### Files Modified/Created
+
+**New Files**:
+- `mcp_client_for_ollama/agents/definitions/prompt_specialist.json` - PROMPT_SPECIALIST agent
+- `mcp_client_for_ollama/agents/definitions/story_researcher.json` - STORY_RESEARCHER agent
+
+**Modified Files**:
+- `mcp_client_for_ollama/agents/definitions/planner.json` - Added Phase 4 agent recognition
+- `mcp_client_for_ollama/__init__.py` - Version bump to 0.36.0
+- `pyproject.toml` - Version bump to 0.36.0
+- `docs/ghost_writer_progress.md` - Documentation update (this file)
+
+### Progress Summary
+
+**Completed Agents** (8 of 9 - 89%):
+- ✅ Phase 1: ACCENT_WRITER (Priority 1)
+- ✅ Phase 2: LORE_KEEPER, CHARACTER_KEEPER (Core agents)
+- ✅ Phase 3: STYLE_MONITOR, QUALITY_MONITOR, DETAIL_CONTRIVER (Core agents)
+- ✅ Phase 4: PROMPT_SPECIALIST, STORY_RESEARCHER (Priority 2 & 3)
+
+**Remaining Optional Agents** (1 category - 11%):
+- 📋 IDEA_NUDGER - Spark creativity when authors are stuck (Optional)
+- 📋 BETA_READER - Story reviews from reader perspective (Optional)
+
+### Usage Examples
+
+**PROMPT_SPECIALIST Example**:
+```
+User: "Create a character portrait prompt for Elena for the book cover"
+
+PROMPT_SPECIALIST:
+1. Queries CHARACTER_KEEPER for Elena's physical description
+2. Queries LORE_KEEPER for naval culture/setting details
+3. Queries STYLE_MONITOR for story tone (serious, gritty realism)
+4. Builds comprehensive prompt:
+   "A stern middle-aged woman in her mid-30s, tall athletic build, standing on a 
+   ship's deck. Long black hair with distinctive silver streak in tight braid. Sharp 
+   green eyes, scar across left eyebrow. Weathered skin from years at sea. Dark blue 
+   naval captain's coat with brass buttons. Ocean at sunset background. Realistic 
+   digital painting, cinematic lighting..."
+5. Includes negative prompt, generation parameters
+6. Saves to memory as F_PROMPT_ELENA_COVER
+```
+
+**STORY_RESEARCHER Example**:
+```
+User: "Elena's ship sailed from London to Edinburgh in three days"
+
+STORY_RESEARCHER:
+1. Identifies questionable element: Travel time seems fast
+2. Web search for: sailing distances, ship speeds, historical travel times
+3. Finds:
+   - Distance: 400-450 nautical miles
+   - Average sailing speed: 4-6 knots
+   - Realistic time: 5-7 days typical, 3.75 days absolute minimum
+4. Assessment: BORDERLINE INACCURATE
+5. Recommendations:
+   - Option 1: Change to 5-7 days (realistic)
+   - Option 2: Keep 3 days but explain (perfect winds, skilled captain)
+   - Option 3: Compromise at 4 days
+6. RECOMMENDED: Option 2 (adds character depth, plausible in exceptional circumstances)
+7. Saves research with sources as F_RESEARCH_LONDON_EDINBURGH_SAILING
+```
+
+### Cross-Agent Collaboration Patterns
+
+**PROMPT_SPECIALIST collaborates with**:
+- CHARACTER_KEEPER → Physical descriptions, personality
+- LORE_KEEPER → World aesthetics, cultural details
+- STYLE_MONITOR → Story tone, aesthetic consistency
+- ACCENT_WRITER → Character voice (for voice-over prompts)
+- DETAIL_CONTRIVER → Minor background details
+
+**STORY_RESEARCHER collaborates with**:
+- LORE_KEEPER → Check if "unrealistic" element is established fantasy
+- CHARACTER_KEEPER → Verify character abilities explain "unrealistic" actions
+- STYLE_MONITOR → Gauge story's realism standards
+- DETAIL_CONTRIVER → Verify intentionally invented details
+
+### Key Improvements from Phase 4
+
+1. **Media Generation Bridge**: Authors can now generate visual and audio assets that accurately reflect their story
+2. **Realism Verification**: Fact-checking prevents immersion-breaking errors
+3. **Balanced Approach**: Both agents respect creative choices while providing accurate information
+4. **Web Search Integration**: STORY_RESEARCHER has access to real-world research
+5. **Platform Awareness**: PROMPT_SPECIALIST adapts to different AI generation tools
+
+### Next Steps
+
+**Optional Enhancements**:
+- IDEA_NUDGER for creative brainstorming assistance
+- BETA_READER for comprehensive story review from reader perspective
+
+**Integration & Testing**:
+- Create multi-agent test scenarios
+- Test cross-agent collaboration in real story projects
+- Refine system prompts based on author feedback
+- Document best practices and workflows
+
+**Advanced Features**:
+- Meta-agent for coordinating full story reviews across all agents
+- Batch processing for complete chapters
+- Export functionality (character bibles, style guides, lore databases)
+- Learning system to adapt to individual author preferences
+
+---
+
+## 🎉 Phase 4 Complete - 89% of Ghost Writer System Implemented!
+
+The ghost writer system is now nearly complete with 8 specialized agents covering all major story writing needs:
+
+**Character & Dialogue**:
+- ✅ ACCENT_WRITER - Speech pattern consistency
+- ✅ CHARACTER_KEEPER - Character consistency tracking
+
+**World-Building**:
+- ✅ LORE_KEEPER - World rules and consistency
+- ✅ STORY_RESEARCHER - Realism verification
+
+**Writing Quality**:
+- ✅ STYLE_MONITOR - Style and formatting consistency
+- ✅ QUALITY_MONITOR - Grammar, clarity, plot quality
+
+**Creative Support**:
+- ✅ DETAIL_CONTRIVER - Minor detail generation
+- ✅ PROMPT_SPECIALIST - Media asset prompt generation
+
+Authors now have a comprehensive AI writing assistant ecosystem that:
+- Maintains consistency across all story elements
+- Generates media prompts from story context
+- Verifies historical/scientific accuracy
+- Tracks character voices and development
+- Ensures style and quality standards
+- All with persistent memory and cross-agent collaboration!

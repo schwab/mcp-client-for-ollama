@@ -2924,6 +2924,28 @@ Please analyze this project and create an initial memory structure with:
 
 app = typer.Typer(help="MCP Client for Ollama", context_settings={"help_option_names": ["-h", "--help"]})
 
+# Global context to store values from callback
+class GlobalContext:
+    def __init__(self):
+        self.host: Optional[str] = None
+
+global_context = GlobalContext()
+
+@app.callback(invoke_without_command=True)
+def global_callback(
+    ctx: typer.Context,
+    host: Optional[str] = typer.Option(
+        None, "--host", "-H",
+        help="Ollama host URL (global option for all commands)"
+    )
+):
+    """Global callback to handle global options"""
+    # Store global host for use by subcommands
+    global_context.host = host
+
+    # If no subcommand is provided, we'll run main by default
+    # This is handled by invoke_without_command=True
+
 @app.command()
 def main(
     # MCP Server Configuration
@@ -2952,11 +2974,6 @@ def main(
     model: str = typer.Option(
         DEFAULT_MODEL, "--model", "-m",
         help="Ollama model to use",
-        rich_help_panel="Ollama Configuration"
-    ),
-    host: str = typer.Option(
-        DEFAULT_OLLAMA_HOST, "--host", "-H",
-        help="Ollama host URL",
         rich_help_panel="Ollama Configuration"
     ),
 
@@ -3006,6 +3023,9 @@ def main(
         # Check if .config/config.json exists - if not, enable auto-discovery
         if not os.path.exists(".config/config.json"):
             auto_discovery = True
+
+    # Get host from global context or use default
+    host = global_context.host if global_context.host else DEFAULT_OLLAMA_HOST
 
     # Run the async main function
     asyncio.run(async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host, query, quiet, trace_enabled, trace_level, trace_dir))
@@ -3149,6 +3169,51 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
             await client.chat_loop()
     finally:
         await client.cleanup()
+
+
+@app.command()
+def web(
+    bind: str = typer.Option(
+        "0.0.0.0",
+        "--bind",
+        "-b",
+        help="Address to bind the web server to (e.g., 0.0.0.0, localhost, 127.0.0.1)"
+    ),
+    port: int = typer.Option(
+        5000,
+        "--port",
+        "-p",
+        help="Port to bind the web server to"
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        "-d",
+        help="Run in debug mode"
+    )
+):
+    """Launch web interface for MCP Client
+
+    Note: Use global --host option to specify Ollama API URL (e.g., ollmcp --host http://example.com web)
+          --bind specifies where the Flask web server listens
+    """
+    from mcp_client_for_ollama.web.app import run_web_server
+
+    # Get host from global context or use default
+    host = global_context.host if global_context.host else DEFAULT_OLLAMA_HOST
+
+    console = Console()
+    console.print(f"[bold cyan]Starting MCP Client Web Server...[/bold cyan]")
+    console.print(f"[cyan]Web server listening on: http://{bind}:{port}[/cyan]")
+    console.print(f"[cyan]Ollama API: {host}[/cyan]")
+    console.print(f"[cyan]API Documentation: http://{bind}:{port}/[/cyan]")
+    console.print(f"[yellow]Press CTRL+C to stop the server[/yellow]\n")
+
+    try:
+        run_web_server(bind=bind, port=port, ollama_host=host, debug=debug)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Shutting down web server...[/yellow]")
+
 
 if __name__ == "__main__":
     app()

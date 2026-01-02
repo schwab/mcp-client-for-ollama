@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Client - Chat Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .model-selector {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.3s;
+        }
+
+        .model-selector:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .model-selector option {
+            background: #764ba2;
+            color: white;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f7f9fc;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.assistant.streaming .message-content {
+            border-left: 3px solid #667eea;
+        }
+
+        .input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+
+        .message-input:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.3s;
+            outline: none;
+        }
+
+        .send-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status-bar {
+            padding: 8px 20px;
+            background: #f0f0f0;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.85rem;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-dot.connected {
+            background: #4caf50;
+            box-shadow: 0 0 4px #4caf50;
+        }
+
+        .status-dot.disconnected {
+            background: #f44336;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #667eea;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .chat-container {
+                height: 100vh;
+                max-width: 100%;
+                border-radius: 0;
+            }
+
+            .chat-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+
+            .message-content {
+                max-width: 85%;
+            }
+
+            .input-container {
+                padding: 15px;
+            }
+
+            .send-button {
+                padding: 12px 16px;
+            }
+        }
+
+        /* Scrollbar styling */
+        .messages-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 MCP Client Chat</h1>
+            <select class="model-selector" id="modelSelector">
+                <option value="">Loading models...</option>
+            </select>
+        </div>
+
+        <div class="messages-container" id="messagesContainer">
+            <div class="message assistant">
+                <div class="message-content">
+                    👋 Hello! I'm ready to help. Start by selecting a model and typing your message below.
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <input
+                type="text"
+                class="message-input"
+                id="messageInput"
+                placeholder="Type your message here..."
+                autocomplete="off"
+            >
+            <button class="send-button" id="sendButton">Send</button>
+        </div>
+
+        <div class="status-bar">
+            <div>
+                <span class="status-dot connected" id="statusDot"></span>
+                <span id="statusText">Connected</span>
+            </div>
+            <div id="sessionInfo">Session: <span id="sessionId">...</span></div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = window.location.origin + '/api';
+
+        // State
+        let sessionId = null;
+        let currentModel = null;
+        let isStreaming = false;
+        let eventSource = null;
+
+        // DOM Elements
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const modelSelector = document.getElementById('modelSelector');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const sessionIdDisplay = document.getElementById('sessionId');
+
+        // Initialize
+        async function initialize() {
+            try {
+                // Create session
+                const response = await fetch(`${API_BASE}/sessions/create`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                sessionId = data.session_id;
+                sessionIdDisplay.textContent = sessionId.substring(0, 8) + '...';
+
+                // Load models
+                await loadModels();
+
+                setStatus('connected', 'Connected');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                setStatus('disconnected', 'Connection failed');
+            }
+        }
+
+        // Load available models
+        async function loadModels() {
+            try {
+                const response = await fetch(`${API_BASE}/models/list`);
+                const data = await response.json();
+
+                modelSelector.innerHTML = '';
+
+                if (data.models && data.models.length > 0) {
+                    data.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        option.textContent = model.name;
+                        modelSelector.appendChild(option);
+                    });
+
+                    // Select first model by default
+                    currentModel = data.models[0].name;
+                    modelSelector.value = currentModel;
+                    await selectModel(currentModel);
+                } else {
+                    modelSelector.innerHTML = '<option>No models available</option>';
+                }
+            } catch (error) {
+                console.error('Error loading models:', error);
+                modelSelector.innerHTML = '<option>Error loading models</option>';
+            }
+        }
+
+        // Select model
+        async function selectModel(modelName) {
+            try {
+                await fetch(`${API_BASE}/models/select`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        model: modelName
+                    })
+                });
+                currentModel = modelName;
+            } catch (error) {
+                console.error('Error selecting model:', error);
+            }
+        }
+
+        // Add message to UI
+        function addMessage(role, content, streaming = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            if (streaming) messageDiv.classList.add('streaming');
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+
+            messageDiv.appendChild(contentDiv);
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+
+            return contentDiv;
+        }
+
+        // Update message content
+        function updateMessage(contentDiv, newContent) {
+            contentDiv.textContent = newContent;
+            scrollToBottom();
+        }
+
+        // Scroll to bottom
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Set status
+        function setStatus(status, text) {
+            statusDot.className = `status-dot ${status}`;
+            statusText.textContent = text;
+        }
+
+        // Send message
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isStreaming || !sessionId || !currentModel) return;
+
+            // Add user message to UI
+            addMessage('user', message);
+            messageInput.value = '';
+
+            // Disable input while streaming
+            isStreaming = true;
+            sendButton.disabled = true;
+            messageInput.disabled = true;
+            setStatus('connected', 'Thinking...');
+
+            // Create placeholder for assistant response
+            const assistantContent = addMessage('assistant', '', true);
+            let fullResponse = '';
+
+            try {
+                // Open SSE connection for streaming
+                const encodedMessage = encodeURIComponent(message);
+                const url = `${API_BASE}/stream/chat?session_id=${sessionId}&message=${encodedMessage}`;
+
+                eventSource = new EventSource(url);
+
+                eventSource.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+
+                    if (data.done) {
+                        // Stream complete
+                        eventSource.close();
+                        eventSource = null;
+                        isStreaming = false;
+                        sendButton.disabled = false;
+                        messageInput.disabled = false;
+                        setStatus('connected', 'Connected');
+                        assistantContent.parentElement.classList.remove('streaming');
+                        messageInput.focus();
+                    } else if (data.chunk) {
+                        // Append chunk to response
+                        fullResponse += data.chunk;
+                        updateMessage(assistantContent, fullResponse);
+                    } else if (data.error) {
+                        // Handle error
+                        updateMessage(assistantContent, `Error: ${data.error}`);
+                        eventSource.close();
+                        eventSource = null;
+                        isStreaming = false;
+                        sendButton.disabled = false;
+                        messageInput.disabled = false;
+                        setStatus('disconnected', 'Error');
+                    }
+                };
+
+                eventSource.onerror = (error) => {
+                    console.error('SSE error:', error);
+                    if (fullResponse === '') {
+                        updateMessage(assistantContent, 'Error: Connection failed. Please try again.');
+                    }
+                    eventSource.close();
+                    eventSource = null;
+                    isStreaming = false;
+                    sendButton.disabled = false;
+                    messageInput.disabled = false;
+                    setStatus('disconnected', 'Connection error');
+                };
+
+            } catch (error) {
+                console.error('Send error:', error);
+                updateMessage(assistantContent, `Error: ${error.message}`);
+                isStreaming = false;
+                sendButton.disabled = false;
+                messageInput.disabled = false;
+                setStatus('disconnected', 'Error');
+            }
+        }
+
+        // Event Listeners
+        sendButton.addEventListener('click', sendMessage);
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        modelSelector.addEventListener('change', (e) => {
+            selectModel(e.target.value);
+        });
+
+        // Initialize on load
+        initialize();
+    </script>
+</body>
+</html>
