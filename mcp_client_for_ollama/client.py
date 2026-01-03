@@ -38,12 +38,12 @@ class MCPClient:
     """Main client class for interacting with Ollama and MCP servers"""
 
 
-    def __init__(self, model: str = DEFAULT_MODEL, host: str = DEFAULT_OLLAMA_HOST):
+    def __init__(self, model: str = DEFAULT_MODEL, host: str = DEFAULT_OLLAMA_HOST, config_dir: str = None):
         # Initialize session and client objects
         self.exit_stack = AsyncExitStack()
         self.ollama = ollama.AsyncClient(host=host)
         self.console = Console()
-        self.config_manager = ConfigManager(self.console)
+        self.config_manager = ConfigManager(self.console, config_dir=config_dir)
         # Initialize the server connector
         self.server_connector = ServerConnector(self.exit_stack, self.console)
         # Initialize the model manager
@@ -3180,7 +3180,7 @@ def web(
         help="Address to bind the web server to (e.g., 0.0.0.0, localhost, 127.0.0.1)"
     ),
     port: int = typer.Option(
-        5000,
+        5222,
         "--port",
         "-p",
         help="Port to bind the web server to"
@@ -3197,20 +3197,25 @@ def web(
     Note: Use global --host option to specify Ollama API URL (e.g., ollmcp --host http://example.com web)
           --bind specifies where the Flask web server listens
     """
+    import os
     from mcp_client_for_ollama.web.app import run_web_server
 
     # Get host from global context or use default
     host = global_context.host if global_context.host else DEFAULT_OLLAMA_HOST
 
+    # Capture current working directory for config loading
+    config_dir = os.path.join(os.getcwd(), ".config")
+
     console = Console()
     console.print(f"[bold cyan]Starting MCP Client Web Server...[/bold cyan]")
     console.print(f"[cyan]Web server listening on: http://{bind}:{port}[/cyan]")
     console.print(f"[cyan]Ollama API: {host}[/cyan]")
+    console.print(f"[cyan]Config directory: {config_dir}[/cyan]")
     console.print(f"[cyan]API Documentation: http://{bind}:{port}/[/cyan]")
     console.print(f"[yellow]Press CTRL+C to stop the server[/yellow]\n")
 
     try:
-        run_web_server(bind=bind, port=port, ollama_host=host, debug=debug)
+        run_web_server(bind=bind, port=port, ollama_host=host, config_dir=config_dir, debug=debug)
     except KeyboardInterrupt:
         console.print("\n[yellow]Shutting down web server...[/yellow]")
 

@@ -1,6 +1,6 @@
 [project]
 name = "mcp-client-for-ollama"
-version = "0.37.6"
+version = "0.40.2"
 description = "MCP Client for Ollama - A client for connecting to Model Context Protocol servers using Ollama"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +15,7 @@ dependencies = [
     "prompt-toolkit~=3.0.52",
     "rich~=14.2.0",
     "typer~=0.20.0",
-    "flask~=3.1.0",
+    "flask[async]~=3.1.0",
     "flask-cors~=5.0.0",
 ]
 

@@ -38,3 +38,32 @@ async def update_config():
 
     # For MVP, only allow model updates (handled via /models/select)
     return jsonify({'status': 'ok', 'message': 'Use /models/select for model changes'})
+
+
+@bp.route('/reload-servers', methods=['POST'])
+async def reload_servers():
+    """Reload MCP servers for session"""
+    session_id = request.args.get('session_id')
+
+    if not session_id:
+        return jsonify({'error': 'session_id required'}), 400
+
+    client = session_manager.get_session(session_id)
+    if not client:
+        return jsonify({'error': 'Invalid session'}), 404
+
+    try:
+        # Reload MCP servers with auto-discovery
+        await client.reload_servers()
+
+        # Count loaded servers
+        server_count = len(client.get_servers())
+
+        return jsonify({
+            'status': 'ok',
+            'server_count': server_count,
+            'message': f'Successfully reloaded {server_count} MCP servers'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

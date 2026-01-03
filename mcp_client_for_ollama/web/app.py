@@ -6,7 +6,7 @@ import asyncio
 from functools import wraps
 
 # Import blueprints
-from mcp_client_for_ollama.web.api import chat, config, sessions, models
+from mcp_client_for_ollama.web.api import chat, config, sessions, models, tools
 from mcp_client_for_ollama.web.sse import streaming
 from mcp_client_for_ollama.web.session.manager import session_manager
 
@@ -43,6 +43,7 @@ def create_app(app_config=None):
     app.register_blueprint(config.bp, url_prefix='/api/config')
     app.register_blueprint(sessions.bp, url_prefix='/api/sessions')
     app.register_blueprint(models.bp, url_prefix='/api/models')
+    app.register_blueprint(tools.bp, url_prefix='/api/tools')
     app.register_blueprint(streaming.bp, url_prefix='/api/stream')
 
     # Root endpoint - serve UI
@@ -55,12 +56,13 @@ def create_app(app_config=None):
     def api_info():
         return jsonify({
             'name': 'MCP Client Web API',
-            'version': '0.37.6',
+            'version': '0.40.2',
             'status': 'running',
             'endpoints': {
                 'sessions': '/api/sessions',
                 'chat': '/api/chat',
                 'models': '/api/models',
+                'tools': '/api/tools',
                 'streaming': '/api/stream/chat',
                 'config': '/api/config'
             }
@@ -104,17 +106,21 @@ def get_global_config():
 app = create_app()
 
 
-def run_web_server(bind='0.0.0.0', port=5000, ollama_host='http://localhost:11434', debug=False):
+def run_web_server(bind='0.0.0.0', port=5222, ollama_host='http://localhost:11434', config_dir=None, debug=False):
     """Run the Flask web server
 
     Args:
         bind: Address to bind Flask server to (e.g., 0.0.0.0, localhost)
         port: Port to bind Flask server to
         ollama_host: Ollama API URL (e.g., http://localhost:11434)
+        config_dir: Config directory path (e.g., /path/to/.config)
         debug: Enable Flask debug mode
     """
-    # Set global config with Ollama host
-    set_global_config({'ollama_host': ollama_host})
+    # Set global config with Ollama host and config directory
+    set_global_config({
+        'ollama_host': ollama_host,
+        'config_dir': config_dir
+    })
 
     print(f"Starting MCP Client Web Server on http://{bind}:{port}")
     print(f"Ollama API: {ollama_host}")

@@ -1870,3 +1870,7 @@ curl http://localhost:5000/api/models/list
 # Test session creation (no headers needed)
 curl -X POST http://localhost:5000/api/sessions/create
 ```
+
+## BUG! Immediate failure when user enters any chat command into the UI
+
+- Error: Connection failed. Please try again.

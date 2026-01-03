@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCP Client - Chat Interface</title>
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -12,8 +14,8 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+            background: #f4f4f4;
             height: 100vh;
             display: flex;
             justify-content: center;
@@ -21,26 +23,234 @@
             padding: 20px;
         }
 
+        .app-container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1400px;
+            height: 90vh;
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 300px;
+        }
+
         .chat-container {
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: 800px;
-            height: 90vh;
+            border-radius: 3px;
+            box-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+            flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
 
+        .tools-sidebar, .agent-activity-sidebar {
+            background: white;
+            border-radius: 3px;
+            box-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            background: #0082c9;
+            color: white;
+            padding: 20px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .sidebar-header:hover {
+            background: #006aa3;
+        }
+
+        .sidebar-content {
+            overflow-y: auto;
+            padding: 15px;
+            max-height: 400px;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .sidebar-content.collapsed {
+            max-height: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .tool-section {
+            margin-bottom: 20px;
+        }
+
+        .tool-section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tool-section-title.enabled {
+            color: #46ba61;
+            border-bottom-color: #46ba61;
+        }
+
+        .tool-section-title.disabled {
+            color: #999;
+            border-bottom-color: #e0e0e0;
+        }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f7f9fc;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .tool-item:hover {
+            background: #e8ecf4;
+        }
+
+        .tool-item.recently-used {
+            background: #fff9e6;
+            border-left: 3px solid #f4a70c;
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .tool-info {
+            flex: 1;
+        }
+
+        .tool-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 2px;
+        }
+
+        .tool-description {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #46ba61;
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Accordion Arrow */
+        .accordion-arrow {
+            transition: transform 0.3s;
+            font-size: 0.8rem;
+        }
+
+        .accordion-arrow.expanded {
+            transform: rotate(180deg);
+        }
+
+        .agent-activity-log {
+            padding: 10px;
+            max-height: 280px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.75rem;
+        }
+
+        .activity-item {
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            border-left: 3px solid #0082c9;
+            background: #f7f9fc;
+            border-radius: 3px;
+        }
+
+        .activity-item.status {
+            border-left-color: #46ba61;
+        }
+
+        .activity-item.agent {
+            border-left-color: #f4a70c;
+            font-size: 0.7rem;
+            color: #555;
+        }
+
+        .activity-timestamp {
+            color: #999;
+            font-size: 0.7rem;
+            margin-right: 8px;
+        }
+
         .chat-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0082c9;
             color: white;
             padding: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-radius: 3px 3px 0 0;
         }
 
         .chat-header h1 {
@@ -67,6 +277,44 @@
         .model-selector option {
             background: #764ba2;
             color: white;
+        }
+
+        .button-bar {
+            background: #f4f4f4;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .action-button {
+            padding: 8px 16px;
+            background: #0082c9;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            outline: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .action-button:hover:not(:disabled) {
+            background: #006aa3;
+        }
+
+        .action-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .action-button.reloading {
+            background: #f4a70c;
         }
 
         .messages-container {
@@ -96,11 +344,10 @@
             padding: 12px 16px;
             border-radius: 12px;
             word-wrap: break-word;
-            white-space: pre-wrap;
         }
 
         .message.user .message-content {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0082c9;
             color: white;
             border-bottom-right-radius: 4px;
         }
@@ -113,7 +360,102 @@
         }
 
         .message.assistant.streaming .message-content {
-            border-left: 3px solid #667eea;
+            border-left: 3px solid #0082c9;
+        }
+
+        /* Markdown Styling */
+        .message-content h1, .message-content h2, .message-content h3,
+        .message-content h4, .message-content h5, .message-content h6 {
+            margin-top: 16px;
+            margin-bottom: 8px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        .message-content h1 { font-size: 1.5rem; border-bottom: 1px solid #e0e0e0; padding-bottom: 8px; }
+        .message-content h2 { font-size: 1.3rem; }
+        .message-content h3 { font-size: 1.1rem; }
+
+        .message-content p {
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+
+        .message-content code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .message.user .message-content code {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .message-content pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        .message-content pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+        }
+
+        .message-content ul, .message-content ol {
+            margin-left: 20px;
+            margin-bottom: 12px;
+        }
+
+        .message-content li {
+            margin-bottom: 4px;
+            line-height: 1.6;
+        }
+
+        .message-content blockquote {
+            border-left: 4px solid #0082c9;
+            padding-left: 12px;
+            margin: 12px 0;
+            color: #666;
+            font-style: italic;
+        }
+
+        .message-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 12px 0;
+        }
+
+        .message-content th, .message-content td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .message-content th {
+            background: #f4f4f4;
+            font-weight: 600;
+        }
+
+        .message-content a {
+            color: #0082c9;
+            text-decoration: none;
+        }
+
+        .message-content a:hover {
+            text-decoration: underline;
+        }
+
+        .message-content hr {
+            border: none;
+            border-top: 1px solid #e0e0e0;
+            margin: 16px 0;
         }
 
         .input-container {
@@ -133,32 +475,36 @@
             outline: none;
             transition: border-color 0.3s;
             font-family: inherit;
+            resize: vertical;
+            min-height: 44px;
+            max-height: 200px;
+            overflow-y: auto;
+            line-height: 1.5;
         }
 
         .message-input:focus {
-            border-color: #667eea;
+            border-color: #0082c9;
         }
 
         .send-button {
             padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0082c9;
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 3px;
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.3s;
+            transition: background-color 0.2s;
             outline: none;
         }
 
         .send-button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            background: #006aa3;
         }
 
         .send-button:disabled {
-            opacity: 0.6;
+            background: #cccccc;
             cursor: not-allowed;
         }
 
@@ -190,26 +536,41 @@
             background: #f44336;
         }
 
-        .loading {
-            display: inline-block;
+        /* Scrollbar styling */
+        .messages-container::-webkit-scrollbar,
+        .sidebar-content::-webkit-scrollbar {
             width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #667eea;
-            animation: pulse 1.5s ease-in-out infinite;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+        .messages-container::-webkit-scrollbar-track,
+        .sidebar-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb,
+        .sidebar-content::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover,
+        .sidebar-content::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
         }
 
         /* Mobile responsive */
         @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .tools-sidebar {
+                width: 100%;
+                height: 200px;
+            }
+
             .chat-container {
-                height: 100vh;
-                max-width: 100%;
-                border-radius: 0;
+                height: calc(90vh - 220px);
             }
 
             .chat-header {
@@ -221,69 +582,90 @@
             .message-content {
                 max-width: 85%;
             }
-
-            .input-container {
-                padding: 15px;
-            }
-
-            .send-button {
-                padding: 12px 16px;
-            }
-        }
-
-        /* Scrollbar styling */
-        .messages-container::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .messages-container::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-
-        .messages-container::-webkit-scrollbar-thumb {
-            background: #667eea;
-            border-radius: 4px;
-        }
-
-        .messages-container::-webkit-scrollbar-thumb:hover {
-            background: #764ba2;
         }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <h1>🤖 MCP Client Chat</h1>
-            <select class="model-selector" id="modelSelector">
-                <option value="">Loading models...</option>
-            </select>
-        </div>
+    <div class="app-container">
+        <!-- Left Panel with Tools and Agent Activity -->
+        <div class="left-panel">
+            <!-- Tools Sidebar -->
+            <div class="tools-sidebar">
+                <div class="sidebar-header" onclick="toggleTools()">
+                    <span>🔧 Tools</span>
+                    <span id="toolsToggle" class="accordion-arrow">▼</span>
+                </div>
+                <div id="toolsContent" class="sidebar-content">
+                    <div class="tool-section">
+                        <div class="tool-section-title enabled">Enabled Tools</div>
+                        <div id="enabledTools"></div>
+                    </div>
+                    <div class="tool-section">
+                        <div class="tool-section-title disabled">Disabled Tools</div>
+                        <div id="disabledTools"></div>
+                    </div>
+                </div>
+            </div>
 
-        <div class="messages-container" id="messagesContainer">
-            <div class="message assistant">
-                <div class="message-content">
-                    👋 Hello! I'm ready to help. Start by selecting a model and typing your message below.
+            <!-- Agent Activity Sidebar -->
+            <div class="agent-activity-sidebar">
+                <div class="sidebar-header" onclick="toggleAgentActivity()">
+                    <span>⚡ Agent Activity</span>
+                    <span id="agentActivityToggle" class="accordion-arrow">▼</span>
+                </div>
+                <div id="agentActivityContent" class="sidebar-content collapsed">
+                    <div id="agentActivityLog" class="agent-activity-log">
+                        <div style="color: #999; font-size: 0.85rem; padding: 10px; text-align: center;">
+                            No activity yet
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="input-container">
-            <input
-                type="text"
-                class="message-input"
-                id="messageInput"
-                placeholder="Type your message here..."
-                autocomplete="off"
-            >
-            <button class="send-button" id="sendButton">Send</button>
-        </div>
-
-        <div class="status-bar">
-            <div>
-                <span class="status-dot connected" id="statusDot"></span>
-                <span id="statusText">Connected</span>
+        <!-- Chat Container -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>MCP Client Chat</h1>
+                <select class="model-selector" id="modelSelector">
+                    <option value="">Loading models...</option>
+                </select>
             </div>
-            <div id="sessionInfo">Session: <span id="sessionId">...</span></div>
+
+            <!-- Button Bar -->
+            <div class="button-bar">
+                <button class="action-button" id="reloadServersButton" onclick="reloadServers()">
+                    <span>🔄</span>
+                    <span>Reload MCP Servers</span>
+                </button>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                <div class="message assistant">
+                    <div class="message-content">
+                        Hello! I'm ready to help. Start by selecting a model and typing your message below.
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <textarea
+                    class="message-input"
+                    id="messageInput"
+                    placeholder="Type your message here..."
+                    autocomplete="off"
+                    rows="1"
+                ></textarea>
+                <button class="send-button" id="sendButton">Send</button>
+            </div>
+
+            <div class="status-bar">
+                <div>
+                    <span class="status-dot connected" id="statusDot"></span>
+                    <span id="statusText">Connected</span>
+                </div>
+                <div id="sessionInfo">Session: <span id="sessionId">...</span></div>
+            </div>
         </div>
     </div>
 
@@ -296,6 +678,7 @@
         let currentModel = null;
         let isStreaming = false;
         let eventSource = null;
+        let tools = [];
 
         // DOM Elements
         const messagesContainer = document.getElementById('messagesContainer');
@@ -305,6 +688,11 @@
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const sessionIdDisplay = document.getElementById('sessionId');
+        const enabledToolsContainer = document.getElementById('enabledTools');
+        const disabledToolsContainer = document.getElementById('disabledTools');
+        const agentActivityLog = document.getElementById('agentActivityLog');
+        const agentActivityContent = document.getElementById('agentActivityContent');
+        const agentActivityToggle = document.getElementById('agentActivityToggle');
 
         // Initialize
         async function initialize() {
@@ -317,8 +705,9 @@
                 sessionId = data.session_id;
                 sessionIdDisplay.textContent = sessionId.substring(0, 8) + '...';
 
-                // Load models
+                // Load models and tools
                 await loadModels();
+                await loadTools();
 
                 setStatus('connected', 'Connected');
             } catch (error) {
@@ -353,6 +742,89 @@
             } catch (error) {
                 console.error('Error loading models:', error);
                 modelSelector.innerHTML = '<option>Error loading models</option>';
+            }
+        }
+
+        // Load tools
+        async function loadTools() {
+            try {
+                const response = await fetch(`${API_BASE}/tools/list?session_id=${sessionId}`);
+                const data = await response.json();
+                tools = data.tools || [];
+                renderTools();
+            } catch (error) {
+                console.error('Error loading tools:', error);
+            }
+        }
+
+        // Render tools in sidebar
+        function renderTools() {
+            const enabled = tools.filter(t => t.enabled);
+            const disabled = tools.filter(t => !t.enabled);
+
+            enabledToolsContainer.innerHTML = enabled.length > 0
+                ? enabled.map(tool => createToolElement(tool)).join('')
+                : '<div style="color: #999; font-size: 0.85rem; padding: 10px;">No enabled tools</div>';
+
+            disabledToolsContainer.innerHTML = disabled.length > 0
+                ? disabled.map(tool => createToolElement(tool)).join('')
+                : '<div style="color: #999; font-size: 0.85rem; padding: 10px;">No disabled tools</div>';
+        }
+
+        // Create tool HTML element
+        // Clean up tool name for display (remove server prefix and replace _ with spaces)
+        function cleanToolName(toolName) {
+            // Remove server prefix (e.g., "builtin." or "server_name.")
+            let cleaned = toolName.includes('.') ? toolName.split('.').slice(1).join('.') : toolName;
+            // Replace underscores with spaces
+            cleaned = cleaned.replace(/_/g, ' ');
+            // Capitalize first letter of each word
+            cleaned = cleaned.split(' ').map(word =>
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
+            return cleaned;
+        }
+
+        function createToolElement(tool) {
+            const displayName = cleanToolName(tool.name);
+            return `
+                <div class="tool-item" data-tool-name="${tool.name}">
+                    <div class="tool-info">
+                        <div class="tool-name">${displayName}</div>
+                        <div class="tool-description">${tool.description}</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${tool.enabled ? 'checked' : ''}
+                               onchange="toggleTool('${tool.name}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            `;
+        }
+
+        // Toggle tool enabled/disabled
+        async function toggleTool(toolName, enabled) {
+            try {
+                const response = await fetch(`${API_BASE}/tools/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        tool_name: toolName,
+                        enabled: enabled
+                    })
+                });
+
+                if (response.ok) {
+                    // Update local state
+                    const tool = tools.find(t => t.name === toolName);
+                    if (tool) {
+                        tool.enabled = enabled;
+                        renderTools();
+                    }
+                }
+            } catch (error) {
+                console.error('Error toggling tool:', error);
             }
         }
 
@@ -392,7 +864,13 @@
 
         // Update message content
         function updateMessage(contentDiv, newContent) {
-            contentDiv.textContent = newContent;
+            // Parse markdown and render as HTML
+            if (typeof marked !== 'undefined') {
+                contentDiv.innerHTML = marked.parse(newContent);
+            } else {
+                // Fallback if marked.js fails to load
+                contentDiv.textContent = newContent;
+            }
             scrollToBottom();
         }
 
@@ -415,6 +893,9 @@
             // Add user message to UI
             addMessage('user', message);
             messageInput.value = '';
+
+            // Clear previous agent activity
+            clearAgentActivity();
 
             // Disable input while streaming
             isStreaming = true;
@@ -450,6 +931,24 @@
                         // Append chunk to response
                         fullResponse += data.chunk;
                         updateMessage(assistantContent, fullResponse);
+                    } else if (data.status) {
+                        // Status update (planning, processing, etc.)
+                        addAgentActivity(data.status, 'status');
+                        setStatus('processing', data.status);
+                    } else if (data.agent_update) {
+                        // Agent activity update
+                        addAgentActivity(data.agent_update, 'agent');
+
+                        // Detect tool calls and highlight them
+                        // Tool calls typically look like: "Running tool: builtin.memory_get" or similar
+                        const toolCallMatch = data.agent_update.match(/(?:Running|Calling|Using|Executing)\s+(?:tool:?\s+)?(\S+)/i);
+                        if (toolCallMatch) {
+                            const toolName = toolCallMatch[1];
+                            highlightTool(toolName);
+                        }
+                    } else if (data.heartbeat) {
+                        // Keep-alive heartbeat (no action needed)
+                        console.log('Received heartbeat');
                     } else if (data.error) {
                         // Handle error
                         updateMessage(assistantContent, `Error: ${data.error}`);
@@ -482,6 +981,122 @@
                 sendButton.disabled = false;
                 messageInput.disabled = false;
                 setStatus('disconnected', 'Error');
+            }
+        }
+
+        // Sidebar Toggle Functions
+        function toggleTools() {
+            const toolsContent = document.getElementById('toolsContent');
+            const toolsToggle = document.getElementById('toolsToggle');
+            const isCollapsed = toolsContent.classList.contains('collapsed');
+            if (isCollapsed) {
+                toolsContent.classList.remove('collapsed');
+                toolsToggle.classList.add('expanded');
+            } else {
+                toolsContent.classList.add('collapsed');
+                toolsToggle.classList.remove('expanded');
+            }
+        }
+
+        function toggleAgentActivity() {
+            const isCollapsed = agentActivityContent.classList.contains('collapsed');
+            if (isCollapsed) {
+                agentActivityContent.classList.remove('collapsed');
+                agentActivityToggle.classList.add('expanded');
+            } else {
+                agentActivityContent.classList.add('collapsed');
+                agentActivityToggle.classList.remove('expanded');
+            }
+        }
+
+        // Reload MCP Servers
+        async function reloadServers() {
+            const button = document.getElementById('reloadServersButton');
+            const originalText = button.innerHTML;
+
+            try {
+                // Disable button and show loading state
+                button.disabled = true;
+                button.classList.add('reloading');
+                button.innerHTML = '<span>⏳</span><span>Reloading...</span>';
+
+                // Call backend API
+                const response = await fetch(`/api/config/reload-servers?session_id=${sessionId}`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to reload servers');
+                }
+
+                const result = await response.json();
+
+                // Show success message
+                button.innerHTML = '<span>✅</span><span>Reloaded!</span>';
+                addAgentActivity(`Reloaded MCP servers successfully. Found ${result.server_count || 0} servers.`, 'status');
+
+                // Reload tools in the UI
+                await loadTools();
+
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('reloading');
+                    button.disabled = false;
+                }, 2000);
+
+            } catch (error) {
+                console.error('Error reloading servers:', error);
+                button.innerHTML = '<span>❌</span><span>Error</span>';
+                addAgentActivity(`Error reloading servers: ${error.message}`, 'status');
+
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('reloading');
+                    button.disabled = false;
+                }, 3000);
+            }
+        }
+
+        function addAgentActivity(message, type = 'status') {
+            // Remove "no activity" message if it exists
+            const noActivity = agentActivityLog.querySelector('[style*="No activity"]');
+            if (noActivity) {
+                agentActivityLog.innerHTML = '';
+            }
+
+            // Create activity item
+            const item = document.createElement('div');
+            item.className = `activity-item ${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            item.innerHTML = `<span class="activity-timestamp">${timestamp}</span>${message}`;
+
+            agentActivityLog.appendChild(item);
+
+            // Auto-scroll to bottom
+            agentActivityLog.scrollTop = agentActivityLog.scrollHeight;
+
+            // Auto-expand accordion if collapsed
+            if (agentActivityContent.classList.contains('collapsed')) {
+                toggleAgentActivity();
+            }
+        }
+
+        function clearAgentActivity() {
+            agentActivityLog.innerHTML = '<div style="color: #999; font-size: 0.85rem; padding: 10px; text-align: center;">No activity yet</div>';
+        }
+
+        // Highlight a tool that was recently used
+        function highlightTool(toolName) {
+            const toolItem = document.querySelector(`.tool-item[data-tool-name="${toolName}"]`);
+            if (toolItem) {
+                toolItem.classList.add('recently-used');
+                // Remove highlight after 5 seconds
+                setTimeout(() => {
+                    toolItem.classList.remove('recently-used');
+                }, 5000);
             }
         }
 

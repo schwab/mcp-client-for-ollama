@@ -17,3 +17,8 @@ wheels/
 .config/
 uv.lock
 *.lock
+
+
+
+# Ignore Smart Environment folder
+.smart-env
