@@ -1,5 +1,5 @@
 """Configuration API endpoints for web interface"""
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 from mcp_client_for_ollama.web.session.manager import session_manager
 
 bp = Blueprint('config', __name__)
@@ -7,13 +7,14 @@ bp = Blueprint('config', __name__)
 
 @bp.route('/get', methods=['GET'])
 async def get_config():
-    """Get configuration for session"""
+    """Get configuration for session (supports both standalone and Nextcloud mode)"""
+    username = g.get('nextcloud_user', None)
     session_id = request.args.get('session_id')
 
     if not session_id:
         return jsonify({'error': 'session_id required'}), 400
 
-    client = session_manager.get_session(session_id)
+    client = session_manager.get_session(session_id, username=username)
     if not client:
         return jsonify({'error': 'Invalid session'}), 404
 
@@ -25,14 +26,15 @@ async def get_config():
 
 @bp.route('/update', methods=['POST'])
 async def update_config():
-    """Update configuration for session (MVP: limited to model selection)"""
+    """Update configuration for session (MVP: limited to model selection, supports both standalone and Nextcloud mode)"""
+    username = g.get('nextcloud_user', None)
     data = request.json
     session_id = data.get('session_id')
 
     if not session_id:
         return jsonify({'error': 'session_id required'}), 400
 
-    client = session_manager.get_session(session_id)
+    client = session_manager.get_session(session_id, username=username)
     if not client:
         return jsonify({'error': 'Invalid session'}), 404
 
@@ -42,17 +44,21 @@ async def update_config():
 
 @bp.route('/reload-servers', methods=['POST'])
 async def reload_servers():
-    """Reload MCP servers for session"""
+    """Reload MCP servers for session (supports both standalone and Nextcloud mode)"""
+    username = g.get('nextcloud_user', None)
     session_id = request.args.get('session_id')
 
     if not session_id:
         return jsonify({'error': 'session_id required'}), 400
 
-    client = session_manager.get_session(session_id)
+    client = session_manager.get_session(session_id, username=username)
     if not client:
         return jsonify({'error': 'Invalid session'}), 404
 
     try:
+        # Ensure client is initialized first
+        await client.initialize()
+
         # Reload MCP servers with auto-discovery
         await client.reload_servers()
 

@@ -48,7 +48,7 @@
             overflow: hidden;
         }
 
-        .tools-sidebar, .agent-activity-sidebar {
+        .tools-sidebar, .agent-activity-sidebar, .memory-panel-sidebar {
             background: white;
             border-radius: 3px;
             box-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
@@ -536,6 +536,328 @@
             background: #f44336;
         }
 
+        /* Memory Panel Styles */
+        .memory-session-status {
+            padding: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .status-badge.active {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+
+        .status-badge.inactive {
+            background: #f5f5f5;
+            color: #666;
+            border: 1px solid #e0e0e0;
+        }
+
+        .status-icon {
+            font-size: 1.1rem;
+        }
+
+        .memory-action-btn {
+            width: 100%;
+            padding: 10px 16px;
+            background: #0082c9;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+
+        .memory-action-btn:hover:not(:disabled) {
+            background: #006aa3;
+        }
+
+        .memory-action-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .goals-list {
+            padding: 15px;
+        }
+
+        .goals-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #0082c9;
+        }
+
+        .goals-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #0082c9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            color: #0082c9;
+        }
+
+        .icon-btn:hover:not(:disabled) {
+            background: rgba(0, 130, 201, 0.1);
+        }
+
+        .icon-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .goals-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        .goal-item {
+            margin-bottom: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+            overflow: hidden;
+        }
+
+        .goal-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 12px;
+            cursor: pointer;
+            background: #f7f9fc;
+            transition: background 0.2s;
+        }
+
+        .goal-header:hover {
+            background: #e8ecf4;
+        }
+
+        .goal-expand-icon {
+            font-size: 0.7rem;
+            transition: transform 0.3s;
+            margin-top: 2px;
+            color: #666;
+        }
+
+        .goal-expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .goal-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .goal-id {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #0082c9;
+            margin-bottom: 4px;
+        }
+
+        .goal-description {
+            font-size: 0.85rem;
+            color: #333;
+            word-wrap: break-word;
+            margin-bottom: 6px;
+        }
+
+        .goal-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .goal-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .goal-actions .icon-btn {
+            font-size: 0.85rem;
+            padding: 2px 6px;
+        }
+
+        .features-list {
+            padding: 8px 12px 12px 12px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .features-list.expanded {
+            display: block;
+        }
+
+        .feature-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f7f9fc;
+            border-left: 3px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .feature-item.pending {
+            border-left-color: #999;
+        }
+
+        .feature-item.in_progress {
+            border-left-color: #0082c9;
+            background: #e3f2fd;
+        }
+
+        .feature-item.completed {
+            border-left-color: #46ba61;
+            background: #e8f5e9;
+        }
+
+        .feature-item.failed {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+
+        .feature-item.blocked {
+            border-left-color: #f4a70c;
+            background: #fff9e6;
+        }
+
+        .feature-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .feature-status-icon {
+            font-size: 1rem;
+        }
+
+        .feature-id {
+            font-weight: 600;
+            color: #0082c9;
+            font-size: 0.75rem;
+        }
+
+        .feature-priority {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #e0e0e0;
+            color: #666;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .feature-priority.high {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+
+        .feature-priority.medium {
+            background: #fff9c4;
+            color: #f57f17;
+        }
+
+        .feature-priority.low {
+            background: #e0e0e0;
+            color: #666;
+        }
+
+        .feature-description {
+            color: #333;
+            margin-bottom: 6px;
+            word-wrap: break-word;
+        }
+
+        .feature-meta {
+            font-size: 0.7rem;
+            color: #666;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .feature-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .feature-actions .icon-btn {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border: 1px solid #e0e0e0;
+            background: white;
+        }
+
+        .add-feature-btn {
+            width: 100%;
+            padding: 8px;
+            background: transparent;
+            color: #0082c9;
+            border: 1px dashed #0082c9;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 8px;
+            transition: all 0.2s;
+        }
+
+        .add-feature-btn:hover:not(:disabled) {
+            background: rgba(0, 130, 201, 0.05);
+            border-color: #006aa3;
+            color: #006aa3;
+        }
+
+        .add-feature-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
         /* Scrollbar styling */
         .messages-container::-webkit-scrollbar,
         .sidebar-content::-webkit-scrollbar {
@@ -621,6 +943,44 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Memory Control Panel -->
+            <div class="memory-panel-sidebar">
+                <div class="sidebar-header" onclick="toggleMemoryPanel()">
+                    <span>🧠 Memory</span>
+                    <span id="memoryPanelToggle" class="accordion-arrow">▼</span>
+                </div>
+                <div id="memoryPanelContent" class="sidebar-content collapsed">
+                    <!-- Memory Session Status -->
+                    <div id="memorySessionStatus" class="memory-session-status">
+                        <div class="status-badge inactive">
+                            <span class="status-icon">⭕</span>
+                            <span>No Active Session</span>
+                        </div>
+                        <button class="memory-action-btn" id="newMemorySessionBtn" onclick="showNewMemorySessionDialog()">
+                            <span>➕</span> New Session
+                        </button>
+                    </div>
+
+                    <!-- Goals List -->
+                    <div id="goalsList" class="goals-list">
+                        <div class="goals-header">
+                            <span class="goals-title">Goals</span>
+                            <button class="icon-btn" id="newGoalBtn" onclick="showNewGoalDialog()" title="Add Goal" disabled>
+                                ➕
+                            </button>
+                        </div>
+                        <div id="goalsContainer" class="goals-container">
+                            <div class="empty-state">
+                                <span style="font-size: 2rem; opacity: 0.3;">🎯</span>
+                                <div style="color: #999; font-size: 0.85rem; margin-top: 8px;">
+                                    No goals yet. Create a memory session to get started.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Chat Container -->
@@ -680,6 +1040,18 @@
         let eventSource = null;
         let tools = [];
 
+        // Memory State
+        let memoryState = {
+            active: false,
+            session_id: null,
+            domain: null,
+            description: null,
+            goals: [],
+            features: {},
+            loading: false,
+            error: null
+        };
+
         // DOM Elements
         const messagesContainer = document.getElementById('messagesContainer');
         const messageInput = document.getElementById('messageInput');
@@ -694,13 +1066,26 @@
         const agentActivityContent = document.getElementById('agentActivityContent');
         const agentActivityToggle = document.getElementById('agentActivityToggle');
 
+        // Message history for up/down arrow navigation
+        let messageHistory = [];
+        let historyIndex = -1;
+        let currentDraft = ''; // Store current unsent message when navigating history
+
         // Initialize
         async function initialize() {
             try {
                 // Create session
                 const response = await fetch(`${API_BASE}/sessions/create`, {
-                    method: 'POST'
+                    method: 'POST',
+                    credentials: 'include'
                 });
+
+                if (response.status === 401) {
+                    setStatus('disconnected', 'Authentication required');
+                    messagesContainer.innerHTML = '<div class="message assistant"><div class="message-content">Authentication required. Please log in to Nextcloud.</div></div>';
+                    return;
+                }
+
                 const data = await response.json();
                 sessionId = data.session_id;
                 sessionIdDisplay.textContent = sessionId.substring(0, 8) + '...';
@@ -709,6 +1094,9 @@
                 await loadModels();
                 await loadTools();
 
+                // Initialize memory panel
+                await initializeMemoryPanel();
+
                 setStatus('connected', 'Connected');
             } catch (error) {
                 console.error('Initialization error:', error);
@@ -716,10 +1104,889 @@
             }
         }
 
+        // ========================================================================
+        // MEMORY API FUNCTIONS
+        // ========================================================================
+
+        // Memory Session Management
+        async function getMemoryStatus() {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/status?session_id=${sessionId}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.active = data.active || false;
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error getting memory status:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function createMemorySession(domain = 'default', description = '') {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/new`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        domain: domain,
+                        description: description
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.active = true;
+                    memoryState.domain = domain;
+                    memoryState.description = description;
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error creating memory session:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function clearMemory() {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/clear`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.active = false;
+                    memoryState.goals = [];
+                    memoryState.features = {};
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error clearing memory:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function exportMemory() {
+            try {
+                const response = await fetch(`${API_BASE}/memory/export?session_id=${sessionId}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error exporting memory:', error);
+                memoryState.error = error.message;
+                return null;
+            }
+        }
+
+        async function importMemory(memoryData) {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/import`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        memory_data: memoryData
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.error = null;
+                    await refreshMemoryState();
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error importing memory:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        // Goals CRUD
+        async function listGoals() {
+            try {
+                const response = await fetch(`${API_BASE}/memory/goals?session_id=${sessionId}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.goals = data.goals || [];
+                    memoryState.error = null;
+                    return data.goals;
+                } else {
+                    memoryState.error = data.error;
+                    return [];
+                }
+            } catch (error) {
+                console.error('Error listing goals:', error);
+                memoryState.error = error.message;
+                return [];
+            }
+        }
+
+        async function getGoal(goalId) {
+            try {
+                const response = await fetch(`${API_BASE}/memory/goals/${goalId}?session_id=${sessionId}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error getting goal:', error);
+                memoryState.error = error.message;
+                return null;
+            }
+        }
+
+        async function createGoal(description, constraints = [], goalId = null) {
+            try {
+                memoryState.loading = true;
+                const body = {
+                    session_id: sessionId,
+                    description: description,
+                    constraints: constraints
+                };
+                if (goalId) body.goal_id = goalId;
+
+                const response = await fetch(`${API_BASE}/memory/goals`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh goals list
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error creating goal:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function updateGoal(goalId, options = {}) {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/goals/${goalId}`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        ...options
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh goals list
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error updating goal:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function deleteGoal(goalId, confirm = false) {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/goals/${goalId}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        confirm: confirm
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh goals list
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error deleting goal:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        // Features CRUD
+        async function getFeature(featureId) {
+            try {
+                const response = await fetch(`${API_BASE}/memory/features/${featureId}?session_id=${sessionId}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error getting feature:', error);
+                memoryState.error = error.message;
+                return null;
+            }
+        }
+
+        async function createFeature(goalId, description, criteria = [], tests = [], priority = 'medium', assignedTo = null) {
+            try {
+                memoryState.loading = true;
+                const body = {
+                    session_id: sessionId,
+                    goal_id: goalId,
+                    description: description,
+                    criteria: criteria,
+                    tests: tests,
+                    priority: priority
+                };
+                if (assignedTo) body.assigned_to = assignedTo;
+
+                const response = await fetch(`${API_BASE}/memory/features`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh to get updated goals with new features
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error creating feature:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function updateFeature(featureId, options = {}) {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/features/${featureId}`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        ...options
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh to get updated features
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error updating feature:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function updateFeatureStatus(featureId, status, notes = null) {
+            try {
+                memoryState.loading = true;
+                const body = {
+                    session_id: sessionId,
+                    status: status
+                };
+                if (notes) body.notes = notes;
+
+                const response = await fetch(`${API_BASE}/memory/features/${featureId}/status`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh to get updated features
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error updating feature status:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function deleteFeature(featureId, confirm = false) {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/features/${featureId}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        confirm: confirm
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh to get updated goals
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error deleting feature:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        async function moveFeature(featureId, targetGoalId) {
+            try {
+                memoryState.loading = true;
+                const response = await fetch(`${API_BASE}/memory/features/${featureId}/move`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        target_goal_id: targetGoalId
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh to get updated goals
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error moving feature:', error);
+                memoryState.error = error.message;
+                return null;
+            } finally {
+                memoryState.loading = false;
+            }
+        }
+
+        // Progress Tracking
+        async function logProgress(action, outcome = 'success', details = '', featureId = null, artifactsChanged = []) {
+            try {
+                const body = {
+                    session_id: sessionId,
+                    agent_type: 'WEB_USER',
+                    action: action,
+                    outcome: outcome,
+                    details: details,
+                    artifacts_changed: artifactsChanged
+                };
+                if (featureId) body.feature_id = featureId;
+
+                const response = await fetch(`${API_BASE}/memory/progress`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error logging progress:', error);
+                memoryState.error = error.message;
+                return null;
+            }
+        }
+
+        async function addTestResult(featureId, testId, passed, details = '', output = '') {
+            try {
+                const response = await fetch(`${API_BASE}/memory/test-results`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        feature_id: featureId,
+                        test_id: testId,
+                        passed: passed,
+                        details: details,
+                        output: output
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    await listGoals(); // Refresh to get updated test results
+                    memoryState.error = null;
+                    return data;
+                } else {
+                    memoryState.error = data.error;
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error adding test result:', error);
+                memoryState.error = error.message;
+                return null;
+            }
+        }
+
+        // Helper Functions
+        async function refreshMemoryState() {
+            const status = await getMemoryStatus();
+            if (status && status.active) {
+                await listGoals();
+            }
+        }
+
+        function parseMemoryGoals(rawState) {
+            // Parse raw memory state JSON and extract goals/features
+            // This is a helper to convert builtin.get_memory_state output to structured data
+            try {
+                if (!rawState) return [];
+
+                // If rawState is already parsed
+                if (typeof rawState === 'object' && rawState.goals) {
+                    return rawState.goals;
+                }
+
+                // If rawState is a string, parse it
+                if (typeof rawState === 'string') {
+                    const parsed = JSON.parse(rawState);
+                    return parsed.goals || [];
+                }
+
+                return [];
+            } catch (error) {
+                console.error('Error parsing memory goals:', error);
+                return [];
+            }
+        }
+
+        function getFeatureStatusColor(status) {
+            const colors = {
+                'pending': '#999',
+                'in_progress': '#0082c9',
+                'completed': '#46ba61',
+                'failed': '#f44336',
+                'blocked': '#f4a70c'
+            };
+            return colors[status] || '#999';
+        }
+
+        function getFeatureStatusIcon(status) {
+            const icons = {
+                'pending': '⏸️',
+                'in_progress': '🔄',
+                'completed': '✅',
+                'failed': '❌',
+                'blocked': '🚧'
+            };
+            return icons[status] || '❓';
+        }
+
+        // ========================================================================
+        // MEMORY PANEL UI FUNCTIONS
+        // ========================================================================
+
+        // Toggle memory panel accordion
+        function toggleMemoryPanel() {
+            const memoryPanelContent = document.getElementById('memoryPanelContent');
+            const memoryPanelToggle = document.getElementById('memoryPanelToggle');
+            const isCollapsed = memoryPanelContent.classList.contains('collapsed');
+
+            if (isCollapsed) {
+                memoryPanelContent.classList.remove('collapsed');
+                memoryPanelToggle.classList.add('expanded');
+            } else {
+                memoryPanelContent.classList.add('collapsed');
+                memoryPanelToggle.classList.remove('expanded');
+            }
+        }
+
+        // Update memory session status badge
+        function updateMemoryStatus() {
+            const statusBadge = document.querySelector('#memorySessionStatus .status-badge');
+            const newSessionBtn = document.getElementById('newMemorySessionBtn');
+            const newGoalBtn = document.getElementById('newGoalBtn');
+
+            if (memoryState.active) {
+                statusBadge.className = 'status-badge active';
+                statusBadge.innerHTML = `
+                    <span class="status-icon">✅</span>
+                    <span>Active: ${memoryState.domain || 'default'}</span>
+                `;
+                newSessionBtn.textContent = '🗑️ Clear Session';
+                newSessionBtn.onclick = clearMemorySession;
+                newGoalBtn.disabled = false;
+            } else {
+                statusBadge.className = 'status-badge inactive';
+                statusBadge.innerHTML = `
+                    <span class="status-icon">⭕</span>
+                    <span>No Active Session</span>
+                `;
+                newSessionBtn.innerHTML = '<span>➕</span> New Session';
+                newSessionBtn.onclick = showNewMemorySessionDialog;
+                newGoalBtn.disabled = true;
+            }
+        }
+
+        // Render memory panel with goals and features
+        function renderMemoryPanel() {
+            const goalsContainer = document.getElementById('goalsContainer');
+
+            if (!memoryState.active || memoryState.goals.length === 0) {
+                goalsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <span style="font-size: 2rem; opacity: 0.3;">🎯</span>
+                        <div style="color: #999; font-size: 0.85rem; margin-top: 8px;">
+                            ${memoryState.active ? 'No goals yet. Click + to add a goal.' : 'No goals yet. Create a memory session to get started.'}
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            goalsContainer.innerHTML = memoryState.goals.map(goal => renderGoal(goal)).join('');
+        }
+
+        // Render a single goal item
+        function renderGoal(goal) {
+            const goalId = goal.goal_id || goal.id || 'G?';
+            const features = goal.features || [];
+            const featureCount = features.length;
+            const completedCount = features.filter(f => f.status === 'completed').length;
+
+            return `
+                <div class="goal-item" data-goal-id="${goalId}">
+                    <div class="goal-header" onclick="toggleGoal('${goalId}')">
+                        <span class="goal-expand-icon" id="expand-${goalId}">▶</span>
+                        <div class="goal-info">
+                            <div class="goal-id">${goalId}</div>
+                            <div class="goal-description">${goal.description || 'No description'}</div>
+                            <div class="goal-meta">
+                                <span>📋 ${featureCount} feature${featureCount !== 1 ? 's' : ''}</span>
+                                ${featureCount > 0 ? `<span>✅ ${completedCount}/${featureCount} complete</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="goal-actions" onclick="event.stopPropagation()">
+                            <button class="icon-btn" onclick="editGoal('${goalId}')" title="Edit Goal">✏️</button>
+                            <button class="icon-btn" onclick="deleteGoalConfirm('${goalId}')" title="Delete Goal">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="features-list" id="features-${goalId}">
+                        ${features.length > 0 ? features.map(feature => renderFeature(feature, goalId)).join('') : '<div style="color: #999; font-size: 0.85rem; padding: 10px; text-align: center;">No features yet</div>'}
+                        <button class="add-feature-btn" onclick="showNewFeatureDialog('${goalId}')">
+                            <span>➕</span> Add Feature
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render a single feature item
+        function renderFeature(feature, goalId) {
+            const featureId = feature.feature_id || feature.id || 'F?';
+            const status = feature.status || 'pending';
+            const priority = feature.priority || 'medium';
+            const statusIcon = getFeatureStatusIcon(status);
+            const criteriaCount = (feature.criteria || []).length;
+            const testsCount = (feature.tests || []).length;
+            const testResults = feature.test_results || [];
+            const passedTests = testResults.filter(t => t.passed).length;
+
+            return `
+                <div class="feature-item ${status}" data-feature-id="${featureId}">
+                    <div class="feature-header">
+                        <span class="feature-status-icon">${statusIcon}</span>
+                        <span class="feature-id">${featureId}</span>
+                        <span class="feature-priority ${priority}">${priority}</span>
+                    </div>
+                    <div class="feature-description">${feature.description || 'No description'}</div>
+                    <div class="feature-meta">
+                        ${criteriaCount > 0 ? `<span>📝 ${criteriaCount} criteria</span>` : ''}
+                        ${testsCount > 0 ? `<span>🧪 ${passedTests}/${testsCount} tests passing</span>` : ''}
+                        ${feature.assigned_to ? `<span>👤 ${feature.assigned_to}</span>` : ''}
+                    </div>
+                    <div class="feature-actions">
+                        <button class="icon-btn" onclick="updateFeatureStatusQuick('${featureId}', 'in_progress')" title="Mark In Progress">🔄</button>
+                        <button class="icon-btn" onclick="updateFeatureStatusQuick('${featureId}', 'completed')" title="Mark Complete">✅</button>
+                        <button class="icon-btn" onclick="editFeature('${featureId}')" title="Edit">✏️</button>
+                        <button class="icon-btn" onclick="deleteFeatureConfirm('${featureId}')" title="Delete">🗑️</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Toggle goal expand/collapse
+        function toggleGoal(goalId) {
+            const featuresList = document.getElementById(`features-${goalId}`);
+            const expandIcon = document.getElementById(`expand-${goalId}`);
+
+            if (featuresList.classList.contains('expanded')) {
+                featuresList.classList.remove('expanded');
+                expandIcon.classList.remove('expanded');
+            } else {
+                featuresList.classList.add('expanded');
+                expandIcon.classList.add('expanded');
+            }
+        }
+
+        // Show new memory session dialog (simple prompt for now)
+        async function showNewMemorySessionDialog() {
+            const domain = prompt('Enter memory domain name:', 'default');
+            if (!domain) return;
+
+            const description = prompt('Enter session description (optional):', '');
+
+            const result = await createMemorySession(domain, description || '');
+            if (result) {
+                updateMemoryStatus();
+                renderMemoryPanel();
+                addAgentActivity(`Created memory session: ${domain}`, 'status');
+            } else {
+                alert('Failed to create memory session: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Clear memory session
+        async function clearMemorySession() {
+            if (!confirm('Are you sure you want to clear the memory session? This will delete all goals and features.')) {
+                return;
+            }
+
+            const result = await clearMemory();
+            if (result) {
+                updateMemoryStatus();
+                renderMemoryPanel();
+                addAgentActivity('Memory session cleared', 'status');
+            } else {
+                alert('Failed to clear memory: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Show new goal dialog (simple prompt for now)
+        async function showNewGoalDialog() {
+            const description = prompt('Enter goal description:');
+            if (!description) return;
+
+            const constraintsInput = prompt('Enter constraints (comma-separated, optional):', '');
+            const constraints = constraintsInput ? constraintsInput.split(',').map(c => c.trim()).filter(c => c) : [];
+
+            const result = await createGoal(description, constraints);
+            if (result) {
+                await listGoals();
+                renderMemoryPanel();
+                addAgentActivity(`Created goal: ${description}`, 'status');
+            } else {
+                alert('Failed to create goal: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Show new feature dialog (simple prompt for now)
+        async function showNewFeatureDialog(goalId) {
+            const description = prompt('Enter feature description:');
+            if (!description) return;
+
+            const priority = prompt('Enter priority (low/medium/high):', 'medium');
+
+            const result = await createFeature(goalId, description, [], [], priority || 'medium');
+            if (result) {
+                await listGoals();
+                renderMemoryPanel();
+                addAgentActivity(`Created feature in ${goalId}: ${description}`, 'status');
+            } else {
+                alert('Failed to create feature: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Quick update feature status
+        async function updateFeatureStatusQuick(featureId, newStatus) {
+            const result = await updateFeatureStatus(featureId, newStatus);
+            if (result) {
+                renderMemoryPanel();
+                addAgentActivity(`Updated ${featureId} status to ${newStatus}`, 'status');
+            } else {
+                alert('Failed to update feature status: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Edit goal (placeholder)
+        function editGoal(goalId) {
+            alert('Edit goal dialog not yet implemented. Goal ID: ' + goalId);
+            // TODO: Implement full edit dialog in Phase 4
+        }
+
+        // Delete goal with confirmation
+        async function deleteGoalConfirm(goalId) {
+            if (!confirm(`Are you sure you want to delete goal ${goalId}? This will also delete all its features.`)) {
+                return;
+            }
+
+            const result = await deleteGoal(goalId, true);
+            if (result) {
+                await listGoals();
+                renderMemoryPanel();
+                addAgentActivity(`Deleted goal ${goalId}`, 'status');
+            } else {
+                alert('Failed to delete goal: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Edit feature (placeholder)
+        function editFeature(featureId) {
+            alert('Edit feature dialog not yet implemented. Feature ID: ' + featureId);
+            // TODO: Implement full edit dialog in Phase 4
+        }
+
+        // Delete feature with confirmation
+        async function deleteFeatureConfirm(featureId) {
+            if (!confirm(`Are you sure you want to delete feature ${featureId}?`)) {
+                return;
+            }
+
+            const result = await deleteFeature(featureId, true);
+            if (result) {
+                await listGoals();
+                renderMemoryPanel();
+                addAgentActivity(`Deleted feature ${featureId}`, 'status');
+            } else {
+                alert('Failed to delete feature: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Initialize memory panel on page load
+        async function initializeMemoryPanel() {
+            await getMemoryStatus();
+            updateMemoryStatus();
+            renderMemoryPanel();
+        }
+
+        // ========================================================================
+        // END MEMORY PANEL UI FUNCTIONS
+        // ========================================================================
+
         // Load available models
         async function loadModels() {
             try {
-                const response = await fetch(`${API_BASE}/models/list`);
+                const response = await fetch(`${API_BASE}/models/list`, {
+                    credentials: 'include'
+                });
                 const data = await response.json();
 
                 modelSelector.innerHTML = '';
@@ -748,7 +2015,9 @@
         // Load tools
         async function loadTools() {
             try {
-                const response = await fetch(`${API_BASE}/tools/list?session_id=${sessionId}`);
+                const response = await fetch(`${API_BASE}/tools/list?session_id=${sessionId}`, {
+                    credentials: 'include'
+                });
                 const data = await response.json();
                 tools = data.tools || [];
                 renderTools();
@@ -807,6 +2076,7 @@
             try {
                 const response = await fetch(`${API_BASE}/tools/toggle`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         session_id: sessionId,
@@ -833,6 +2103,7 @@
             try {
                 await fetch(`${API_BASE}/models/select`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         session_id: sessionId,
@@ -889,6 +2160,11 @@
         async function sendMessage() {
             const message = messageInput.value.trim();
             if (!message || isStreaming || !sessionId || !currentModel) return;
+
+            // Add to message history for up/down arrow navigation
+            messageHistory.push(message);
+            historyIndex = messageHistory.length; // Reset to end of history
+            currentDraft = ''; // Clear draft
 
             // Add user message to UI
             addMessage('user', message);
@@ -1022,14 +2298,17 @@
 
                 // Call backend API
                 const response = await fetch(`/api/config/reload-servers?session_id=${sessionId}`, {
-                    method: 'POST'
+                    method: 'POST',
+                    credentials: 'include'
                 });
 
-                if (!response.ok) {
-                    throw new Error('Failed to reload servers');
-                }
-
                 const result = await response.json();
+
+                if (!response.ok) {
+                    // Extract error message from response
+                    const errorMsg = result.error || 'Failed to reload servers';
+                    throw new Error(errorMsg);
+                }
 
                 // Show success message
                 button.innerHTML = '<span>✅</span><span>Reloaded!</span>';
@@ -1107,6 +2386,38 @@
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
+            }
+        });
+
+        // Handle up/down arrow keys for message history navigation
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                // Navigate backward in history
+                if (historyIndex > 0) {
+                    // Save current input as draft if we're at the end of history
+                    if (historyIndex === messageHistory.length) {
+                        currentDraft = messageInput.value;
+                    }
+                    historyIndex--;
+                    messageInput.value = messageHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                // Navigate forward in history
+                if (historyIndex < messageHistory.length - 1) {
+                    historyIndex++;
+                    messageInput.value = messageHistory[historyIndex];
+                } else if (historyIndex === messageHistory.length - 1) {
+                    // At the last history item, go back to draft
+                    historyIndex = messageHistory.length;
+                    messageInput.value = currentDraft;
+                }
+            } else if (e.key === 'Escape') {
+                // Clear input and reset history position
+                messageInput.value = '';
+                historyIndex = messageHistory.length;
+                currentDraft = '';
             }
         });
 

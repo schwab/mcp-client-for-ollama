@@ -34,6 +34,49 @@ from .utils.tool_parser import ToolParser
 from .agents.delegation_client import DelegationClient
 
 
+def convert_tool_args_types(tool_args: dict, tool_schema: dict) -> dict:
+    """Convert tool arguments from strings to proper types based on schema.
+
+    Ollama often returns tool arguments as strings (e.g., {"days": "3"}),
+    but MCP tools expect proper types (e.g., {"days": 3}).
+    This function converts arguments based on the tool's input schema.
+
+    Args:
+        tool_args: Dictionary of tool arguments (possibly with string values)
+        tool_schema: Tool input schema with 'properties' defining parameter types
+
+    Returns:
+        Dictionary with arguments converted to proper types
+    """
+    if not tool_schema or 'properties' not in tool_schema:
+        return tool_args
+
+    converted_args = {}
+    for key, value in tool_args.items():
+        if key in tool_schema['properties']:
+            param_type = tool_schema['properties'][key].get('type')
+
+            # Convert strings to appropriate types
+            if param_type == 'integer' and isinstance(value, str):
+                try:
+                    converted_args[key] = int(value)
+                except (ValueError, TypeError):
+                    converted_args[key] = value
+            elif param_type == 'number' and isinstance(value, str):
+                try:
+                    converted_args[key] = float(value)
+                except (ValueError, TypeError):
+                    converted_args[key] = value
+            elif param_type == 'boolean' and isinstance(value, str):
+                converted_args[key] = value.lower() in ('true', '1', 'yes')
+            else:
+                converted_args[key] = value
+        else:
+            converted_args[key] = value
+
+    return converted_args
+
+
 class MCPClient:
     """Main client class for interacting with Ollama and MCP servers"""
 
@@ -654,6 +697,9 @@ class MCPClient:
 
         enabled_tools = self.get_filtered_tools_for_current_mode()
 
+        # Build schema lookup for type conversion
+        tool_schemas = {tool.name: tool.inputSchema for tool in enabled_tools}
+
         loop_count = 0
         pending_tool_calls = tool_calls
 
@@ -709,6 +755,10 @@ class MCPClient:
                         "tool_name": tool_name
                     })
                     continue
+
+                # Convert tool argument types based on schema
+                if tool_name in tool_schemas:
+                    tool_args = convert_tool_args_types(tool_args, tool_schemas[tool_name])
 
                 # Call the tool on the specified server
                 result = None
@@ -2222,8 +2272,26 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         return True
 
     async def cleanup(self):
-        """Clean up resources"""
-        await self.exit_stack.aclose()
+        """Clean up resources with graceful shutdown"""
+        try:
+            # Give pending operations a moment to finish
+            await asyncio.sleep(0.5)
+
+            # Close exit stack with timeout to prevent hanging
+            try:
+                await asyncio.wait_for(self.exit_stack.aclose(), timeout=5.0)
+            except asyncio.TimeoutError:
+                # Cleanup timed out, log but don't raise
+                print("[Cleanup] Warning: Resource cleanup timed out after 5 seconds")
+            except RuntimeError as e:
+                # Event loop may be closed - this is expected in some contexts
+                if "Event loop is closed" in str(e):
+                    print("[Cleanup] Warning: Event loop already closed (expected in web context)")
+                else:
+                    print(f"[Cleanup] Warning: Runtime error during cleanup: {e}")
+        except Exception as e:
+            # Any other errors during cleanup - log but don't raise
+            print(f"[Cleanup] Warning: Unexpected error during cleanup: {e}")
 
     async def reload_servers(self):
         """Reload all MCP servers with the same connection parameters"""
@@ -2943,8 +3011,9 @@ def global_callback(
     # Store global host for use by subcommands
     global_context.host = host
 
-    # If no subcommand is provided, we'll run main by default
-    # This is handled by invoke_without_command=True
+    # If no subcommand is provided, invoke main by default
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(main)
 
 @app.command()
 def main(

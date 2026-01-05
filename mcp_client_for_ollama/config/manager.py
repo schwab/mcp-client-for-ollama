@@ -121,6 +121,9 @@ class ConfigManager:
 
         # Write to file
         try:
+            # Ensure config directory exists
+            os.makedirs(self.config_dir, exist_ok=True)
+
             with open(config_path, 'w') as f:
                 json.dump(config_data, f, indent=2)
 

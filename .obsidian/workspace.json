@@ -23,12 +23,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "SUMMARY_v0.28.5.md",
+                "file": "docs/memory-system.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "SUMMARY_v0.28.5"
+              "title": "memory-system"
             }
           }
         ],
@@ -191,7 +191,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 522.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -209,17 +209,19 @@
   },
   "active": "fd6734c8ad7bab24",
   "lastOpenFiles": [
-    "dist/mcp_client_for_ollama-0.40.2-py3-none-any.whl",
-    "dist/mcp_client_for_ollama-0.40.2.tar.gz",
-    "mcp_client_for_ollama/web/app.py.tmp.562439.1767409097776",
-    "mcp_client_for_ollama/__init__.py.tmp.562439.1767409091671",
-    "pyproject.toml.tmp.562439.1767409086725",
-    "mcp_client_for_ollama/web/integration/client_wrapper.py.tmp.562439.1767409066529",
-    "mcp_client_for_ollama/web/integration/client_wrapper.py.tmp.562439.1767409059826",
-    "mcp_client_for_ollama/web/app.py.tmp.562439.1767409041278",
-    "mcp_client_for_ollama/client.py.tmp.562439.1767409022400",
-    "mcp_client_for_ollama/client.py.tmp.562439.1767409002181",
-    "mcp_client_for_ollama/config/manager.py.tmp.562439.1767408987409",
+    "dist/mcp_client_for_ollama-0.42.3-py3-none-any.whl",
+    "dist/mcp_client_for_ollama-0.42.3.tar.gz",
+    "docs/QA_FIXES_v0.42.3.md",
+    "docs/QA_FIXES_v0.42.3.md.tmp.562439.1767562446326",
+    "mcp_client_for_ollama/web/app.py.tmp.562439.1767562387250",
+    "mcp_client_for_ollama/__pycache__/__init__.cpython-310.pyc.139856798717488",
+    "mcp_client_for_ollama/__init__.py.tmp.562439.1767562381059",
+    "pyproject.toml.tmp.562439.1767562375631",
+    "mcp_client_for_ollama/web/integration/client_wrapper.py.tmp.562439.1767561649353",
+    "SUMMARY_v0.28.5.md",
+    "dist/mcp_client_for_ollama-0.41.2-py3-none-any.whl",
+    "dist/mcp_client_for_ollama-0.41.2.tar.gz",
+    "mcp_client_for_ollama/web/app.py.tmp.562439.1767454979121",
     "docs/agent_guide.md"
   ]
 }

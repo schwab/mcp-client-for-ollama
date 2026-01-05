@@ -1,5 +1,5 @@
 """Models API endpoints for web interface"""
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 from mcp_client_for_ollama.web.session.manager import session_manager
 import ollama
 
@@ -43,7 +43,8 @@ async def list_models():
 
 @bp.route('/select', methods=['POST'])
 async def select_model():
-    """Set model for session"""
+    """Set model for session (supports both standalone and Nextcloud mode)"""
+    username = g.get('nextcloud_user', None)
     data = request.json
     session_id = data.get('session_id')
     model_name = data.get('model')
@@ -51,7 +52,7 @@ async def select_model():
     if not session_id or not model_name:
         return jsonify({'error': 'session_id and model required'}), 400
 
-    client = session_manager.get_session(session_id)
+    client = session_manager.get_session(session_id, username=username)
     if not client:
         return jsonify({'error': 'Invalid session'}), 404
 
@@ -61,13 +62,14 @@ async def select_model():
 
 @bp.route('/current', methods=['GET'])
 async def get_current_model():
-    """Get current model for session"""
+    """Get current model for session (supports both standalone and Nextcloud mode)"""
+    username = g.get('nextcloud_user', None)
     session_id = request.args.get('session_id')
 
     if not session_id:
         return jsonify({'error': 'session_id required'}), 400
 
-    client = session_manager.get_session(session_id)
+    client = session_manager.get_session(session_id, username=username)
     if not client:
         return jsonify({'error': 'Invalid session'}), 404
 

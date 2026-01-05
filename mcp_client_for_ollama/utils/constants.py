@@ -13,10 +13,8 @@ else:  # Linux and other Unix-like systems
     DEFAULT_CLAUDE_CONFIG = os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
 
 # Default config directory and filename for MCP client for Ollama
+# Note: Directory creation is handled by ConfigManager when needed, not at import time
 DEFAULT_CONFIG_DIR = ".config"
-if not os.path.exists(DEFAULT_CONFIG_DIR):
-    os.makedirs(DEFAULT_CONFIG_DIR)
-
 DEFAULT_CONFIG_FILE = "config.json"
 
 # Default model

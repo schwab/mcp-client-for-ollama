@@ -109,8 +109,13 @@ def parse_server_configs(config_path: str) -> Tuple[List[Dict[str, Any]], Option
         server_configs = config.get('mcpServers', {})
 
         for name, server_config_data in server_configs.items():
-            # Skip disabled servers
-            if server_config_data.get('disabled', False):
+            # Skip disabled servers (support both 'disabled' and 'enabled' fields)
+            # If 'enabled' field exists, use it (skip if enabled=false)
+            # Otherwise, check 'disabled' field (skip if disabled=true)
+            if 'enabled' in server_config_data:
+                if not server_config_data['enabled']:
+                    continue
+            elif server_config_data.get('disabled', False):
                 continue
 
             # Determine server type
