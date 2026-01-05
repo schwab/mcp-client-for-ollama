@@ -15,6 +15,7 @@ class WebMCPClient:
         self.chat_history: List[Dict] = []
         self.current_model = self.config.get('model', 'llama3.2:latest')
         self.ollama_host = self.config.get('ollama_host', 'http://localhost:11434')
+        self.memory_domain = None  # Will be set when memory session is created
 
         # Create persistent config directory for this session
         # This directory will be used for memory storage and persist across requests
@@ -117,13 +118,9 @@ class WebMCPClient:
         if temp_client:
             self._mcp_client = temp_client
             await self._load_tools()
-            # Clean up the temp client with error suppression
-            try:
-                await temp_client.cleanup()
-            except (RuntimeError, Exception) as e:
-                print(f"Warning: Temp client cleanup error (expected): {e}")
-            finally:
-                self._mcp_client = None
+            # Don't call cleanup() - causes cancel scope errors in Flask async context
+            # Temp client will be garbage collected automatically
+            self._mcp_client = None
         else:
             self._tools_cache = []
 
@@ -459,6 +456,9 @@ class WebMCPClient:
             memory = DomainMemory(metadata=metadata, goals=[])
             delegation_client.memory_tools.storage.save_memory(memory)
 
+            # Store the domain for future operations
+            self.memory_domain = domain
+
             return {
                 'status': 'created',
                 'domain': domain,
@@ -506,10 +506,17 @@ class WebMCPClient:
             if not delegation_client or not delegation_client.memory_enabled:
                 return []
 
-            # Load memory directly from storage using session_id
+            # Use stored domain if available, otherwise try to auto-detect or use default
+            domain = self.memory_domain
+            if not domain:
+                # Try to auto-detect domain by checking common domains
+                # Or use default "web" domain
+                domain = "web"
+
+            # Load memory directly from storage using session_id and domain
             memory = delegation_client.memory_tools.storage.load_memory(
                 self.session_id,
-                "web"  # default domain
+                domain
             )
 
             if not memory:
@@ -591,18 +598,20 @@ class WebMCPClient:
             if not delegation_client or not delegation_client.memory_enabled:
                 return {'error': 'Memory system is not enabled'}
 
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
+
             # Try to load existing memory session from storage
-            # First check if memory exists for this session
             memory = delegation_client.memory_tools.storage.load_memory(
                 self.session_id,
-                "web"  # default domain
+                domain
             )
 
             if not memory:
                 return {'error': 'No active memory session. Create a session first.'}
 
             # Set the current session so memory_tools knows which session to use
-            delegation_client.memory_tools.set_current_session(self.session_id, "web")
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
 
             # Call add_goal via memory_tools directly for reliability
             result = delegation_client.memory_tools.add_goal(
@@ -630,19 +639,37 @@ class WebMCPClient:
             return {'error': 'Could not create MCP client'}
 
         try:
-            if not hasattr(temp_client, 'memory_tools') or not temp_client.memory_tools:
-                return {'error': 'Memory not enabled'}
+            # Check if memory is enabled
+            delegation_client = temp_client.get_delegation_client()
+            if not delegation_client or not delegation_client.memory_enabled:
+                return {'error': 'Memory system is not enabled'}
 
-            # Call builtin.update_goal
-            args = {'goal_id': goal_id}
-            if description:
-                args['description'] = description
-            if add_constraints:
-                args['add_constraints'] = add_constraints
-            if remove_constraints:
-                args['remove_constraints'] = remove_constraints
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
 
-            result = await temp_client.call_tool('builtin.update_goal', args)
+            # Try to load existing memory session from storage
+            memory = delegation_client.memory_tools.storage.load_memory(
+                self.session_id,
+                domain
+            )
+
+            if not memory:
+                return {'error': 'No active memory session. Create a session first.'}
+
+            # Set the current session so memory_tools knows which session to use
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
+
+            # Call update_goal via memory_tools directly for reliability
+            result = delegation_client.memory_tools.update_goal(
+                goal_id=goal_id,
+                description=description,
+                add_constraints=add_constraints,
+                remove_constraints=remove_constraints
+            )
+
+            # Check if result indicates error
+            if result.startswith('Error:'):
+                return {'error': result}
 
             return {'status': 'updated', 'message': result}
         finally:
@@ -657,14 +684,35 @@ class WebMCPClient:
             return {'error': 'Could not create MCP client'}
 
         try:
-            if not hasattr(temp_client, 'memory_tools') or not temp_client.memory_tools:
-                return {'error': 'Memory not enabled'}
+            # Check if memory is enabled
+            delegation_client = temp_client.get_delegation_client()
+            if not delegation_client or not delegation_client.memory_enabled:
+                return {'error': 'Memory system is not enabled'}
 
-            # Call builtin.remove_goal
-            result = await temp_client.call_tool('builtin.remove_goal', {
-                'goal_id': goal_id,
-                'confirm': confirm
-            })
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
+
+            # Try to load existing memory session from storage
+            memory = delegation_client.memory_tools.storage.load_memory(
+                self.session_id,
+                domain
+            )
+
+            if not memory:
+                return {'error': 'No active memory session. Create a session first.'}
+
+            # Set the current session so memory_tools knows which session to use
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
+
+            # Call remove_goal via memory_tools directly for reliability
+            result = delegation_client.memory_tools.remove_goal(
+                goal_id=goal_id,
+                confirm=confirm
+            )
+
+            # Check if result indicates error
+            if result.startswith('Error:'):
+                return {'error': result}
 
             return {'status': 'deleted' if confirm else 'confirm_required', 'message': result}
         finally:
@@ -706,17 +754,20 @@ class WebMCPClient:
             if not delegation_client or not delegation_client.memory_enabled:
                 return {'error': 'Memory system is not enabled'}
 
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
+
             # Try to load existing memory session from storage
             memory = delegation_client.memory_tools.storage.load_memory(
                 self.session_id,
-                "web"  # default domain
+                domain
             )
 
             if not memory:
                 return {'error': 'No active memory session. Create a session first.'}
 
             # Set the current session so memory_tools knows which session to use
-            delegation_client.memory_tools.set_current_session(self.session_id, "web")
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
 
             # Call add_feature via memory_tools directly for reliability
             result = delegation_client.memory_tools.add_feature(
@@ -745,14 +796,41 @@ class WebMCPClient:
             return {'error': 'Could not create MCP client'}
 
         try:
-            if not hasattr(temp_client, 'memory_tools') or not temp_client.memory_tools:
-                return {'error': 'Memory not enabled'}
+            # Check if memory is enabled
+            delegation_client = temp_client.get_delegation_client()
+            if not delegation_client or not delegation_client.memory_enabled:
+                return {'error': 'Memory system is not enabled'}
 
-            # Call builtin.update_feature
-            args = {'feature_id': feature_id}
-            args.update({k: v for k, v in kwargs.items() if v is not None})
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
 
-            result = await temp_client.call_tool('builtin.update_feature', args)
+            # Try to load existing memory session from storage
+            memory = delegation_client.memory_tools.storage.load_memory(
+                self.session_id,
+                domain
+            )
+
+            if not memory:
+                return {'error': 'No active memory session. Create a session first.'}
+
+            # Set the current session so memory_tools knows which session to use
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
+
+            # Call update_feature via memory_tools directly for reliability
+            result = delegation_client.memory_tools.update_feature(
+                feature_id=feature_id,
+                description=kwargs.get('description'),
+                add_criteria=kwargs.get('add_criteria'),
+                remove_criteria=kwargs.get('remove_criteria'),
+                add_tests=kwargs.get('add_tests'),
+                remove_tests=kwargs.get('remove_tests'),
+                priority=kwargs.get('priority'),
+                assigned_to=kwargs.get('assigned_to')
+            )
+
+            # Check if result indicates error
+            if result.startswith('Error:'):
+                return {'error': result}
 
             return {'status': 'updated', 'message': result}
         finally:
@@ -767,18 +845,36 @@ class WebMCPClient:
             return {'error': 'Could not create MCP client'}
 
         try:
-            if not hasattr(temp_client, 'memory_tools') or not temp_client.memory_tools:
-                return {'error': 'Memory not enabled'}
+            # Check if memory is enabled
+            delegation_client = temp_client.get_delegation_client()
+            if not delegation_client or not delegation_client.memory_enabled:
+                return {'error': 'Memory system is not enabled'}
 
-            # Call builtin.update_feature_status
-            args = {
-                'feature_id': feature_id,
-                'status': status
-            }
-            if notes:
-                args['notes'] = notes
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
 
-            result = await temp_client.call_tool('builtin.update_feature_status', args)
+            # Try to load existing memory session from storage
+            memory = delegation_client.memory_tools.storage.load_memory(
+                self.session_id,
+                domain
+            )
+
+            if not memory:
+                return {'error': 'No active memory session. Create a session first.'}
+
+            # Set the current session so memory_tools knows which session to use
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
+
+            # Call update_feature_status via memory_tools directly for reliability
+            result = delegation_client.memory_tools.update_feature_status(
+                feature_id=feature_id,
+                status=status,
+                notes=notes
+            )
+
+            # Check if result indicates error
+            if result.startswith('Error:'):
+                return {'error': result}
 
             return {'status': 'updated', 'new_status': status, 'message': result}
         finally:
@@ -793,14 +889,35 @@ class WebMCPClient:
             return {'error': 'Could not create MCP client'}
 
         try:
-            if not hasattr(temp_client, 'memory_tools') or not temp_client.memory_tools:
-                return {'error': 'Memory not enabled'}
+            # Check if memory is enabled
+            delegation_client = temp_client.get_delegation_client()
+            if not delegation_client or not delegation_client.memory_enabled:
+                return {'error': 'Memory system is not enabled'}
 
-            # Call builtin.remove_feature
-            result = await temp_client.call_tool('builtin.remove_feature', {
-                'feature_id': feature_id,
-                'confirm': confirm
-            })
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
+
+            # Try to load existing memory session from storage
+            memory = delegation_client.memory_tools.storage.load_memory(
+                self.session_id,
+                domain
+            )
+
+            if not memory:
+                return {'error': 'No active memory session. Create a session first.'}
+
+            # Set the current session so memory_tools knows which session to use
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
+
+            # Call remove_feature via memory_tools directly for reliability
+            result = delegation_client.memory_tools.remove_feature(
+                feature_id=feature_id,
+                confirm=confirm
+            )
+
+            # Check if result indicates error
+            if result.startswith('Error:'):
+                return {'error': result}
 
             return {'status': 'deleted' if confirm else 'confirm_required', 'message': result}
         finally:
@@ -815,14 +932,35 @@ class WebMCPClient:
             return {'error': 'Could not create MCP client'}
 
         try:
-            if not hasattr(temp_client, 'memory_tools') or not temp_client.memory_tools:
-                return {'error': 'Memory not enabled'}
+            # Check if memory is enabled
+            delegation_client = temp_client.get_delegation_client()
+            if not delegation_client or not delegation_client.memory_enabled:
+                return {'error': 'Memory system is not enabled'}
 
-            # Call builtin.move_feature
-            result = await temp_client.call_tool('builtin.move_feature', {
-                'feature_id': feature_id,
-                'target_goal_id': target_goal_id
-            })
+            # Use stored domain if available, otherwise use default
+            domain = self.memory_domain if self.memory_domain else "web"
+
+            # Try to load existing memory session from storage
+            memory = delegation_client.memory_tools.storage.load_memory(
+                self.session_id,
+                domain
+            )
+
+            if not memory:
+                return {'error': 'No active memory session. Create a session first.'}
+
+            # Set the current session so memory_tools knows which session to use
+            delegation_client.memory_tools.set_current_session(self.session_id, domain)
+
+            # Call move_feature via memory_tools directly for reliability
+            result = delegation_client.memory_tools.move_feature(
+                feature_id=feature_id,
+                target_goal_id=target_goal_id
+            )
+
+            # Check if result indicates error
+            if result.startswith('Error:'):
+                return {'error': result}
 
             return {'status': 'moved', 'message': result}
         finally:
@@ -891,13 +1029,7 @@ class WebMCPClient:
         """Cleanup resources when session is deleted"""
         self._initialized = False
 
-        # Clean up persistent MCP client if it exists
+        # Don't call cleanup() on MCP client - causes cancel scope errors
+        # Just set to None and let garbage collection handle it
         if self._mcp_client:
-            try:
-                # Graceful cleanup with error suppression
-                await self._mcp_client.cleanup()
-            except (RuntimeError, Exception) as e:
-                # Event loop may be closed, ignore cleanup errors
-                print(f"Warning: MCP client cleanup error (expected): {e}")
-            finally:
-                self._mcp_client = None
+            self._mcp_client = None

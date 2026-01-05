@@ -377,3 +377,60 @@ Traceback (most recent call last):
   File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 461, in __exit__
     raise RuntimeError(
 RuntimeError: Attempted to exit cancel scope in a different task than it was entered in
+
+## Error while creating goal (in a memory session)
+- the user added a memory session which shows Active: Book ghost writer, then
+- user attempted to add a goal and got confirimation in the agent activty however:
+- no further visual feedback of the goal and we get an error in the log:
+Memory file not found for session cf5ccb76-7b15-4344-8bbe-0476b276478c in domain web
+unhandled exception during asyncio.run() shutdown
+task: <Task finished name='Task-68' coro=<<async_generator_athrow without __name__>()> exception=RuntimeError('Attempted to exit cancel scope in a different task than it was entered in')>
+  + Exception Group Traceback (most recent call last):
+  |   File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  | exceptiongroup.BaseExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp/client/stdio/__init__.py", line 189, in stdio_client
+    |     yield read_stream, write_stream
+    | asyncio.exceptions.CancelledError
+    | 
+    | During handling of the above exception, another exception occurred:
+    | 
+    | Traceback (most recent call last):
+    |   File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp/client/stdio/__init__.py", line 197, in stdio_client
+    |     await process.stdin.aclose()
+    | GeneratorExit
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/mcp/client/stdio/__init__.py", line 182, in stdio_client
+    async with (
+  File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 789, in __aexit__
+    if self.cancel_scope.__exit__(type(exc), exc, exc.__traceback__):
+  File "/home/mcstar/.virtualenvs/Journal-dqnp/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 461, in __exit__
+    raise RuntimeError(
+RuntimeError: Attempted to exit cancel scope in a different task than it was entered in
+127.0.0.1 - - [04/Jan/2026 18:42:56] "GET /api/memory/goals?session_id=cf5ccb76-7b15-4344-8bbe-0476b276478c HTTP/1.1" 200 -
+
+## Obsidian tool getting errors on write
+
+TRACE: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260104_185733.json
+   Write the summary and outline into the outline file
+Log:
+▶️  Executing task_3 (📝🔮 OBSIDIAN) <llama3.2:latest>
+
+🔧 Detected 5 tool call(s)
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+ERROR:mcp-obsidian:Error 40400: Not Found
+INFO:mcp.server.lowlevel.server:Warning: InsecureRequestWarning: Unverified HTTPS request is being made to host '127.0.0.1'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+ERROR:mcp-obsidian:Error 40400: Not Found
+INFO:mcp.server.lowlevel.server:Warning: InsecureRequestWarning: Unverified HTTPS request is being made to host '127.0.0.1'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+ERROR:mcp-obsidian:Error 40400: Not Found
+INFO:mcp.server.lowlevel.server:Warning: InsecureRequestWarning: Unverified HTTPS request is being made to host '127.0.0.1'. Adding certificate verification is strongly advised. See: 
+
+## Verifty the tools are accessing the goals and features

@@ -96,7 +96,7 @@ def create_app(app_config=None):
     def api_info():
         return jsonify({
             'name': 'MCP Client Web API',
-            'version': '0.42.3',
+            'version': '0.42.6',
             'status': 'running',
             'endpoints': {
                 'sessions': '/api/sessions',

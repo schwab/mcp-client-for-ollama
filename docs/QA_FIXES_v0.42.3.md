@@ -5,10 +5,14 @@
 
 ## Critical Fixes
 
-### ✅ Fix #1: Memory Session Creation Crash
-**QA Bug**: "Error Creating memory session in ui" - RuntimeError: Attempted to exit cancel scope in a different task
+### ✅ Fix #1: Memory Session Creation Crash + Session Manager Cleanup Error
+**QA Bugs**:
+- "Error Creating memory session in ui" (lines 239-345)
+- "Goal was created but error in the logs - UI does not show the new goal" (lines 347-379)
 
-**Root Cause**: The `create_memory_session()` method (and 15 other methods) were calling `await temp_client.cleanup()` in their finally blocks. This caused a RuntimeError because anyio cancel scopes cannot be exited in different tasks than they were entered. When these methods were called from Flask async request contexts, the cleanup attempted to exit cancel scopes across task boundaries.
+**Root Cause**: The `create_memory_session()` method (and 15 other methods in client_wrapper.py) AND the `delete_session()` method in session manager were calling `await client.cleanup()`. This caused RuntimeError because anyio cancel scopes cannot be exited in different tasks than they were entered. When these methods were called from Flask async request contexts, the cleanup attempted to exit cancel scopes across task boundaries.
+
+**Additional Impact**: The session manager cleanup errors were preventing sessions from being properly stored, causing "Invalid session" errors even immediately after session creation.
 
 **Fix**: Removed all `await temp_client.cleanup()` calls from finally blocks in `client_wrapper.py`. The temporary MCP clients are now automatically garbage collected, and cleanup happens naturally when the WebMCPClient session is destroyed.
 
@@ -143,13 +147,18 @@ async def create_memory_session(self, domain: str, description: str) -> Dict:
    - Lines 591-620: Fixed `create_goal()` to load memory from storage
    - Lines 710-741: Fixed `create_feature()` to load memory from storage
 
-2. **mcp_client_for_ollama/__init__.py** - Version bump to 0.42.3
+2. **mcp_client_for_ollama/web/session/manager.py** ⚠️ **Critical Fix**
+   - Lines 92-111: Removed cleanup() calls from `delete_session()` method
+   - This was causing "Invalid session" errors even immediately after session creation
+   - Sessions now properly persist and remain accessible
 
-3. **pyproject.toml** - Version bump to 0.42.3
+3. **mcp_client_for_ollama/__init__.py** - Version bump to 0.42.3
 
-4. **mcp_client_for_ollama/web/app.py** - API version bump to 0.42.3
+4. **pyproject.toml** - Version bump to 0.42.3
 
-5. **docs/QA_FIXES_v0.42.3.md** - This documentation
+5. **mcp_client_for_ollama/web/app.py** - API version bump to 0.42.3
+
+6. **docs/QA_FIXES_v0.42.3.md** - This documentation
 
 ---
 

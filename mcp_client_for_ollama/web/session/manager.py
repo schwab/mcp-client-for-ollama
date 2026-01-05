@@ -99,14 +99,14 @@ class WebSessionManager:
         if self.multi_user_mode:
             if username and username in self.user_sessions:
                 if session_id in self.user_sessions[username]:
-                    client = self.user_sessions[username][session_id]
-                    await client.cleanup()
+                    # Don't call cleanup() - causes cancel scope errors in Flask async context
+                    # Client will be garbage collected automatically
                     del self.user_sessions[username][session_id]
                     del self.user_timestamps[username][session_id]
         else:
             if session_id in self.sessions:
-                client = self.sessions[session_id]
-                await client.cleanup()
+                # Don't call cleanup() - causes cancel scope errors in Flask async context
+                # Client will be garbage collected automatically
                 del self.sessions[session_id]
                 del self.session_timestamps[session_id]
 
