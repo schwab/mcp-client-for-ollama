@@ -726,79 +726,113 @@ Remember: Output ONLY valid JSON following the format shown above. Use ONLY agen
         # Get planner model (agent config -> global config -> fallback to current)
         planner_model = planner_config.model or self.config.get('planner_model') or self.mcp_client.model_manager.get_current_model()
 
-        # Execute planning with minimal tools
-        try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=self.console,
-            ) as progress:
-                task = progress.add_task(f"Planning with {planner_model}... (Ctrl+C to cancel)", total=None)
+        # Retry loop for plan validation
+        max_retries = 2
+        task_plan = None
+        validation_error = None
 
-                # Build messages for planner
-                messages = []
+        for attempt in range(max_retries + 1):
+            # Build retry feedback if this is a retry
+            retry_feedback = ""
+            if attempt > 0 and validation_error:
+                retry_feedback = f"""
 
-                # Inject memory context if memory system is enabled
-                if self.memory_enabled and self.current_memory:
-                    from ..memory.boot_ritual import BootRitual
-                    memory_context = BootRitual.build_memory_context(
-                        memory=self.current_memory,
-                        agent_type="PLANNER",
-                        task_description=query,
+🚨 PREVIOUS PLAN WAS REJECTED 🚨
+
+Your previous plan was invalid. Error:
+{validation_error}
+
+Please create a NEW plan that fixes this issue. Pay careful attention to the MANDATORY PRE-PROCESSING step at the top of your instructions.
+"""
+
+            # Execute planning with minimal tools
+            try:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=self.console,
+                ) as progress:
+                    retry_msg = f" (attempt {attempt+1}/{max_retries+1})" if attempt > 0 else ""
+                    task = progress.add_task(f"Planning with {planner_model}{retry_msg}... (Ctrl+C to cancel)", total=None)
+
+                    # Build messages for planner
+                    messages = []
+
+                    # Inject memory context if memory system is enabled
+                    if self.memory_enabled and self.current_memory:
+                        from ..memory.boot_ritual import BootRitual
+                        memory_context = BootRitual.build_memory_context(
+                            memory=self.current_memory,
+                            agent_type="PLANNER",
+                            task_description=query,
+                        )
+                        messages.append({
+                            "role": "system",
+                            "content": memory_context
+                        })
+
+                    # Add planning prompt with retry feedback if applicable
+                    messages.append({"role": "user", "content": planning_prompt + retry_feedback})
+
+                    # Get available tools for planner
+                    available_tool_names = self._get_available_tool_names()
+                    planner_tool_names = planner_config.get_effective_tools(available_tool_names)
+                    planner_tool_objects = self._get_tool_objects(planner_tool_names)
+
+                    # Execute planning (planner usually doesn't need tools, just JSON output)
+                    response_text = await self._execute_with_tools(
+                        messages=messages,
+                        model=planner_model,
+                        temperature=planner_config.temperature,
+                        tools=planner_tool_objects,
+                        loop_limit=planner_config.loop_limit,
+                        task_id=None,  # Planning phase
+                        agent_type=None,  # Will be logged as PLANNER
+                        quiet=True  # Suppress verbose output for cleaner UX
                     )
-                    messages.append({
-                        "role": "system",
-                        "content": memory_context
-                    })
 
-                # Add planning prompt
-                messages.append({"role": "user", "content": planning_prompt})
+                    progress.update(task, completed=True)
 
-                # Get available tools for planner
-                available_tool_names = self._get_available_tool_names()
-                planner_tool_names = planner_config.get_effective_tools(available_tool_names)
-                planner_tool_objects = self._get_tool_objects(planner_tool_names)
+            except KeyboardInterrupt:
+                self.console.print("\n[yellow]⚠️  Planning interrupted by user (Ctrl+C)[/yellow]")
+                self.console.print("[dim]   Returning to main prompt...[/dim]")
+                raise Exception("Planning cancelled by user")
 
-                # Execute planning (planner usually doesn't need tools, just JSON output)
-                response_text = await self._execute_with_tools(
-                    messages=messages,
-                    model=planner_model,
-                    temperature=planner_config.temperature,
-                    tools=planner_tool_objects,
-                    loop_limit=planner_config.loop_limit,
-                    task_id=None,  # Planning phase
-                    agent_type=None,  # Will be logged as PLANNER
-                    quiet=True  # Suppress verbose output for cleaner UX
-                )
+            # Parse JSON from response
+            task_plan = self._extract_json_from_response(response_text)
 
-                progress.update(task, completed=True)
+            # Validate plan structure
+            if not isinstance(task_plan, dict) or 'tasks' not in task_plan:
+                validation_error = f"Invalid plan structure. Expected dict with 'tasks' key, got: {type(task_plan)}"
+                if attempt < max_retries:
+                    self.console.print(f"[yellow]⚠️  {validation_error}. Retrying...[/yellow]")
+                    continue
+                else:
+                    raise Exception(validation_error)
 
-        except KeyboardInterrupt:
-            self.console.print("\n[yellow]⚠️  Planning interrupted by user (Ctrl+C)[/yellow]")
-            self.console.print("[dim]   Returning to main prompt...[/dim]")
-            raise Exception("Planning cancelled by user")
+            # Log planning phase
+            example_categories = [ex.get('category', '') for ex in relevant_examples]
+            self.trace_logger.log_planning_phase(
+                query=query,
+                plan=task_plan,
+                available_agents=list(self.agent_configs.keys()),
+                examples_used=example_categories
+            )
 
-        # Parse JSON from response
-        task_plan = self._extract_json_from_response(response_text)
+            # Validate plan quality
+            is_valid, error_msg = self._validate_plan_quality(task_plan)
+            if not is_valid:
+                validation_error = error_msg
+                if attempt < max_retries:
+                    self.console.print(f"[yellow]⚠️  Plan validation failed: {error_msg}[/yellow]")
+                    self.console.print(f"[yellow]   Retrying... (attempt {attempt+2}/{max_retries+1})[/yellow]")
+                    continue
+                else:
+                    self.console.print(f"[red]❌ Plan validation failed after {max_retries+1} attempts: {error_msg}[/red]")
+                    raise Exception(f"Invalid task plan: {error_msg}")
 
-        # Validate plan structure
-        if not isinstance(task_plan, dict) or 'tasks' not in task_plan:
-            raise Exception(f"Invalid plan structure. Expected dict with 'tasks' key, got: {type(task_plan)}")
-
-        # Log planning phase
-        example_categories = [ex.get('category', '') for ex in relevant_examples]
-        self.trace_logger.log_planning_phase(
-            query=query,
-            plan=task_plan,
-            available_agents=list(self.agent_configs.keys()),
-            examples_used=example_categories
-        )
-
-        # Validate plan quality
-        is_valid, error_msg = self._validate_plan_quality(task_plan)
-        if not is_valid:
-            self.console.print(f"[red]❌ Plan validation failed: {error_msg}[/red]")
-            raise Exception(f"Invalid task plan: {error_msg}")
+            # Plan is valid, break out of retry loop
+            break
 
         # Display plan
         self._display_plan(task_plan)
@@ -849,6 +883,41 @@ Remember: Output ONLY valid JSON following the format shown above. Use ONLY agen
             for dep_id in deps:
                 if dep_id not in task_ids:
                     return False, f"Task {i+1} depends on non-existent task: {dep_id}"
+
+        # Check 6: Detect "list + process each" anti-pattern
+        # This pattern should be ONE Python batch task, not split into two
+        if len(tasks) >= 2:
+            task_1_desc = tasks[0].get('description', '').lower()
+            task_2_desc = tasks[1].get('description', '') if len(tasks) > 1 else ''
+
+            # Pattern: task_1 lists files, task_2 processes "each"
+            if any(word in task_1_desc for word in ['list', 'get', 'find']) and \
+               any(word in task_1_desc for word in ['file', 'pdf', 'document']) and \
+               any(word in task_2_desc.lower() for word in ['each', 'every', 'all']):
+
+                # Check if task_2 has filenames in description
+                # If not, it's the anti-pattern
+                if '/' not in task_2_desc and '.pdf' not in task_2_desc.lower():
+                    return False, (
+                        "Invalid plan: 'list files + process each' must be ONE Python batch task using SHELL_EXECUTOR. "
+                        "Create a single task with builtin.execute_python_code that lists files AND processes them in a loop. "
+                        "See MANDATORY PRE-PROCESSING in PLANNER instructions."
+                    )
+
+        # Check 7: Detect unwanted memory tasks
+        # User must explicitly request memory operations
+        if len(tasks) >= 2:
+            last_tasks_desc = [tasks[i].get('description', '').lower() for i in range(max(0, len(tasks)-2), len(tasks))]
+
+            has_memory_task = any(
+                'update_feature_status' in desc or 'log_progress' in desc
+                for desc in last_tasks_desc
+            )
+
+            if has_memory_task:
+                # This is likely a violation - return warning but allow (too risky to block)
+                # The actual user query should have requested this
+                pass  # Could add warning here but not blocking
 
         return True, ""
 

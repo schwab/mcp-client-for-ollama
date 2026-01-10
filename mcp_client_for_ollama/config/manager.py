@@ -19,15 +19,13 @@ class ConfigManager:
     including enabled tools, selected model, and context retention preferences.
     """
 
-    def __init__(self, console: Optional[Console] = None, config_dir: Optional[str] = None):
+    def __init__(self, console: Optional[Console] = None):
         """Initialize the ConfigManager.
 
         Args:
             console: Rich console for output (optional)
-            config_dir: Optional custom config directory path (defaults to DEFAULT_CONFIG_DIR)
         """
         self.console = console or Console()
-        self.config_dir = config_dir or DEFAULT_CONFIG_DIR
 
     def config_exists(self, config_name: Optional[str] = None) -> bool:
         """Check if a configuration file exists without printing messages.
@@ -121,9 +119,6 @@ class ConfigManager:
 
         # Write to file
         try:
-            # Ensure config directory exists
-            os.makedirs(self.config_dir, exist_ok=True)
-
             with open(config_path, 'w') as f:
                 json.dump(config_data, f, indent=2)
 
@@ -184,9 +179,9 @@ class ConfigManager:
             str: Full path to the configuration file
         """
         if config_name == "default":
-            return os.path.join(self.config_dir, DEFAULT_CONFIG_FILE)
+            return os.path.join(DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE)
         else:
-            return os.path.join(self.config_dir, f"{config_name}.json")
+            return os.path.join(DEFAULT_CONFIG_DIR, f"{config_name}.json")
 
     def _validate_config(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate configuration data and provide defaults for missing fields.

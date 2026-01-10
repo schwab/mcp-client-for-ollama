@@ -70,6 +70,11 @@ class BuiltinToolManager:
             "move_feature": self._handle_move_feature,
             "get_project_context": self._handle_get_project_context,
             "rescan_project_context": self._handle_rescan_project_context,
+            # Artifact generation tools
+            "generate_tool_form": self._handle_generate_tool_form,
+            "generate_query_builder": self._handle_generate_query_builder,
+            "generate_tool_wizard": self._handle_generate_tool_wizard,
+            "generate_batch_tool": self._handle_generate_batch_tool,
         }
 
     def set_memory_tools(self, memory_tools: Any) -> None:
@@ -921,13 +926,85 @@ class BuiltinToolManager:
             }
         )
 
+        # Artifact generation tools
+        generate_tool_form_tool = Tool(
+            name="builtin.generate_tool_form",
+            description="Generate an interactive form artifact for a specific MCP tool. Creates a user-friendly input panel with smart widget selection and parameter suggestions. The form will be displayed in the web UI for easy tool execution.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tool_name": {
+                        "type": "string",
+                        "description": "The name of the tool to generate a form for (e.g., 'builtin.read_file')"
+                    },
+                    "prefill": {
+                        "type": "object",
+                        "description": "Optional dictionary of prefilled parameter values"
+                    }
+                },
+                "required": ["tool_name"]
+            }
+        )
+
+        generate_query_builder_tool = Tool(
+            name="builtin.generate_query_builder",
+            description="Generate a query builder artifact that helps users discover and use available tools. Creates an interactive interface with categorized tools, common patterns, and context-aware suggestions.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter_category": {
+                        "type": "string",
+                        "description": "Optional category to filter tools (e.g., 'File Operations', 'Memory Management')"
+                    }
+                },
+                "required": []
+            }
+        )
+
+        generate_tool_wizard_tool = Tool(
+            name="builtin.generate_tool_wizard",
+            description="Generate a multi-step wizard artifact for a complex tool. Breaks the tool's parameters into logical steps with validation and progress tracking.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tool_name": {
+                        "type": "string",
+                        "description": "The name of the tool to create a wizard for"
+                    }
+                },
+                "required": ["tool_name"]
+            }
+        )
+
+        generate_batch_tool_tool = Tool(
+            name="builtin.generate_batch_tool",
+            description="Generate a batch processing artifact for executing a tool multiple times with different inputs. Useful for bulk operations on multiple files or items.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tool_name": {
+                        "type": "string",
+                        "description": "The name of the tool to create a batch interface for"
+                    },
+                    "initial_inputs": {
+                        "type": "array",
+                        "description": "Optional array of initial input parameter sets",
+                        "items": {"type": "object"}
+                    }
+                },
+                "required": ["tool_name"]
+            }
+        )
+
         # Build the tool list - include memory tools only if memory_tools is available
         tools = [
             set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool, run_pytest_tool,
             read_file_tool, validate_file_path_tool, write_file_tool, patch_file_tool, list_files_tool, list_directories_tool,
             create_directory_tool, delete_file_tool, file_exists_tool, get_file_info_tool,
             read_image_tool, open_file_tool, get_config_tool, update_config_section_tool,
-            add_mcp_server_tool, remove_mcp_server_tool, list_mcp_servers_tool, get_config_path_tool
+            add_mcp_server_tool, remove_mcp_server_tool, list_mcp_servers_tool, get_config_path_tool,
+            # Artifact generation tools
+            generate_tool_form_tool, generate_query_builder_tool, generate_tool_wizard_tool, generate_batch_tool_tool
         ]
 
         # Add memory tools if memory system is enabled
@@ -3187,4 +3264,148 @@ class BuiltinToolManager:
             )
 
         return self.memory_tools.rescan_project_context()
+
+    # Artifact generation tool handlers
+
+    def _handle_generate_tool_form(self, args: Dict[str, Any]) -> str:
+        """Handles the 'generate_tool_form' tool call."""
+        import json
+        from ..artifacts.tool_schema_parser import ToolSchemaParser
+
+        tool_name = args.get("tool_name")
+        prefill = args.get("prefill")
+
+        if not tool_name:
+            return "Error: 'tool_name' argument is required for generate_tool_form."
+
+        # Initialize parser with this tool manager
+        parser = ToolSchemaParser(tool_manager=self)
+
+        try:
+            # Generate the artifact
+            artifact = parser.generate_form_artifact(
+                tool_name=tool_name,
+                prefill=prefill,
+                context=None  # Could pass chat history if available
+            )
+
+            # Return as formatted artifact code block
+            artifact_json = json.dumps(artifact['data'], indent=2)
+            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+
+        except ValueError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Error generating tool form: {str(e)}"
+
+    def _handle_generate_query_builder(self, args: Dict[str, Any]) -> str:
+        """Handles the 'generate_query_builder' tool call."""
+        import json
+        from ..artifacts.tool_schema_parser import ToolSchemaParser
+
+        filter_category = args.get("filter_category")
+
+        # Initialize parser with this tool manager
+        parser = ToolSchemaParser(tool_manager=self)
+
+        try:
+            # Get available tools
+            available_tools = [tool.name for tool in self.get_builtin_tools()]
+
+            # Filter by category if specified
+            if filter_category:
+                # This is a simple implementation - could be enhanced
+                filtered_tools = [
+                    name for name in available_tools
+                    if self._tool_matches_category(name, filter_category)
+                ]
+                available_tools = filtered_tools
+
+            # Generate the artifact
+            artifact = parser.generate_query_builder_artifact(
+                available_tools=available_tools,
+                context=None  # Could pass chat history if available
+            )
+
+            # Return as formatted artifact code block
+            artifact_json = json.dumps(artifact['data'], indent=2)
+            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+
+        except Exception as e:
+            return f"Error generating query builder: {str(e)}"
+
+    def _handle_generate_tool_wizard(self, args: Dict[str, Any]) -> str:
+        """Handles the 'generate_tool_wizard' tool call."""
+        import json
+        from ..artifacts.tool_schema_parser import ToolSchemaParser
+
+        tool_name = args.get("tool_name")
+
+        if not tool_name:
+            return "Error: 'tool_name' argument is required for generate_tool_wizard."
+
+        # Initialize parser with this tool manager
+        parser = ToolSchemaParser(tool_manager=self)
+
+        try:
+            # Generate the artifact
+            artifact = parser.generate_wizard_artifact(
+                tool_name=tool_name,
+                context=None  # Could pass chat history if available
+            )
+
+            # Return as formatted artifact code block
+            artifact_json = json.dumps(artifact['data'], indent=2)
+            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+
+        except ValueError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Error generating tool wizard: {str(e)}"
+
+    def _handle_generate_batch_tool(self, args: Dict[str, Any]) -> str:
+        """Handles the 'generate_batch_tool' tool call."""
+        import json
+        from ..artifacts.tool_schema_parser import ToolSchemaParser
+
+        tool_name = args.get("tool_name")
+        initial_inputs = args.get("initial_inputs")
+
+        if not tool_name:
+            return "Error: 'tool_name' argument is required for generate_batch_tool."
+
+        # Initialize parser with this tool manager
+        parser = ToolSchemaParser(tool_manager=self)
+
+        try:
+            # Generate the artifact
+            artifact = parser.generate_batch_artifact(
+                tool_name=tool_name,
+                batch_inputs=initial_inputs
+            )
+
+            # Return as formatted artifact code block
+            artifact_json = json.dumps(artifact['data'], indent=2)
+            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+
+        except ValueError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Error generating batch tool: {str(e)}"
+
+    def _tool_matches_category(self, tool_name: str, category: str) -> bool:
+        """Check if a tool matches a given category."""
+        name_lower = tool_name.lower()
+        category_lower = category.lower()
+
+        category_keywords = {
+            "file operations": ["file", "read", "write", "directory", "list", "delete", "create"],
+            "code execution": ["execute", "python", "bash", "pytest", "run"],
+            "configuration": ["config", "set_system", "mcp_server", "settings"],
+            "memory management": ["memory", "feature", "goal", "progress", "session"],
+            "system": ["validate", "exists", "info", "open", "path"],
+        }
+
+        keywords = category_keywords.get(category_lower, [])
+        return any(kw in name_lower for kw in keywords)
 

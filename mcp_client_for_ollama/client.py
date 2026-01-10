@@ -34,59 +34,16 @@ from .utils.tool_parser import ToolParser
 from .agents.delegation_client import DelegationClient
 
 
-def convert_tool_args_types(tool_args: dict, tool_schema: dict) -> dict:
-    """Convert tool arguments from strings to proper types based on schema.
-
-    Ollama often returns tool arguments as strings (e.g., {"days": "3"}),
-    but MCP tools expect proper types (e.g., {"days": 3}).
-    This function converts arguments based on the tool's input schema.
-
-    Args:
-        tool_args: Dictionary of tool arguments (possibly with string values)
-        tool_schema: Tool input schema with 'properties' defining parameter types
-
-    Returns:
-        Dictionary with arguments converted to proper types
-    """
-    if not tool_schema or 'properties' not in tool_schema:
-        return tool_args
-
-    converted_args = {}
-    for key, value in tool_args.items():
-        if key in tool_schema['properties']:
-            param_type = tool_schema['properties'][key].get('type')
-
-            # Convert strings to appropriate types
-            if param_type == 'integer' and isinstance(value, str):
-                try:
-                    converted_args[key] = int(value)
-                except (ValueError, TypeError):
-                    converted_args[key] = value
-            elif param_type == 'number' and isinstance(value, str):
-                try:
-                    converted_args[key] = float(value)
-                except (ValueError, TypeError):
-                    converted_args[key] = value
-            elif param_type == 'boolean' and isinstance(value, str):
-                converted_args[key] = value.lower() in ('true', '1', 'yes')
-            else:
-                converted_args[key] = value
-        else:
-            converted_args[key] = value
-
-    return converted_args
-
-
 class MCPClient:
     """Main client class for interacting with Ollama and MCP servers"""
 
 
-    def __init__(self, model: str = DEFAULT_MODEL, host: str = DEFAULT_OLLAMA_HOST, config_dir: str = None):
+    def __init__(self, model: str = DEFAULT_MODEL, host: str = DEFAULT_OLLAMA_HOST):
         # Initialize session and client objects
         self.exit_stack = AsyncExitStack()
         self.ollama = ollama.AsyncClient(host=host)
         self.console = Console()
-        self.config_manager = ConfigManager(self.console, config_dir=config_dir)
+        self.config_manager = ConfigManager(self.console)
         # Initialize the server connector
         self.server_connector = ServerConnector(self.exit_stack, self.console)
         # Initialize the model manager
@@ -697,9 +654,6 @@ class MCPClient:
 
         enabled_tools = self.get_filtered_tools_for_current_mode()
 
-        # Build schema lookup for type conversion
-        tool_schemas = {tool.name: tool.inputSchema for tool in enabled_tools}
-
         loop_count = 0
         pending_tool_calls = tool_calls
 
@@ -755,10 +709,6 @@ class MCPClient:
                         "tool_name": tool_name
                     })
                     continue
-
-                # Convert tool argument types based on schema
-                if tool_name in tool_schemas:
-                    tool_args = convert_tool_args_types(tool_args, tool_schemas[tool_name])
 
                 # Call the tool on the specified server
                 result = None
@@ -2272,26 +2222,8 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
         return True
 
     async def cleanup(self):
-        """Clean up resources with graceful shutdown"""
-        try:
-            # Give pending operations a moment to finish
-            await asyncio.sleep(0.5)
-
-            # Close exit stack with timeout to prevent hanging
-            try:
-                await asyncio.wait_for(self.exit_stack.aclose(), timeout=5.0)
-            except asyncio.TimeoutError:
-                # Cleanup timed out, log but don't raise
-                print("[Cleanup] Warning: Resource cleanup timed out after 5 seconds")
-            except RuntimeError as e:
-                # Event loop may be closed - this is expected in some contexts
-                if "Event loop is closed" in str(e):
-                    print("[Cleanup] Warning: Event loop already closed (expected in web context)")
-                else:
-                    print(f"[Cleanup] Warning: Runtime error during cleanup: {e}")
-        except Exception as e:
-            # Any other errors during cleanup - log but don't raise
-            print(f"[Cleanup] Warning: Unexpected error during cleanup: {e}")
+        """Clean up resources"""
+        await self.exit_stack.aclose()
 
     async def reload_servers(self):
         """Reload all MCP servers with the same connection parameters"""
@@ -2992,29 +2924,6 @@ Please analyze this project and create an initial memory structure with:
 
 app = typer.Typer(help="MCP Client for Ollama", context_settings={"help_option_names": ["-h", "--help"]})
 
-# Global context to store values from callback
-class GlobalContext:
-    def __init__(self):
-        self.host: Optional[str] = None
-
-global_context = GlobalContext()
-
-@app.callback(invoke_without_command=True)
-def global_callback(
-    ctx: typer.Context,
-    host: Optional[str] = typer.Option(
-        None, "--host", "-H",
-        help="Ollama host URL (global option for all commands)"
-    )
-):
-    """Global callback to handle global options"""
-    # Store global host for use by subcommands
-    global_context.host = host
-
-    # If no subcommand is provided, invoke main by default
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(main)
-
 @app.command()
 def main(
     # MCP Server Configuration
@@ -3043,6 +2952,11 @@ def main(
     model: str = typer.Option(
         DEFAULT_MODEL, "--model", "-m",
         help="Ollama model to use",
+        rich_help_panel="Ollama Configuration"
+    ),
+    host: str = typer.Option(
+        DEFAULT_OLLAMA_HOST, "--host", "-H",
+        help="Ollama host URL",
         rich_help_panel="Ollama Configuration"
     ),
 
@@ -3092,9 +3006,6 @@ def main(
         # Check if .config/config.json exists - if not, enable auto-discovery
         if not os.path.exists(".config/config.json"):
             auto_discovery = True
-
-    # Get host from global context or use default
-    host = global_context.host if global_context.host else DEFAULT_OLLAMA_HOST
 
     # Run the async main function
     asyncio.run(async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, model, host, query, quiet, trace_enabled, trace_level, trace_dir))
@@ -3238,56 +3149,6 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
             await client.chat_loop()
     finally:
         await client.cleanup()
-
-
-@app.command()
-def web(
-    bind: str = typer.Option(
-        "0.0.0.0",
-        "--bind",
-        "-b",
-        help="Address to bind the web server to (e.g., 0.0.0.0, localhost, 127.0.0.1)"
-    ),
-    port: int = typer.Option(
-        5222,
-        "--port",
-        "-p",
-        help="Port to bind the web server to"
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        "-d",
-        help="Run in debug mode"
-    )
-):
-    """Launch web interface for MCP Client
-
-    Note: Use global --host option to specify Ollama API URL (e.g., ollmcp --host http://example.com web)
-          --bind specifies where the Flask web server listens
-    """
-    import os
-    from mcp_client_for_ollama.web.app import run_web_server
-
-    # Get host from global context or use default
-    host = global_context.host if global_context.host else DEFAULT_OLLAMA_HOST
-
-    # Capture current working directory for config loading
-    config_dir = os.path.join(os.getcwd(), ".config")
-
-    console = Console()
-    console.print(f"[bold cyan]Starting MCP Client Web Server...[/bold cyan]")
-    console.print(f"[cyan]Web server listening on: http://{bind}:{port}[/cyan]")
-    console.print(f"[cyan]Ollama API: {host}[/cyan]")
-    console.print(f"[cyan]Config directory: {config_dir}[/cyan]")
-    console.print(f"[cyan]API Documentation: http://{bind}:{port}/[/cyan]")
-    console.print(f"[yellow]Press CTRL+C to stop the server[/yellow]\n")
-
-    try:
-        run_web_server(bind=bind, port=port, ollama_host=host, config_dir=config_dir, debug=debug)
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Shutting down web server...[/yellow]")
-
 
 if __name__ == "__main__":
     app()

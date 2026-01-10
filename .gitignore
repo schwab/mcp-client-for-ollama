@@ -17,8 +17,8 @@ wheels/
 .config/
 uv.lock
 *.lock
-
-
-
-# Ignore Smart Environment folder
+*/.smart-env/*
 .smart-env
+.obsidian
+.env
+.sync-exclude.lst
