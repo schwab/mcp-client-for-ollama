@@ -3150,5 +3150,33 @@ async def async_main(mcp_server, mcp_server_url, servers_json, auto_discovery, m
     finally:
         await client.cleanup()
 
+@app.command()
+def web(
+    bind: str = typer.Option(
+        "0.0.0.0", "--bind", "-b",
+        help="Address to bind Flask server to"
+    ),
+    port: int = typer.Option(
+        5222, "--port", "-p",
+        help="Port to bind Flask server to"
+    ),
+    ollama_host: str = typer.Option(
+        DEFAULT_OLLAMA_HOST, "--ollama-host",
+        help="Ollama API URL"
+    ),
+    config_dir: Optional[str] = typer.Option(
+        None, "--config-dir",
+        help="Config directory path"
+    ),
+    debug: bool = typer.Option(
+        False, "--debug",
+        help="Enable Flask debug mode"
+    )
+):
+    """Run the MCP Client web server"""
+    from .web.app import run_web_server
+    run_web_server(bind=bind, port=port, ollama_host=ollama_host,
+                   config_dir=config_dir, debug=debug)
+
 if __name__ == "__main__":
     app()

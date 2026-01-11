@@ -27,8 +27,149 @@
             display: flex;
             gap: 20px;
             width: 100%;
-            max-width: 1400px;
+            max-width: 1800px;
             height: 90vh;
+        }
+
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 400px;
+        }
+
+        .artifact-panel {
+            background: white;
+            border-radius: 3px;
+            box-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        .artifact-header {
+            background: #0082c9;
+            color: white;
+            padding: 15px 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .artifact-content {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .artifact-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        /* Form Artifact Styles */
+        .artifact-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-label {
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        .form-label.required::after {
+            content: ' *';
+            color: #f44336;
+        }
+
+        .form-input {
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            border-color: #0082c9;
+        }
+
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .form-select {
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            outline: none;
+            background: white;
+            cursor: pointer;
+        }
+
+        .form-checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .form-submit {
+            padding: 12px 24px;
+            background: #0082c9;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .form-submit:hover:not(:disabled) {
+            background: #006aa3;
+        }
+
+        .form-submit:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .form-result {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            background: #f7f9fc;
+            border-left: 3px solid #0082c9;
+        }
+
+        .form-result pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
         .left-panel {
@@ -1027,6 +1168,23 @@
                 <div id="sessionInfo">Session: <span id="sessionId">...</span></div>
             </div>
         </div>
+
+        <!-- Right Panel - Artifacts -->
+        <div class="right-panel">
+            <div class="artifact-panel">
+                <div class="artifact-header">
+                    <span>🎨 Artifacts</span>
+                    <button class="icon-btn" onclick="clearArtifacts()" title="Clear Artifacts" style="color: white;">🗑️</button>
+                </div>
+                <div class="artifact-content" id="artifactContent">
+                    <div class="artifact-empty">
+                        <span style="font-size: 3rem; opacity: 0.2;">🎨</span>
+                        <div style="margin-top: 10px;">No artifacts yet</div>
+                        <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1981,6 +2139,318 @@
         // END MEMORY PANEL UI FUNCTIONS
         // ========================================================================
 
+        // ========================================================================
+        // ARTIFACT SYSTEM
+        // ========================================================================
+
+        // Artifact state
+        let currentArtifact = null;
+
+        // Detect artifacts in LLM response
+        function detectArtifacts(content) {
+            const artifactPattern = /```artifact:(\w+)\n([\s\S]*?)\n```/g;
+            const artifacts = [];
+            let match;
+
+            while ((match = artifactPattern.exec(content)) !== null) {
+                const type = match[1];
+                const dataStr = match[2];
+
+                try {
+                    const data = JSON.parse(dataStr);
+                    artifacts.push({
+                        type: type,
+                        data: data
+                    });
+                } catch (e) {
+                    console.error('Failed to parse artifact:', e);
+                }
+            }
+
+            return artifacts;
+        }
+
+        // Render artifact in the artifact panel
+        function renderArtifact(artifact) {
+            const artifactContent = document.getElementById('artifactContent');
+            currentArtifact = artifact;
+
+            // Render based on type
+            switch (artifact.type) {
+                case 'form':
+                    artifactContent.innerHTML = renderFormArtifact(artifact.data);
+                    break;
+                case 'toolform':
+                    artifactContent.innerHTML = renderToolFormArtifact(artifact.data);
+                    break;
+                default:
+                    artifactContent.innerHTML = `
+                        <div class="artifact-empty">
+                            <span style="font-size: 3rem; opacity: 0.2;">⚠️</span>
+                            <div style="margin-top: 10px;">Unsupported artifact type: ${artifact.type}</div>
+                            <div style="font-size: 0.85rem; margin-top: 5px;">Renderer not yet implemented</div>
+                        </div>
+                    `;
+            }
+        }
+
+        // Render generic form artifact
+        function renderFormArtifact(data) {
+            const title = data.title || 'Form';
+            const fields = data.data?.fields || [];
+
+            let html = `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <form class="artifact-form" id="artifactForm" onsubmit="submitGenericForm(event)">
+            `;
+
+            fields.forEach((field, index) => {
+                html += renderFormField(field, index);
+            });
+
+            html += `
+                    <button type="submit" class="form-submit">Submit</button>
+                    <div id="formResult"></div>
+                </form>
+            `;
+
+            return html;
+        }
+
+        // Render tool form artifact
+        function renderToolFormArtifact(data) {
+            const title = data.title || 'Tool Form';
+            const toolName = data.data?.tool_name || '';
+            const description = data.data?.tool_description || '';
+            const schema = data.data?.schema || {};
+            const properties = schema.properties || {};
+
+            let html = `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                    ${description ? `<p style="font-size: 0.85rem; color: #666; margin-top: 5px;">${description}</p>` : ''}
+                </div>
+                <form class="artifact-form" id="artifactForm" onsubmit="submitToolForm(event, '${toolName}')">
+            `;
+
+            for (const [propName, propSchema] of Object.entries(properties)) {
+                html += renderToolFormField(propName, propSchema);
+            }
+
+            const submitLabel = data.data?.submit_button?.label || 'Execute';
+            html += `
+                    <button type="submit" class="form-submit">${submitLabel}</button>
+                    <div id="formResult"></div>
+                </form>
+            `;
+
+            return html;
+        }
+
+        // Render a single form field
+        function renderFormField(field, index) {
+            const fieldId = field.id || `field_${index}`;
+            const label = field.label || field.id;
+            const type = field.type || 'text';
+            const required = field.required || false;
+            const placeholder = field.placeholder || '';
+
+            let inputHtml = '';
+
+            switch (type) {
+                case 'textarea':
+                    const rows = field.rows || 3;
+                    inputHtml = `<textarea class="form-input form-textarea" id="${fieldId}" name="${fieldId}" placeholder="${placeholder}" ${required ? 'required' : ''} rows="${rows}"></textarea>`;
+                    break;
+                case 'select':
+                    const options = field.options || [];
+                    inputHtml = `
+                        <select class="form-select" id="${fieldId}" name="${fieldId}" ${required ? 'required' : ''}>
+                            <option value="">Select...</option>
+                            ${options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                        </select>
+                    `;
+                    break;
+                case 'checkbox':
+                    inputHtml = `
+                        <div class="form-checkbox-wrapper">
+                            <input type="checkbox" class="form-checkbox" id="${fieldId}" name="${fieldId}">
+                            <label for="${fieldId}">${label}</label>
+                        </div>
+                    `;
+                    return `<div class="form-field">${inputHtml}</div>`;
+                case 'radio':
+                    const radioOptions = field.options || [];
+                    inputHtml = radioOptions.map((opt, i) => `
+                        <div class="form-checkbox-wrapper">
+                            <input type="radio" id="${fieldId}_${i}" name="${fieldId}" value="${opt}" ${required && i === 0 ? 'required' : ''}>
+                            <label for="${fieldId}_${i}">${opt}</label>
+                        </div>
+                    `).join('');
+                    break;
+                default:
+                    inputHtml = `<input type="${type}" class="form-input" id="${fieldId}" name="${fieldId}" placeholder="${placeholder}" ${required ? 'required' : ''}>`;
+            }
+
+            return `
+                <div class="form-field">
+                    <label class="form-label ${required ? 'required' : ''}" for="${fieldId}">${label}</label>
+                    ${inputHtml}
+                </div>
+            `;
+        }
+
+        // Render a tool form field
+        function renderToolFormField(propName, propSchema) {
+            const label = propSchema.ui_hints?.label || propName.replace(/_/g, ' ');
+            const description = propSchema.description || '';
+            const widget = propSchema.ui_widget || 'text';
+            const required = propSchema.ui_hints?.optional === false;
+
+            let inputHtml = '';
+
+            switch (widget) {
+                case 'textarea':
+                case 'code_editor':
+                    inputHtml = `<textarea class="form-input form-textarea" id="${propName}" name="${propName}" ${required ? 'required' : ''} rows="4"></textarea>`;
+                    break;
+                case 'checkbox':
+                    inputHtml = `
+                        <div class="form-checkbox-wrapper">
+                            <input type="checkbox" class="form-checkbox" id="${propName}" name="${propName}">
+                            <label for="${propName}">${description || label}</label>
+                        </div>
+                    `;
+                    return `<div class="form-field">${inputHtml}</div>`;
+                case 'select':
+                    const enumValues = propSchema.enum || [];
+                    inputHtml = `
+                        <select class="form-select" id="${propName}" name="${propName}" ${required ? 'required' : ''}>
+                            <option value="">Select...</option>
+                            ${enumValues.map(val => `<option value="${val}">${val}</option>`).join('')}
+                        </select>
+                    `;
+                    break;
+                default:
+                    const inputType = widget === 'email' ? 'email' : widget === 'number' ? 'number' : 'text';
+                    inputHtml = `<input type="${inputType}" class="form-input" id="${propName}" name="${propName}" ${required ? 'required' : ''}>`;
+            }
+
+            return `
+                <div class="form-field">
+                    <label class="form-label ${required ? 'required' : ''}" for="${propName}">${label}</label>
+                    ${description && widget !== 'checkbox' ? `<div style="font-size: 0.8rem; color: #666; margin-top: -4px;">${description}</div>` : ''}
+                    ${inputHtml}
+                </div>
+            `;
+        }
+
+        // Submit generic form
+        function submitGenericForm(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = {};
+
+            for (const [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+
+            // For generic forms, just display the data
+            const resultDiv = document.getElementById('formResult');
+            resultDiv.innerHTML = `
+                <div class="form-result">
+                    <strong>Form Data:</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+        }
+
+        // Submit tool form
+        async function submitToolForm(event, toolName) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const args = {};
+
+            for (const [key, value] of formData.entries()) {
+                // Handle checkboxes
+                const element = form.elements[key];
+                if (element.type === 'checkbox') {
+                    args[key] = element.checked;
+                } else if (element.type === 'number') {
+                    args[key] = parseFloat(value) || 0;
+                } else {
+                    args[key] = value;
+                }
+            }
+
+            const resultDiv = document.getElementById('formResult');
+            resultDiv.innerHTML = `
+                <div class="form-result">
+                    <strong>Executing ${toolName}...</strong>
+                </div>
+            `;
+
+            try {
+                // Call the tool via API
+                const response = await fetch(`${API_BASE}/tools/execute`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        tool_name: toolName,
+                        arguments: args
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="form-result">
+                            <strong>Result:</strong>
+                            <pre>${typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="form-result" style="border-left-color: #f44336; background: #ffebee;">
+                            <strong>Error:</strong>
+                            <pre>${result.error || 'Unknown error'}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="form-result" style="border-left-color: #f44336; background: #ffebee;">
+                        <strong>Error:</strong>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        // Clear artifacts
+        function clearArtifacts() {
+            const artifactContent = document.getElementById('artifactContent');
+            currentArtifact = null;
+            artifactContent.innerHTML = `
+                <div class="artifact-empty">
+                    <span style="font-size: 3rem; opacity: 0.2;">🎨</span>
+                    <div style="margin-top: 10px;">No artifacts yet</div>
+                    <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
+                </div>
+            `;
+        }
+
+        // ========================================================================
+        // END ARTIFACT SYSTEM
+        // ========================================================================
+
         // Load available models
         async function loadModels() {
             try {
@@ -2143,6 +2613,13 @@
                 contentDiv.textContent = newContent;
             }
             scrollToBottom();
+
+            // Detect and render artifacts
+            const artifacts = detectArtifacts(newContent);
+            if (artifacts.length > 0) {
+                // Render the first artifact (in future, could support multiple)
+                renderArtifact(artifacts[0]);
+            }
         }
 
         // Scroll to bottom

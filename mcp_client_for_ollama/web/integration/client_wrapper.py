@@ -68,11 +68,12 @@ class WebMCPClient:
             # This ensures memory storage persists across requests within the same session
             config_dir_to_use = self.config_dir
 
-            # Create MCP client with correct parameters (model, host, config_dir)
+            # Create MCP client with correct parameters (model, host)
+            # Note: MCPClient doesn't accept config_dir in __init__
+            # We'll pass config path to connect_to_servers() below
             mcp_client = MCPClient(
                 model=self.current_model,
-                host=self.ollama_host,
-                config_dir=config_dir_to_use
+                host=self.ollama_host
             )
 
             # Disable Human-in-the-Loop prompts for web interface
@@ -170,8 +171,11 @@ class WebMCPClient:
             mcp_client = await self._create_mcp_client()
 
             if mcp_client:
-                # Add message to MCPClient's chat history for context
-                # Note: MCPClient maintains its own chat history
+                # Add previous conversation history to the fresh MCP client
+                # This ensures context is maintained across requests
+                if self.chat_history:
+                    # Copy our persistent chat history to the fresh MCP client
+                    mcp_client.chat_history = self.chat_history.copy()
 
                 # Check if delegation is enabled
                 use_delegation = mcp_client.is_delegation_enabled()

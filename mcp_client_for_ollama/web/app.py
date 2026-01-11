@@ -201,11 +201,33 @@ def run_web_server(bind='0.0.0.0', port=5222, ollama_host='http://localhost:1143
         config_dir: Config directory path (e.g., /path/to/.config)
         debug: Enable Flask debug mode
     """
-    # Set global config with Ollama host and config directory
-    set_global_config({
+    import json
+
+    # Load config file if config_dir is provided
+    global_config = {
         'ollama_host': ollama_host,
         'config_dir': config_dir
-    })
+    }
+
+    if config_dir:
+        config_file = os.path.join(config_dir, 'config.json')
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r') as f:
+                    file_config = json.load(f)
+                # Merge file config into global config
+                # This ensures mcpServers and other settings are available
+                global_config.update(file_config)
+                global_config['config_dir'] = config_dir  # Preserve config_dir
+                print(f"Loaded config from: {config_file}")
+                if 'mcpServers' in file_config:
+                    server_count = len(file_config['mcpServers'])
+                    print(f"Found {server_count} MCP server(s) in config")
+            except Exception as e:
+                print(f"Warning: Failed to load config file {config_file}: {e}")
+
+    # Set global config with Ollama host, config directory, and loaded settings
+    set_global_config(global_config)
 
     print(f"Starting MCP Client Web Server on http://{bind}:{port}")
     print(f"Ollama API: {ollama_host}")

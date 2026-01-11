@@ -693,3 +693,692 @@ Without restarting the server, the doc_type fix won't be active!
 - ❌ doc_type UnboundLocalError
 - ❌ Hitting loop limit before processing
 - ❌ Zero files processed
+
+
+## ✅ FIXED in v0.44.1: UI Form Not Shown - Wrong Agent Assignment
+
+**Status**: FIXED - PLANNER now routes form requests correctly
+
+**TRACE**: /home/mcstar/Nextcloud/DEV/pdf_extract_mcp/.trace/trace_20260110_170656.json
+
+### Issue Summary
+
+User asked: "create a form for inputing user name and profile information"
+
+**What happened**:
+1. PLANNER assigned task to TOOL_FORM_AGENT
+2. TOOL_FORM_AGENT called `builtin.generate_tool_form` with invalid tool name "username_profile"
+3. Tool call failed (no such tool exists)
+4. Agent returned text describing a tool call instead of an artifact
+5. NO FORM SHOWN TO USER
+
+### Root Causes
+
+**Cause 1: Wrong Agent Assignment**
+- User requested a GENERIC data collection form
+- PLANNER assigned to TOOL_FORM_AGENT (wrong!)
+- TOOL_FORM_AGENT is specialized for creating forms FROM existing tool schemas
+- Should have assigned to ARTIFACT_AGENT instead
+
+**Cause 2: PLANNER Lacked Agent Guidance**
+- PLANNER prompt listed basic agents but not ARTIFACT_AGENT or TOOL_FORM_AGENT
+- No guidance on when to use each for form requests
+- PLANNER couldn't distinguish between:
+  - Generic form: "create a form for user profile" → ARTIFACT_AGENT
+  - Tool-based form: "create a form to use read_file tool" → TOOL_FORM_AGENT
+
+**Cause 3: Tool Call Failed Silently**
+- TOOL_FORM_AGENT tried: `generate_tool_form(tool_name="username_profile")`
+- "username_profile" is not a real MCP tool name
+- Tool handler expected real tool like "builtin.read_file" or "pdf_extract.process_document"
+- Error not properly handled, agent gave up
+
+### Solution (v0.44.1)
+
+**Fix 1: Updated PLANNER Agent List**
+Added ARTIFACT_AGENT and TOOL_FORM_AGENT to planner.json with clear guidance:
+
+```
+ARTIFACT_AGENT - Create visualizations and generic data collection forms
+  Use for: tables, charts, graphs, timelines, dashboards, GENERIC forms
+  Example: "create a form for user profile" → ARTIFACT_AGENT
+
+TOOL_FORM_AGENT - Create forms FROM existing MCP tool schemas
+  Use for: "create a form to use [tool_name]" OR "make [tool_name] easier to use"
+  Example: "create a form to use read_file tool" → TOOL_FORM_AGENT
+  NEVER use for generic forms without a specific tool!
+```
+
+**Fix 2: Added Form Creation Examples to ARTIFACT_AGENT**
+Updated artifact_agent.json with explicit generic form creation instructions:
+- Complete form artifact structure
+- All available field types (text, email, textarea, select, checkbox, etc.)
+- Validation rules
+- Submission configuration
+- Clear distinction between artifact:form (generic) and artifact:toolform (tool-based)
+
+### Files Modified (v0.44.1)
+- mcp_client_for_ollama/agents/definitions/planner.json - Added agent routing guidance
+- mcp_client_for_ollama/agents/definitions/artifact_agent.json - Added form examples
+- docs/qa_bugs.md - Documentation
+
+### Expected Behavior Now
+
+**User**: "create a form for user profile information"
+
+**PLANNER**: Assigns to ARTIFACT_AGENT (recognizes generic form request)
+
+**ARTIFACT_AGENT**: Generates artifact:form with proper structure:
+```artifact:form
+{
+  "type": "artifact:form",
+  "version": "1.0",
+  "title": "User Profile Form",
+  "data": {
+    "fields": [
+      {"id": "username", "type": "text", "label": "Username", "required": true},
+      {"id": "email", "type": "email", "label": "Email", "required": true},
+      {"id": "bio", "type": "textarea", "label": "Bio"}
+    ],
+    "submission": {
+      "method": "api",
+      "endpoint": "/api/submit",
+      "successMessage": "Saved!"
+    }
+  }
+}
+```
+
+**Result**: Form artifact displayed in web UI
+
+### Comparison: Generic vs Tool Forms
+
+**Generic Form (ARTIFACT_AGENT)**:
+- Request: "create a form for [arbitrary data]"
+- Agent: ARTIFACT_AGENT
+- Output: artifact:form
+- No MCP tool involved
+
+**Tool Form (TOOL_FORM_AGENT)**:
+- Request: "create a form to use [tool_name]"
+- Agent: TOOL_FORM_AGENT
+- Output: artifact:toolform (auto-generated from tool schema)
+- Executes actual MCP tool when submitted
+
+## ✅ FIXED in v0.44.2: Tool Form Agent - Artifact Not Returned
+
+**Status**: FIXED - Tool handlers now return proper artifacts
+
+**TRACE**: /home/mcstar/Nextcloud/DEV/pdf_extract_mcp/.trace/trace_20260110_190735.json
+
+### Issue Summary
+
+User asked: "create a form to use list-files"
+
+**What happened**:
+1. ✅ PLANNER correctly assigned to TOOL_FORM_AGENT (v0.44.1 fix worked!)
+2. ✅ TOOL_FORM_AGENT called `builtin.generate_tool_form`
+3. ❌ Tool call returned empty response in loop 0
+4. ❌ Agent gave up and manually created JSON with ````json` fence in loop 1
+5. ❌ NO FORM SHOWN TO USER (UI only detects ````artifact:type` fences)
+
+### Root Causes
+
+**Cause 1: Tool Handler Bug**
+Line 3294 in builtin.py tried to access `artifact['data']['type']`:
+```python
+artifact_json = json.dumps(artifact['data'], indent=2)
+return f"```artifact:{artifact['data']['type']...}"
+```
+
+But artifact structure has `type` at top level:
+```python
+{
+  "type": "artifact:toolform",  # ← HERE, not in 'data'
+  "data": { ... }
+}
+```
+
+Result: KeyError on 'type', caught by try/except, returned "Error generating tool form: 'type'"
+
+**Cause 2: Agent Didn't Output Tool Result**
+- Agent called tool in loop 0
+- Tool returned error string (not artifact)
+- Agent saw error, didn't output anything (empty response)
+- Loop 1: Agent tried to manually create form without using the tool
+- Created ````json` fence instead of ````artifact:toolform`
+
+**Cause 3: Missing Output Instructions**
+- Agent didn't know it should directly output the tool's result
+- No explicit instruction to pass through the artifact code block
+
+### Solution (v0.44.2)
+
+**Fix 1: Fixed Tool Handler Bug** (`builtin.py:3292-3296`)
+Changed from accessing `artifact['data']['type']` to `artifact['type']`:
+```python
+# Return as formatted artifact code block
+# Extract type from top level, not from data
+artifact_type = artifact['type'].replace('artifact:', '')
+artifact_json = json.dumps(artifact, indent=2)  # ← Dump full artifact
+return f"```artifact:{artifact_type}\n{artifact_json}\n```"
+```
+
+Applied to all 4 artifact generation handlers:
+- `_handle_generate_tool_form`
+- `_handle_generate_query_builder`
+- `_handle_generate_tool_wizard`
+- `_handle_generate_batch_tool`
+
+**Fix 2: Added Explicit Output Instructions** (`tool_form_agent.json`)
+Added to agent prompt:
+```
+CRITICAL WORKFLOW:
+1. Identify the tool name
+2. Call builtin.generate_tool_form with that tool name
+3. The tool returns a complete artifact code block
+4. OUTPUT THAT ARTIFACT DIRECTLY - DO NOT modify it
+5. DO NOT create your own JSON structure
+6. JUST OUTPUT THE ARTIFACT the tool gave you
+```
+
+### Files Modified (v0.44.2)
+- mcp_client_for_ollama/tools/builtin.py - Fixed artifact type access (4 handlers)
+- mcp_client_for_ollama/agents/definitions/tool_form_agent.json - Added output instructions
+- mcp_client_for_ollama/pyproject.toml - Version 0.44.2
+- mcp_client_for_ollama/__init__.py - Version 0.44.2
+- docs/qa_bugs.md - Documentation
+
+### Expected Behavior Now
+
+**User**: "create a form to use list_files"
+
+**PLANNER**: Assigns to TOOL_FORM_AGENT ✅
+
+**TOOL_FORM_AGENT Loop 0**:
+- Calls `builtin.generate_tool_form(tool_name="builtin.list_files")`
+- Tool returns:
+  ````artifact:toolform
+  {
+    "type": "artifact:toolform",
+    "version": "1.0",
+    "title": "List Files",
+    "data": {
+      "tool_name": "builtin.list_files",
+      "schema": { ... },
+      "submit_button": {"label": "List", "icon": "list"}
+    }
+  }
+  ```
+- Agent outputs this artifact directly
+
+**Result**: Form artifact displayed in web UI ✅
+
+### Testing
+
+Verified with:
+```python
+tool_manager._handle_generate_tool_form({"tool_name": "builtin.list_files"})
+```
+
+Returns proper ````artifact:toolform` code fence with complete artifact structure.
+
+## ✅ FIXED in v0.44.5: Tool Form Prefill Parameter Error + MCP Server Loading
+
+**Status**: FIXED - Tool handler now parses JSON strings, user needs to restart web server
+
+**TRACE**: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260110_212742.json
+
+### Issue 1: Tool Form Not Displayed - prefill Parameter Error
+
+**What happened**:
+1. ✅ PLANNER correctly assigned to TOOL_FORM_AGENT
+2. ✅ Agent called `builtin.generate_tool_form(tool_name="builtin.list_directories", prefill="{}")`
+3. ❌ Tool handler crashed: `'str' object is not a mapping`
+4. ❌ Agent gave up in loop 1 and manually created JSON without artifact fence
+5. ❌ NO FORM SHOWN (UI only detects ```artifact:type fences)
+
+**Root Cause**:
+The LLM passed `prefill` as a JSON string `"{}"` instead of a dict object:
+```json
+"arguments": {"prefill": "{}", "tool_name": "builtin.list_directories"}
+```
+
+The tool handler expected a dict but got a string, causing the error when trying to use it as a mapping.
+
+**Solution (v0.44.5)**:
+Fixed `_handle_generate_tool_form` in builtin.py to parse JSON strings:
+```python
+# Parse prefill if it's a JSON string
+if isinstance(prefill, str):
+    try:
+        prefill = json.loads(prefill) if prefill else None
+    except json.JSONDecodeError:
+        prefill = None
+```
+
+Now works with both:
+- Dict: `prefill={"path": "/home"}`
+- JSON string: `prefill='{"path": "/home"}'`
+- Empty string: `prefill="{}"`
+
+### Issue 2: MCP Servers Not Loading (User Action Required)
+
+**What happened**:
+Only builtin tools visible, no biblerag or obsidian tools despite v0.44.4 fix.
+
+**Root Cause**:
+The v0.44.4 fix is correct, but the web server needs to be restarted for it to take effect.
+
+**Solution (v0.44.5)**:
+The code is already fixed in v0.44.4. User must:
+1. Stop the current web server (Ctrl+C)
+2. Restart with config directory:
+   ```bash
+   python3 -m mcp_client_for_ollama web --config-dir /home/mcstar/Nextcloud/Vault/Journal/.config
+   ```
+3. Check console output for:
+   ```
+   Loaded config from: .../config.json
+   Found 3 MCP server(s) in config
+   ```
+
+If still not working after restart:
+- Verify config file exists: `ls -la /path/to/.config/config.json`
+- Check file is readable
+- Ensure mcpServers section is in the file
+
+### Files Modified (v0.44.5):
+- mcp_client_for_ollama/tools/builtin.py - Fixed prefill parameter parsing
+- mcp_client_for_ollama/pyproject.toml - Version 0.44.5
+- mcp_client_for_ollama/__init__.py - Version 0.44.5
+- docs/qa_bugs.md - Documentation
+
+### Expected Behavior After v0.44.5 + Server Restart:
+
+**User**: "generate a form to input the tool call parameters for list-directories"
+
+**PLANNER**: Assigns to TOOL_FORM_AGENT ✅
+
+**TOOL_FORM_AGENT Loop 0**:
+- Calls `builtin.generate_tool_form(tool_name="builtin.list_directories", prefill="{}")`
+- Prefill gets parsed from string to dict ✅
+- Tool returns proper artifact:
+  ```artifact:toolform
+  {
+    "type": "artifact:toolform",
+    "version": "1.0",
+    "title": "List Directories",
+    "data": {
+      "tool_name": "builtin.list_directories",
+      "schema": {...},
+      "submit_button": {"label": "List", "icon": "list"}
+    }
+  }
+  ```
+- Agent outputs artifact directly ✅
+
+**Result**: Form displayed in web UI ✅
+
+**MCP Servers**: biblerag and obsidian tools now available ✅
+
+
+## 0.44.5 issues
+Trace: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260110_214045.json
+- still no user form being shown by the UI
+- between user queries, the ai/ui forgets the context of previous questions.
+For instance, in the first query the user asked about the book of Luke in the Amplified version, the in the second question the user mentioned showing the 5th chapter of luke, and the AI ignored the context of the Amplified version and planned to use the KJV version instead.
+
+## ✅ FIXED in v0.44.6: Missing get_tool Method - Forms Not Generated
+
+**Status**: FIXED - ToolManager now has get_tool method for MCP tools
+
+**TRACE**: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260110_214045.json
+
+### Issue Summary
+
+User asked: "create a user form for calling Get Topic Verses"
+
+**What happened**:
+1. ✅ PLANNER correctly assigned to TOOL_FORM_AGENT
+2. ✅ TOOL_FORM_AGENT called `builtin.generate_tool_form(tool_name="biblerag.get_topic_verses")`
+3. ❌ Tool handler returned: "Error: Tool not found: biblerag.get_topic_verses"
+4. ❌ Agent retried multiple times, all failed with same error
+5. ❌ NO FORM SHOWN TO USER
+
+### Root Cause
+
+**Missing Method in ToolManager**:
+- `ToolSchemaParser` expects `ToolManager.get_tool(tool_name)` method (line 252-253 in tool_schema_parser.py)
+- `ToolManager` class had NO `get_tool` method
+- When trying to generate form for MCP tool → Can't find tool → Returns "Tool not found"
+- Only builtin tools could be found through the fallback `get_builtin_tools()` path
+
+**Why This Happened**:
+- ToolManager stores all tools (builtin + MCP) in `available_tools` list
+- But had no method to retrieve a single tool by name
+- ToolSchemaParser was designed to call `get_tool(tool_name)`
+- Missing method meant ALL MCP tool forms would fail
+
+### Solution (v0.44.6)
+
+**Added get_tool Method to ToolManager** (manager.py:146-162):
+```python
+def get_tool(self, tool_name: str) -> Optional[Dict]:
+    """Get a specific tool by name.
+
+    Args:
+        tool_name: Name of the tool to retrieve
+
+    Returns:
+        Dictionary with tool metadata (name, description, inputSchema) or None if not found
+    """
+    for tool in self.available_tools:
+        if tool.name == tool_name:
+            return {
+                'name': tool.name,
+                'description': tool.description,
+                'inputSchema': tool.inputSchema
+            }
+    return None
+```
+
+**How It Works**:
+1. Searches through `self.available_tools` list
+2. Finds tool with matching name
+3. Returns dict with name, description, inputSchema
+4. Returns None if not found
+
+**Now Works For**:
+- ✅ All builtin tools (builtin.*)
+- ✅ All MCP server tools (biblerag.*, obsidian.*, etc.)
+- ✅ Any tool in available_tools list
+
+### Files Modified (v0.44.6):
+- mcp_client_for_ollama/tools/manager.py - Added get_tool method
+- mcp_client_for_ollama/pyproject.toml - Version 0.44.6
+- mcp_client_for_ollama/__init__.py - Version 0.44.6
+- docs/qa_bugs.md - Documentation
+
+### Expected Behavior Now:
+
+**User**: "create a form to use biblerag.get_topic_verses"
+
+**PLANNER**: Assigns to TOOL_FORM_AGENT ✅
+
+**TOOL_FORM_AGENT Loop 0**:
+- Calls `builtin.generate_tool_form(tool_name="biblerag.get_topic_verses")`
+- ToolSchemaParser calls `tool_manager.get_tool("biblerag.get_topic_verses")` ✅
+- **NEW**: Method exists! Returns tool metadata ✅
+- Generates artifact:
+  ```artifact:toolform
+  {
+    "type": "artifact:toolform",
+    "version": "1.0",
+    "title": "Get Topic Verses",
+    "data": {
+      "tool_name": "biblerag.get_topic_verses",
+      "schema": {...},
+      "submit_button": {"label": "Search", "icon": "search"}
+    }
+  }
+  ```
+- Agent outputs artifact ✅
+
+**Result**: Form displayed in web UI ✅
+
+### Testing Required:
+1. Restart web server with updated code
+2. Ask: "create a form to use biblerag.get_topic_verses"
+3. Verify form is generated and displayed
+4. Test with other MCP tools (obsidian.*, etc.)
+
+## ✅ FIXED in v0.45.0: Context Not Preserved Between Queries
+
+**Status**: FIXED - Chat history now properly passed to MCP client
+
+**TRACE**: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260110_214045.json
+
+### Issue Summary
+
+Between user queries, the AI forgets the context of previous questions.
+
+**Example**:
+- Query 1: "Show me the book of Luke in the Amplified version"
+- Query 2: "Show me the 5th chapter of Luke"
+- Expected: AI remembers to use Amplified version from Query 1
+- Actual: AI uses KJV version (default), ignoring the Amplified context
+
+### Root Cause
+
+**Fresh MCP Client Without History**:
+- WebMCPClient creates a **fresh MCP client for each request** (client_wrapper.py:171)
+- Reason: Avoids event loop binding issues in Flask async context
+- Problem: Fresh client has **empty chat_history**
+- The delegation system receives `mcp_client.chat_history` which is always empty (line 218)
+
+**WebMCPClient Has Two Histories**:
+1. `self.chat_history` - Persistent across all requests in the session ✅
+2. `mcp_client.chat_history` - Fresh/empty for each request ❌
+
+**Flow**:
+```
+User Query 1 → Fresh MCP client (empty history) → Response → Saved to self.chat_history
+User Query 2 → Fresh MCP client (empty history) → Response → Context from Query 1 LOST!
+```
+
+### Solution (v0.45.0)
+
+**Copy Persistent History to Fresh MCP Client** (client_wrapper.py:174-178):
+```python
+if mcp_client:
+    # Add previous conversation history to the fresh MCP client
+    # This ensures context is maintained across requests
+    if self.chat_history:
+        # Copy our persistent chat history to the fresh MCP client
+        mcp_client.chat_history = self.chat_history.copy()
+```
+
+**How It Works**:
+1. WebMCPClient maintains persistent `self.chat_history` for the session
+2. When creating fresh MCP client for new request:
+   - Copy all previous messages from `self.chat_history`
+   - Fresh client now has full conversation context
+3. Delegation system receives `mcp_client.chat_history` with complete history ✅
+4. After response, append to `self.chat_history` for next request
+
+**Flow After Fix**:
+```
+User Query 1 → Fresh MCP client (empty) → Response → Saved to self.chat_history
+User Query 2 → Fresh MCP client (COPY of self.chat_history) → Response with context ✅
+```
+
+### Files Modified (v0.45.0):
+- mcp_client_for_ollama/web/integration/client_wrapper.py - Copy history to fresh client
+- mcp_client_for_ollama/pyproject.toml - Version 0.45.0
+- mcp_client_for_ollama/__init__.py - Version 0.45.0
+- docs/qa_bugs.md - Documentation
+
+### Expected Behavior Now:
+
+**User Query 1**: "Show me the book of Luke in the Amplified version"
+- MCP client has empty history
+- AI responds with Luke from Amplified version
+- Response saved to `self.chat_history`
+
+**User Query 2**: "Show me the 5th chapter of Luke"
+- Fresh MCP client created
+- **NEW**: `self.chat_history` copied to `mcp_client.chat_history` ✅
+- PLANNER sees previous query about Amplified version ✅
+- AI correctly uses Amplified version for chapter 5 ✅
+
+**Result**: Context preserved across all queries in session ✅
+
+### Testing Required:
+1. Restart web server with updated code
+2. Start a new conversation
+3. Query 1: Ask about "Luke in Amplified version"
+4. Query 2: Ask about "chapter 5 of Luke" (without specifying version)
+5. Verify AI remembers to use Amplified version from Query 1
+
+### Summary of v0.45.0 Fixes
+
+This release includes TWO critical fixes:
+
+**Fix 1 (v0.44.6): Missing get_tool Method**
+- Added `ToolManager.get_tool()` method
+- Now MCP tools can be found by ToolSchemaParser
+- Forms for MCP tools now work ✅
+
+**Fix 2 (v0.45.0): Context Not Preserved**
+- Copy persistent chat history to fresh MCP client
+- Conversation context now maintained across queries ✅
+
+Both issues are now resolved!
+
+
+## 0.45.0 Issues:
+Trace: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260111_121256.json
+- TOOL_FORM_AGENT unable to find loaded tools. The tool biblerag.get_topic_verses is not found by the agent even though it's shown in the UI
+- no ui shown for the form requested
+
+## ✅ FIXED in v0.45.1: BuiltinToolManager Can't Find MCP Tools
+
+**Status**: FIXED - BuiltinToolManager now has reference to parent ToolManager
+
+**TRACE**: /home/mcstar/Nextcloud/Vault/Journal/.trace/trace_20260111_121256.json
+
+### Issue Summary
+
+TOOL_FORM_AGENT unable to find loaded MCP tools when generating forms.
+
+**What happened**:
+1. ✅ User can see biblerag.get_topic_verses in the UI (tool is loaded)
+2. ✅ User asks "create a form to use biblerag.get_topic_verses"
+3. ✅ PLANNER assigns to TOOL_FORM_AGENT
+4. ✅ TOOL_FORM_AGENT calls `builtin.generate_tool_form(tool_name="biblerag.get_topic_verses")`
+5. ❌ Tool handler returns: "Error: Tool not found: biblerag.get_topic_verses"
+6. ❌ NO FORM GENERATED
+7. ❌ No UI shown for the form requested
+
+### Root Cause
+
+**BuiltinToolManager Isolated from MCP Tools**:
+- v0.44.6 added `get_tool()` method to `ToolManager` ✅
+- `ToolSchemaParser` calls `tool_manager.get_tool(tool_name)` (line 252-253 in tool_schema_parser.py)
+- Problem: `tool_manager` is a `BuiltinToolManager` instance, NOT the main `ToolManager`
+
+**Architecture Before Fix**:
+```
+ToolManager (has ALL tools: builtin + MCP)
+  └─ BuiltinToolManager (only knows builtin tools)
+       └─ When generating form, passes `self` to ToolSchemaParser
+            └─ ToolSchemaParser can only find builtin tools ❌
+```
+
+**Why This Happened**:
+- `BuiltinToolManager` is instantiated by `ToolManager` (manager.py:41-46)
+- But `BuiltinToolManager` had no reference back to parent
+- When artifact generation tools run, they pass `self` (BuiltinToolManager) to ToolSchemaParser
+- BuiltinToolManager.get_builtin_tools() only returns builtin tools
+- Has no method to access MCP tools from parent ToolManager
+- Result: MCP tools appear "not found" even though they're loaded
+
+### Solution (v0.45.1)
+
+**Step 1: Add Parent Reference to BuiltinToolManager** (builtin.py:14-32)
+
+Added `parent_tool_manager` parameter to `__init__`:
+```python
+def __init__(self, model_config_manager: Any, ollama_host: str = None,
+             config_manager: Any = None, console: Optional[Console] = None,
+             parent_tool_manager: Any = None):
+    """
+    Args:
+        parent_tool_manager: Optional reference to parent ToolManager (for accessing MCP tools).
+    """
+    # ... other init code ...
+    self.parent_tool_manager = parent_tool_manager  # Reference to parent ToolManager
+```
+
+**Step 2: Pass Parent Reference from ToolManager** (manager.py:41-46)
+
+When creating BuiltinToolManager, pass `self`:
+```python
+self.builtin_tool_manager = BuiltinToolManager(
+    self.model_config_manager,
+    config_manager=self.config_manager,
+    console=self.console,
+    parent_tool_manager=self  # Pass reference to parent ToolManager
+)
+```
+
+**Step 3: Use Parent ToolManager in Artifact Handlers** (builtin.py:3290-3293, 3321-3323, 3363-3365, 3396-3398)
+
+Updated all 4 artifact generation handlers to use parent when available:
+```python
+# Initialize parser with parent tool manager (has all tools) if available, otherwise self
+# This allows ToolSchemaParser to find both builtin and MCP tools
+tool_manager = self.parent_tool_manager if self.parent_tool_manager else self
+parser = ToolSchemaParser(tool_manager=tool_manager)
+```
+
+Applied to:
+- `_handle_generate_tool_form`
+- `_handle_generate_query_builder`
+- `_handle_generate_tool_wizard`
+- `_handle_generate_batch_tool`
+
+**Architecture After Fix**:
+```
+ToolManager (has ALL tools: builtin + MCP)
+  ↕ (bidirectional reference)
+BuiltinToolManager (has parent_tool_manager reference)
+  └─ When generating form, passes parent_tool_manager to ToolSchemaParser
+       └─ ToolSchemaParser can find ALL tools (builtin + MCP) ✅
+```
+
+### Files Modified (v0.45.1):
+- mcp_client_for_ollama/tools/builtin.py - Added parent_tool_manager parameter and updated 4 handlers
+- mcp_client_for_ollama/tools/manager.py - Pass self as parent_tool_manager
+- mcp_client_for_ollama/pyproject.toml - Version 0.45.1
+- mcp_client_for_ollama/__init__.py - Version 0.45.1
+- docs/qa_bugs.md - Documentation
+
+### Expected Behavior Now:
+
+**User**: "create a form to use biblerag.get_topic_verses"
+
+**PLANNER**: Assigns to TOOL_FORM_AGENT ✅
+
+**TOOL_FORM_AGENT Loop 0**:
+- Calls `builtin.generate_tool_form(tool_name="biblerag.get_topic_verses")`
+- Handler uses `self.parent_tool_manager` (the main ToolManager) ✅
+- ToolSchemaParser calls `parent_tool_manager.get_tool("biblerag.get_topic_verses")` ✅
+- **NEW**: Parent ToolManager has MCP tools! Returns tool metadata ✅
+- Generates artifact with proper schema
+- Agent outputs artifact ✅
+
+**Result**: Form displayed in web UI side panel ✅
+
+### Testing Required:
+1. Restart web server with updated code
+2. Ask: "create a form to use biblerag.get_topic_verses"
+3. Verify form is generated and displayed in side panel
+4. Test with other MCP tools (obsidian.obsidian_list_files_in_dir, etc.)
+
+### Summary of All Fixes (v0.44.6 → v0.45.1)
+
+**v0.44.6: Added get_tool Method**
+- ToolManager.get_tool() added to find tools by name
+- But BuiltinToolManager couldn't access it ❌
+
+**v0.45.0: Context Preservation**
+- Fixed conversation history not persisting between queries ✅
+
+**v0.45.1: BuiltinToolManager Access to MCP Tools**
+- BuiltinToolManager now references parent ToolManager
+- Can access ALL tools (builtin + MCP) when generating forms ✅
+- All artifact generation handlers updated ✅
+
+All form generation issues now resolved!

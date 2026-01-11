@@ -41,7 +41,8 @@ class ToolManager:
             self.builtin_tool_manager = BuiltinToolManager(
                 self.model_config_manager,
                 config_manager=self.config_manager,
-                console=self.console
+                console=self.console,
+                parent_tool_manager=self
             )
             self._create_builtin_tools()
 
@@ -142,6 +143,24 @@ class ToolManager:
             Dictionary mapping tool names to enabled status
         """
         return self.enabled_tools
+
+    def get_tool(self, tool_name: str) -> Optional[Dict]:
+        """Get a specific tool by name.
+
+        Args:
+            tool_name: Name of the tool to retrieve
+
+        Returns:
+            Dictionary with tool metadata (name, description, inputSchema) or None if not found
+        """
+        for tool in self.available_tools:
+            if tool.name == tool_name:
+                return {
+                    'name': tool.name,
+                    'description': tool.description,
+                    'inputSchema': tool.inputSchema
+                }
+        return None
 
     def enable_all_tools(self) -> None:
         """Enable all available tools."""

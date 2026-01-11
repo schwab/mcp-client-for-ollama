@@ -11,7 +11,7 @@ from rich.prompt import Confirm
 class BuiltinToolManager:
     """Manages the definition and execution of built-in tools."""
 
-    def __init__(self, model_config_manager: Any, ollama_host: str = None, config_manager: Any = None, console: Optional[Console] = None):
+    def __init__(self, model_config_manager: Any, ollama_host: str = None, config_manager: Any = None, console: Optional[Console] = None, parent_tool_manager: Any = None):
         """
         Initializes the BuiltinToolManager.
 
@@ -20,6 +20,7 @@ class BuiltinToolManager:
             ollama_host: Optional Ollama server URL. If not provided, uses OLLAMA_HOST env var or default.
             config_manager: An instance of ConfigManager to interact with application config.
             console: Rich console for user prompts and output.
+            parent_tool_manager: Optional reference to parent ToolManager (for accessing MCP tools).
         """
         self.model_config_manager = model_config_manager
         self.ollama_host = ollama_host or os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
@@ -28,6 +29,7 @@ class BuiltinToolManager:
         self.working_directory = os.getcwd()  # Store the working directory for security checks
         self._approved_paths: Set[str] = set()  # Store approved base directories for file access
         self.memory_tools = None  # Reference to MemoryTools instance (set when memory system is enabled)
+        self.parent_tool_manager = parent_tool_manager  # Reference to parent ToolManager with all tools (builtin + MCP)
         self._tool_handlers: Dict[str, Callable[[Dict[str, Any]], str]] = {
             "set_system_prompt": self._handle_set_system_prompt,
             "get_system_prompt": self._handle_get_system_prompt,
@@ -3278,8 +3280,17 @@ class BuiltinToolManager:
         if not tool_name:
             return "Error: 'tool_name' argument is required for generate_tool_form."
 
-        # Initialize parser with this tool manager
-        parser = ToolSchemaParser(tool_manager=self)
+        # Parse prefill if it's a JSON string
+        if isinstance(prefill, str):
+            try:
+                prefill = json.loads(prefill) if prefill else None
+            except json.JSONDecodeError:
+                prefill = None
+
+        # Initialize parser with parent tool manager (has all tools) if available, otherwise self
+        # This allows ToolSchemaParser to find both builtin and MCP tools
+        tool_manager = self.parent_tool_manager if self.parent_tool_manager else self
+        parser = ToolSchemaParser(tool_manager=tool_manager)
 
         try:
             # Generate the artifact
@@ -3290,8 +3301,10 @@ class BuiltinToolManager:
             )
 
             # Return as formatted artifact code block
-            artifact_json = json.dumps(artifact['data'], indent=2)
-            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+            # Extract type from top level, not from data
+            artifact_type = artifact['type'].replace('artifact:', '')
+            artifact_json = json.dumps(artifact, indent=2)
+            return f"```artifact:{artifact_type}\n{artifact_json}\n```"
 
         except ValueError as e:
             return f"Error: {str(e)}"
@@ -3305,8 +3318,9 @@ class BuiltinToolManager:
 
         filter_category = args.get("filter_category")
 
-        # Initialize parser with this tool manager
-        parser = ToolSchemaParser(tool_manager=self)
+        # Initialize parser with parent tool manager (has all tools) if available, otherwise self
+        tool_manager = self.parent_tool_manager if self.parent_tool_manager else self
+        parser = ToolSchemaParser(tool_manager=tool_manager)
 
         try:
             # Get available tools
@@ -3328,8 +3342,10 @@ class BuiltinToolManager:
             )
 
             # Return as formatted artifact code block
-            artifact_json = json.dumps(artifact['data'], indent=2)
-            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+            # Extract type from top level, not from data
+            artifact_type = artifact['type'].replace('artifact:', '')
+            artifact_json = json.dumps(artifact, indent=2)
+            return f"```artifact:{artifact_type}\n{artifact_json}\n```"
 
         except Exception as e:
             return f"Error generating query builder: {str(e)}"
@@ -3344,8 +3360,9 @@ class BuiltinToolManager:
         if not tool_name:
             return "Error: 'tool_name' argument is required for generate_tool_wizard."
 
-        # Initialize parser with this tool manager
-        parser = ToolSchemaParser(tool_manager=self)
+        # Initialize parser with parent tool manager (has all tools) if available, otherwise self
+        tool_manager = self.parent_tool_manager if self.parent_tool_manager else self
+        parser = ToolSchemaParser(tool_manager=tool_manager)
 
         try:
             # Generate the artifact
@@ -3355,8 +3372,10 @@ class BuiltinToolManager:
             )
 
             # Return as formatted artifact code block
-            artifact_json = json.dumps(artifact['data'], indent=2)
-            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+            # Extract type from top level, not from data
+            artifact_type = artifact['type'].replace('artifact:', '')
+            artifact_json = json.dumps(artifact, indent=2)
+            return f"```artifact:{artifact_type}\n{artifact_json}\n```"
 
         except ValueError as e:
             return f"Error: {str(e)}"
@@ -3374,8 +3393,9 @@ class BuiltinToolManager:
         if not tool_name:
             return "Error: 'tool_name' argument is required for generate_batch_tool."
 
-        # Initialize parser with this tool manager
-        parser = ToolSchemaParser(tool_manager=self)
+        # Initialize parser with parent tool manager (has all tools) if available, otherwise self
+        tool_manager = self.parent_tool_manager if self.parent_tool_manager else self
+        parser = ToolSchemaParser(tool_manager=tool_manager)
 
         try:
             # Generate the artifact
@@ -3385,8 +3405,10 @@ class BuiltinToolManager:
             )
 
             # Return as formatted artifact code block
-            artifact_json = json.dumps(artifact['data'], indent=2)
-            return f"```artifact:{artifact['data']['type'].replace('artifact:', '')}\n{artifact_json}\n```"
+            # Extract type from top level, not from data
+            artifact_type = artifact['type'].replace('artifact:', '')
+            artifact_json = json.dumps(artifact, indent=2)
+            return f"```artifact:{artifact_type}\n{artifact_json}\n```"
 
         except ValueError as e:
             return f"Error: {str(e)}"
