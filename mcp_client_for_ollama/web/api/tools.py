@@ -80,3 +80,40 @@ async def get_disabled_tools():
 
     disabled_tools = client.get_disabled_tools()
     return jsonify({'tools': disabled_tools})
+
+
+@bp.route('/execute', methods=['POST'])
+async def execute_tool():
+    """Execute a tool with the given arguments (supports both standalone and Nextcloud mode)"""
+    username = g.get('nextcloud_user', None)
+    data = request.json
+    session_id = data.get('session_id')
+    tool_name = data.get('tool_name')
+    arguments = data.get('arguments', {})
+
+    if not session_id or not tool_name:
+        return jsonify({'error': 'session_id and tool_name required'}), 400
+
+    client = session_manager.get_session(session_id, username=username)
+    if not client:
+        return jsonify({'error': 'Invalid session'}), 404
+
+    # Ensure client is initialized
+    await client.initialize()
+
+    try:
+        # Execute the tool directly through the client
+        # The client has access to both builtin tools and MCP server tools
+        result = await client.execute_tool(tool_name, arguments)
+
+        return jsonify({
+            'status': 'ok',
+            'tool_name': tool_name,
+            'result': result
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'tool_name': tool_name,
+            'error': str(e)
+        }), 500

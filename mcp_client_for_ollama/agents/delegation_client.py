@@ -1247,6 +1247,24 @@ Please create a NEW plan that fixes this issue. Pay careful attention to the MAN
         if not successful_results:
             return "No tasks completed successfully. Unable to provide a response."
 
+        # SKIP AGGREGATION FOR ARTIFACTS - they should be returned verbatim
+        # Check if any task result contains an artifact
+        import re
+        for task in tasks:
+            if task.status == TaskStatus.COMPLETED and task.result:
+                # Check for artifact pattern (supports both correct and malformed formats)
+                if re.search(r'```\s*artifact:\w+', task.result):
+                    # Artifact-generating agents (TOOL_FORM_AGENT, ARTIFACT_AGENT) should
+                    # have their output passed directly to the UI without synthesis
+                    self.console.print(f"[green]✓[/green] Artifact detected, skipping aggregation")
+                    return task.result
+
+        # If we have only one task, return its result directly (no need to synthesize)
+        if len(successful_results) == 1:
+            # Extract just the result without the task label
+            task_result = tasks[0].result if tasks[0].status == TaskStatus.COMPLETED else ""
+            return task_result
+
         # Use AGGREGATOR agent to synthesize results into a coherent answer
         try:
             aggregator_config = self.agent_configs["AGGREGATOR"]
@@ -1554,6 +1572,30 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
             })
 
             pending_tool_calls = tool_calls
+
+        # TOOL_FORM_AGENT FIX: Extract artifact from tool result if agent didn't output it correctly
+        # Small models (llama3.2) often:
+        # 1. Describe the artifact instead of outputting it verbatim
+        # 2. Output malformed artifacts with extra whitespace (e.g., ```\nartifact:type)
+        import re
+        if agent_type == "TOOL_FORM_AGENT":
+            # Check if response has a correctly formatted artifact
+            correct_artifact = re.search(r'```artifact:(\w+)\n([\s\S]*?)\n```', response_text)
+
+            if not correct_artifact:
+                # Artifact missing or malformed - extract from tool results
+                for msg in messages:
+                    if msg.get("role") == "tool":
+                        content = msg.get("content", "")
+                        if "artifact:" in content:
+                            # Extract artifact - handle both ```artifact:type and ```\nartifact:type
+                            artifact_match = re.search(r'```\s*artifact:(\w+)\s*\n([\s\S]*?)\n```', content)
+                            if artifact_match:
+                                # Return artifact in correct format (fixes malformed output)
+                                artifact_type = artifact_match.group(1)
+                                artifact_json = artifact_match.group(2).strip()
+                                artifact_block = f"```artifact:{artifact_type}\n{artifact_json}\n```"
+                                return artifact_block
 
         return response_text.strip()
 

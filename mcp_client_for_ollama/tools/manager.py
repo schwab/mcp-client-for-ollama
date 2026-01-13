@@ -22,7 +22,7 @@ class ToolManager:
     an interactive interface, and organizing tools by server.
     """
 
-    def __init__(self, console: Optional[Console] = None, server_connector=None, model_config_manager=None, config_manager=None):
+    def __init__(self, console: Optional[Console] = None, server_connector=None, model_config_manager=None, config_manager=None, ollama_host: str = None):
         """Initialize the ToolManager.
 
         Args:
@@ -30,6 +30,7 @@ class ToolManager:
             server_connector: Server connector to notify of tool state changes (optional)
             model_config_manager: Model config manager to modify model settings (optional)
             config_manager: Config manager for application config access (optional)
+            ollama_host: Optional Ollama server URL to pass to builtin tools
         """
         self.console = console or Console()
         self.available_tools = []
@@ -40,6 +41,7 @@ class ToolManager:
         if self.model_config_manager:
             self.builtin_tool_manager = BuiltinToolManager(
                 self.model_config_manager,
+                ollama_host=ollama_host,
                 config_manager=self.config_manager,
                 console=self.console,
                 parent_tool_manager=self

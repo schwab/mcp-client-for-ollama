@@ -1046,6 +1046,149 @@
                 max-width: 85%;
             }
         }
+
+        /* Modal Dialog Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-dialog {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            background: #0082c9;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+        }
+
+        .modal-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 8px 16px;
+            border-radius: 3px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .modal-btn-primary {
+            background: #0082c9;
+            color: white;
+        }
+
+        .modal-btn-primary:hover {
+            background: #006ba1;
+        }
+
+        .modal-btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .modal-btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .modal-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .modal-form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .modal-form-label {
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        .modal-form-input,
+        .modal-form-textarea,
+        .modal-form-select {
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 3px;
+            font-size: 0.9rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .modal-form-input:focus,
+        .modal-form-textarea:focus,
+        .modal-form-select:focus {
+            outline: none;
+            border-color: #0082c9;
+        }
+
+        .modal-form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
     </style>
 </head>
 <body>
@@ -1166,6 +1309,7 @@
                     <span id="statusText">Connected</span>
                 </div>
                 <div id="sessionInfo">Session: <span id="sessionId">...</span></div>
+                <div style="color: #999; font-size: 0.75rem;">v0.45.11</div>
             </div>
         </div>
 
@@ -1183,6 +1327,26 @@
                         <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Dialog -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <span id="modalTitle">Edit</span>
+                <button class="modal-close-btn" onclick="closeEditModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="modal-form" id="modalForm" onsubmit="submitModalForm(event)">
+                    <!-- Dynamic form content will be inserted here -->
+                    <div id="modalFormContent"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn-secondary" onclick="closeEditModal()">Cancel</button>
+                <button type="submit" form="modalForm" class="modal-btn modal-btn-primary" id="modalSubmitBtn">Save</button>
             </div>
         </div>
     </div>
@@ -1228,6 +1392,9 @@
         let messageHistory = [];
         let historyIndex = -1;
         let currentDraft = ''; // Store current unsent message when navigating history
+
+        // Conversation history for context (role/content pairs)
+        let conversationHistory = [];
 
         // Initialize
         async function initialize() {
@@ -2084,10 +2251,39 @@
             }
         }
 
-        // Edit goal (placeholder)
+        // Edit goal
         function editGoal(goalId) {
-            alert('Edit goal dialog not yet implemented. Goal ID: ' + goalId);
-            // TODO: Implement full edit dialog in Phase 4
+            const goal = memoryState.goals.find(g => (g.goal_id || g.id) === goalId);
+            if (!goal) {
+                alert('Goal not found');
+                return;
+            }
+
+            // Set modal title
+            document.getElementById('modalTitle').textContent = `Edit Goal: ${goalId}`;
+
+            // Build form content
+            const formContent = `
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="goalDescription">Description</label>
+                    <textarea class="modal-form-textarea" id="goalDescription" name="description" required>${goal.description || ''}</textarea>
+                </div>
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="goalConstraints">Constraints (comma-separated)</label>
+                    <textarea class="modal-form-textarea" id="goalConstraints" name="constraints" rows="3">${(goal.constraints || []).join(', ')}</textarea>
+                </div>
+            `;
+
+            document.getElementById('modalFormContent').innerHTML = formContent;
+
+            // Store context for submission
+            window.currentModalData = {
+                type: 'goal',
+                id: goalId
+            };
+
+            // Show modal
+            document.getElementById('editModal').classList.add('active');
         }
 
         // Delete goal with confirmation
@@ -2106,10 +2302,77 @@
             }
         }
 
-        // Edit feature (placeholder)
+        // Edit feature
         function editFeature(featureId) {
-            alert('Edit feature dialog not yet implemented. Feature ID: ' + featureId);
-            // TODO: Implement full edit dialog in Phase 4
+            // Find feature across all goals
+            let feature = null;
+            let goalId = null;
+
+            for (const goal of memoryState.goals) {
+                const f = (goal.features || []).find(f => (f.feature_id || f.id) === featureId);
+                if (f) {
+                    feature = f;
+                    goalId = goal.goal_id || goal.id;
+                    break;
+                }
+            }
+
+            if (!feature) {
+                alert('Feature not found');
+                return;
+            }
+
+            // Set modal title
+            document.getElementById('modalTitle').textContent = `Edit Feature: ${featureId}`;
+
+            // Build form content
+            const formContent = `
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="featureDescription">Description</label>
+                    <textarea class="modal-form-textarea" id="featureDescription" name="description" required>${feature.description || ''}</textarea>
+                </div>
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="featureStatus">Status</label>
+                    <select class="modal-form-select" id="featureStatus" name="status">
+                        <option value="pending" ${feature.status === 'pending' ? 'selected' : ''}>Pending</option>
+                        <option value="in_progress" ${feature.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+                        <option value="completed" ${feature.status === 'completed' ? 'selected' : ''}>Completed</option>
+                        <option value="blocked" ${feature.status === 'blocked' ? 'selected' : ''}>Blocked</option>
+                    </select>
+                </div>
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="featurePriority">Priority</label>
+                    <select class="modal-form-select" id="featurePriority" name="priority">
+                        <option value="low" ${feature.priority === 'low' ? 'selected' : ''}>Low</option>
+                        <option value="medium" ${feature.priority === 'medium' ? 'selected' : ''}>Medium</option>
+                        <option value="high" ${feature.priority === 'high' ? 'selected' : ''}>High</option>
+                    </select>
+                </div>
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="featureAssignedTo">Assigned To</label>
+                    <input type="text" class="modal-form-input" id="featureAssignedTo" name="assigned_to" value="${feature.assigned_to || ''}" placeholder="Optional">
+                </div>
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="featureCriteria">Criteria (comma-separated)</label>
+                    <textarea class="modal-form-textarea" id="featureCriteria" name="criteria" rows="3">${(feature.criteria || []).join(', ')}</textarea>
+                </div>
+                <div class="modal-form-field">
+                    <label class="modal-form-label" for="featureTests">Tests (comma-separated)</label>
+                    <textarea class="modal-form-textarea" id="featureTests" name="tests" rows="3">${(feature.tests || []).join(', ')}</textarea>
+                </div>
+            `;
+
+            document.getElementById('modalFormContent').innerHTML = formContent;
+
+            // Store context for submission
+            window.currentModalData = {
+                type: 'feature',
+                id: featureId,
+                goalId: goalId
+            };
+
+            // Show modal
+            document.getElementById('editModal').classList.add('active');
         }
 
         // Delete feature with confirmation
@@ -2125,6 +2388,63 @@
                 addAgentActivity(`Deleted feature ${featureId}`, 'status');
             } else {
                 alert('Failed to delete feature: ' + (memoryState.error || 'Unknown error'));
+            }
+        }
+
+        // Close modal dialog
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('active');
+            document.getElementById('modalFormContent').innerHTML = '';
+            window.currentModalData = null;
+        }
+
+        // Submit modal form
+        async function submitModalForm(event) {
+            event.preventDefault();
+
+            if (!window.currentModalData) {
+                alert('No form data available');
+                return;
+            }
+
+            const formData = new FormData(event.target);
+            const data = {};
+
+            // Convert form data to object
+            for (const [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+
+            // Parse comma-separated lists
+            if (data.constraints) {
+                data.constraints = data.constraints.split(',').map(c => c.trim()).filter(c => c);
+            }
+            if (data.criteria) {
+                data.criteria = data.criteria.split(',').map(c => c.trim()).filter(c => c);
+            }
+            if (data.tests) {
+                data.tests = data.tests.split(',').map(c => c.trim()).filter(c => c);
+            }
+
+            // Clean up empty values
+            if (data.assigned_to === '') {
+                delete data.assigned_to;
+            }
+
+            let result;
+            if (window.currentModalData.type === 'goal') {
+                result = await updateGoal(window.currentModalData.id, data);
+            } else if (window.currentModalData.type === 'feature') {
+                result = await updateFeature(window.currentModalData.id, data);
+            }
+
+            if (result) {
+                closeEditModal();
+                await listGoals();
+                renderMemoryPanel();
+                addAgentActivity(`Updated ${window.currentModalData.type} ${window.currentModalData.id}`, 'status');
+            } else {
+                alert('Failed to update: ' + (memoryState.error || 'Unknown error'));
             }
         }
 
@@ -2147,8 +2467,9 @@
         let currentArtifact = null;
 
         // Detect artifacts in LLM response
+        // Handles both correct format (```artifact:type) and malformed (```\nartifact:type)
         function detectArtifacts(content) {
-            const artifactPattern = /```artifact:(\w+)\n([\s\S]*?)\n```/g;
+            const artifactPattern = /```\s*artifact:(\w+)\s*\n([\s\S]*?)\n```/g;
             const artifacts = [];
             let match;
 
@@ -2164,6 +2485,7 @@
                     });
                 } catch (e) {
                     console.error('Failed to parse artifact:', e);
+                    console.log('Raw artifact data:', dataStr);
                 }
             }
 
@@ -2175,19 +2497,55 @@
             const artifactContent = document.getElementById('artifactContent');
             currentArtifact = artifact;
 
+            // Remove artifact: prefix if present
+            const type = artifact.type.replace('artifact:', '');
+
             // Render based on type
-            switch (artifact.type) {
+            switch (type) {
                 case 'form':
                     artifactContent.innerHTML = renderFormArtifact(artifact.data);
                     break;
                 case 'toolform':
                     artifactContent.innerHTML = renderToolFormArtifact(artifact.data);
                     break;
+                case 'spreadsheet':
+                    artifactContent.innerHTML = renderSpreadsheetArtifact(artifact);
+                    break;
+                case 'chart':
+                    artifactContent.innerHTML = renderChartArtifact(artifact);
+                    break;
+                case 'code':
+                    artifactContent.innerHTML = renderCodeArtifact(artifact);
+                    break;
+                case 'markdown':
+                    artifactContent.innerHTML = renderMarkdownArtifact(artifact);
+                    break;
+                case 'diff':
+                    artifactContent.innerHTML = renderDiffArtifact(artifact);
+                    break;
+                case 'filetree':
+                    artifactContent.innerHTML = renderFiletreeArtifact(artifact);
+                    break;
+                case 'kanban':
+                    artifactContent.innerHTML = renderKanbanArtifact(artifact);
+                    break;
+                case 'timeline':
+                    artifactContent.innerHTML = renderTimelineArtifact(artifact);
+                    break;
+                case 'querybuilder':
+                    artifactContent.innerHTML = renderQueryBuilderArtifact(artifact);
+                    break;
+                case 'toolwizard':
+                    artifactContent.innerHTML = renderToolWizardArtifact(artifact);
+                    break;
+                case 'batchtool':
+                    artifactContent.innerHTML = renderBatchToolArtifact(artifact);
+                    break;
                 default:
                     artifactContent.innerHTML = `
                         <div class="artifact-empty">
                             <span style="font-size: 3rem; opacity: 0.2;">⚠️</span>
-                            <div style="margin-top: 10px;">Unsupported artifact type: ${artifact.type}</div>
+                            <div style="margin-top: 10px;">Unsupported artifact type: ${type}</div>
                             <div style="font-size: 0.85rem; margin-top: 5px;">Renderer not yet implemented</div>
                         </div>
                     `;
@@ -2226,6 +2584,9 @@
             const description = data.data?.tool_description || '';
             const schema = data.data?.schema || {};
             const properties = schema.properties || {};
+
+            // Store schema in window for access during submission
+            window.currentToolFormSchema = schema;
 
             let html = `
                 <div style="margin-bottom: 15px;">
@@ -2308,18 +2669,21 @@
             const description = propSchema.description || '';
             const widget = propSchema.ui_widget || 'text';
             const required = propSchema.ui_hints?.optional === false;
+            const schemaType = propSchema.type || 'string';
+            const defaultValue = propSchema.default;
 
             let inputHtml = '';
+            let helpText = description;
 
             switch (widget) {
                 case 'textarea':
                 case 'code_editor':
-                    inputHtml = `<textarea class="form-input form-textarea" id="${propName}" name="${propName}" ${required ? 'required' : ''} rows="4"></textarea>`;
+                    inputHtml = `<textarea class="form-input form-textarea" id="${propName}" name="${propName}" data-type="${schemaType}" ${required ? 'required' : ''} rows="4"></textarea>`;
                     break;
                 case 'checkbox':
                     inputHtml = `
                         <div class="form-checkbox-wrapper">
-                            <input type="checkbox" class="form-checkbox" id="${propName}" name="${propName}">
+                            <input type="checkbox" class="form-checkbox" id="${propName}" name="${propName}" data-type="${schemaType}">
                             <label for="${propName}">${description || label}</label>
                         </div>
                     `;
@@ -2327,21 +2691,27 @@
                 case 'select':
                     const enumValues = propSchema.enum || [];
                     inputHtml = `
-                        <select class="form-select" id="${propName}" name="${propName}" ${required ? 'required' : ''}>
+                        <select class="form-select" id="${propName}" name="${propName}" data-type="${schemaType}" ${required ? 'required' : ''}>
                             <option value="">Select...</option>
                             ${enumValues.map(val => `<option value="${val}">${val}</option>`).join('')}
                         </select>
                     `;
                     break;
+                case 'tag_input':
+                    // For array/list inputs, provide a text input with helpful instructions
+                    const defaultHint = defaultValue ? ` (default: ${JSON.stringify(defaultValue)})` : '';
+                    helpText = `Enter comma-separated values${defaultHint}. Examples: .pdf, .docx, .txt`;
+                    inputHtml = `<input type="text" class="form-input" id="${propName}" name="${propName}" data-type="array" placeholder="value1, value2, value3" ${required ? 'required' : ''}>`;
+                    break;
                 default:
                     const inputType = widget === 'email' ? 'email' : widget === 'number' ? 'number' : 'text';
-                    inputHtml = `<input type="${inputType}" class="form-input" id="${propName}" name="${propName}" ${required ? 'required' : ''}>`;
+                    inputHtml = `<input type="${inputType}" class="form-input" id="${propName}" name="${propName}" data-type="${schemaType}" ${required ? 'required' : ''}>`;
             }
 
             return `
                 <div class="form-field">
                     <label class="form-label ${required ? 'required' : ''}" for="${propName}">${label}</label>
-                    ${description && widget !== 'checkbox' ? `<div style="font-size: 0.8rem; color: #666; margin-top: -4px;">${description}</div>` : ''}
+                    ${helpText && widget !== 'checkbox' ? `<div style="font-size: 0.8rem; color: #666; margin-top: -4px; margin-bottom: 4px;">${helpText}</div>` : ''}
                     ${inputHtml}
                 </div>
             `;
@@ -2368,6 +2738,30 @@
             `;
         }
 
+        // Parse array input from various formats
+        function parseArrayInput(value) {
+            if (!value || value.trim() === '') {
+                return [];
+            }
+
+            const trimmed = value.trim();
+
+            // Try to parse as JSON array first
+            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) {
+                        return parsed;
+                    }
+                } catch (e) {
+                    // Not valid JSON, fall through to comma-separated
+                }
+            }
+
+            // Parse as comma-separated values
+            return trimmed.split(',').map(v => v.trim()).filter(v => v !== '');
+        }
+
         // Submit tool form
         async function submitToolForm(event, toolName) {
             event.preventDefault();
@@ -2375,15 +2769,47 @@
             const formData = new FormData(form);
             const args = {};
 
+            // Get schema from window storage
+            const schema = window.currentToolFormSchema || {};
+            const properties = schema.properties || {};
+
             for (const [key, value] of formData.entries()) {
-                // Handle checkboxes
                 const element = form.elements[key];
+                const dataType = element.getAttribute('data-type');
+                const propSchema = properties[key] || {};
+
+                // Handle checkboxes
                 if (element.type === 'checkbox') {
                     args[key] = element.checked;
-                } else if (element.type === 'number') {
+                }
+                // Handle numbers
+                else if (element.type === 'number') {
                     args[key] = parseFloat(value) || 0;
-                } else {
+                }
+                // Handle array/list fields
+                else if (dataType === 'array') {
+                    if (value.trim() === '') {
+                        // Empty value - use default if available
+                        if (propSchema.default !== undefined) {
+                            args[key] = propSchema.default;
+                        }
+                        // If no default and field is required, validation will catch it
+                        // If optional, don't include it
+                    } else {
+                        // Parse the value as an array
+                        args[key] = parseArrayInput(value);
+                    }
+                }
+                // Handle regular fields
+                else {
                     args[key] = value;
+                }
+            }
+
+            // Add defaults for missing optional array fields
+            for (const [propName, propSchema] of Object.entries(properties)) {
+                if (propSchema.type === 'array' && !(propName in args) && propSchema.default !== undefined) {
+                    args[propName] = propSchema.default;
                 }
             }
 
@@ -2410,12 +2836,19 @@
                 const result = await response.json();
 
                 if (response.ok) {
+                    const resultText = typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2);
                     resultDiv.innerHTML = `
                         <div class="form-result">
                             <strong>Result:</strong>
-                            <pre>${typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2)}</pre>
+                            <pre>${resultText}</pre>
                         </div>
                     `;
+
+                    // Record artifact execution for context
+                    recordArtifactExecution(toolName, args, resultText);
+
+                    // Add to agent activity
+                    addAgentActivity(`Executed ${toolName} via artifact`, 'tool');
                 } else {
                     resultDiv.innerHTML = `
                         <div class="form-result" style="border-left-color: #f44336; background: #ffebee;">
@@ -2434,6 +2867,61 @@
             }
         }
 
+        // Record artifact execution for context tracking
+        function recordArtifactExecution(toolName, args, result) {
+            // Store in local context (for display in UI)
+            if (!window.artifactContext) {
+                window.artifactContext = [];
+            }
+
+            const execution = {
+                id: Date.now(),
+                timestamp: new Date(),
+                toolName: toolName,
+                args: args,
+                result: result,
+                summary: createExecutionSummary(toolName, args, result)
+            };
+
+            window.artifactContext.push(execution);
+
+            // Keep only last 10 executions
+            if (window.artifactContext.length > 10) {
+                window.artifactContext = window.artifactContext.slice(-10);
+            }
+
+            // Update context display if visible
+            updateArtifactContextDisplay();
+        }
+
+        // Create summary of execution
+        function createExecutionSummary(toolName, args, result) {
+            const toolDisplay = toolName.replace('builtin.', '').replace(/_/g, ' ');
+
+            if (toolName.includes('read_file')) {
+                const path = args.path || 'unknown';
+                const sizeKb = (result.length / 1024).toFixed(1);
+                return `Loaded ${path} (${sizeKb} KB)`;
+            } else if (toolName.includes('list_files') || toolName.includes('list_directories')) {
+                const path = args.path || '.';
+                const lines = result.split('\n').filter(l => l.trim()).length;
+                return `Listed ${lines} items in ${path}`;
+            } else {
+                return `Executed ${toolDisplay}`;
+            }
+        }
+
+        // Update artifact context display
+        function updateArtifactContextDisplay() {
+            // Optional: Add a visual indicator in the UI showing recent artifact context
+            // This could be displayed in the agent activity panel or a separate context panel
+            if (window.artifactContext && window.artifactContext.length > 0) {
+                const latest = window.artifactContext[window.artifactContext.length - 1];
+                // Context is now available and can be referenced in natural language
+                console.log('Artifact context updated:', latest.summary);
+            }
+        }
+
         // Clear artifacts
         function clearArtifacts() {
             const artifactContent = document.getElementById('artifactContent');
@@ -2445,6 +2933,889 @@
                     <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
                 </div>
             `;
+        }
+
+        // ========================================================================
+        // ADVANCED ARTIFACT RENDERERS
+        // ========================================================================
+
+        // Render spreadsheet artifact
+        function renderSpreadsheetArtifact(artifact) {
+            const title = artifact.title || 'Spreadsheet';
+            const data = artifact.data || {};
+            let columns = data.columns || [];
+            let rows = data.rows || [];
+
+            // Normalize columns: handle both string arrays and object arrays
+            if (columns.length > 0 && typeof columns[0] === 'object') {
+                // Convert from [{id: "...", label: "..."}] to ["..."]
+                columns = columns.map(col => col.label || col.id || col.name || String(col));
+            }
+
+            // Normalize rows: handle both array of arrays and array of objects with values
+            if (rows.length > 0 && typeof rows[0] === 'object' && !Array.isArray(rows[0])) {
+                // Convert from [{values: [...]}] to [[...]]
+                rows = rows.map(row => row.values || Object.values(row));
+            }
+
+            let html = `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                        <thead>
+                            <tr style="background: #f5f5f5;">
+                                ${columns.map(col => `<th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: 600;">${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(row => `
+                                <tr>
+                                    ${row.map(cell => `<td style="padding: 8px; border: 1px solid #ddd;">${cell !== null && cell !== undefined ? cell : ''}</td>`).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            return html;
+        }
+
+        // Render chart artifact
+        function renderChartArtifact(artifact) {
+            const title = artifact.title || 'Chart';
+            const data = artifact.data || {};
+            const chartType = data.chart_type || 'bar';
+            const chartData = data.data || {};
+            const options = data.options || {};
+
+            let html = `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 5px;">Type: ${chartType}</div>
+                </div>
+                <div style="padding: 20px; background: #f9f9f9; border-radius: 4px;">
+            `;
+
+            // Get datasets (either single values array or multiple datasets)
+            const datasets = chartData.datasets || (chartData.values ? [{ label: '', values: chartData.values }] : []);
+            const labels = chartData.labels || [];
+
+            if (labels.length === 0 || datasets.length === 0) {
+                html += `<pre style="margin: 0; font-size: 0.85rem;">${JSON.stringify(chartData, null, 2)}</pre>`;
+                html += `</div>`;
+                return html;
+            }
+
+            // Chart colors
+            const colors = ['#0082c9', '#00a676', '#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+
+            switch (chartType) {
+                case 'bar':
+                    html += renderBarChart(labels, datasets, options, colors);
+                    break;
+                case 'line':
+                    html += renderLineChart(labels, datasets, options, colors);
+                    break;
+                case 'pie':
+                    html += renderPieChart(labels, datasets[0].values, colors);
+                    break;
+                case 'scatter':
+                    html += renderScatterChart(labels, datasets, options, colors);
+                    break;
+                case 'area':
+                    html += renderAreaChart(labels, datasets, options, colors);
+                    break;
+                default:
+                    html += `<pre style="margin: 0; font-size: 0.85rem;">${JSON.stringify(chartData, null, 2)}</pre>`;
+            }
+
+            html += `</div>`;
+            return html;
+        }
+
+        function renderBarChart(labels, datasets, options, colors) {
+            const allValues = datasets.flatMap(ds => ds.values);
+            const maxValue = Math.max(...allValues);
+            let html = `<div style="display: flex; flex-direction: column; gap: 15px;">`;
+
+            // Legend for multiple datasets
+            if (datasets.length > 1 && options.show_legend !== false) {
+                html += `<div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 5px;">`;
+                datasets.forEach((ds, i) => {
+                    html += `<div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 16px; height: 16px; background: ${colors[i % colors.length]}; border-radius: 2px;"></div>
+                        <span style="font-size: 0.85rem;">${ds.label || `Series ${i + 1}`}</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            labels.forEach((label, i) => {
+                html += `<div>
+                    <div style="font-size: 0.85rem; margin-bottom: 4px; font-weight: 500;">${label}</div>
+                    <div style="display: flex; gap: 5px; align-items: center;">`;
+
+                datasets.forEach((ds, dsIndex) => {
+                    const value = ds.values[i];
+                    const percent = (value / maxValue) * 100;
+                    html += `
+                        <div style="flex: 1;">
+                            <div style="background: #e0e0e0; height: 24px; border-radius: 3px; overflow: hidden;">
+                                <div style="background: ${colors[dsIndex % colors.length]}; height: 100%; width: ${percent}%;"></div>
+                            </div>
+                        </div>
+                        <span style="font-size: 0.8rem; color: #666; min-width: 40px; text-align: right;">${value}</span>
+                    `;
+                });
+
+                html += `</div></div>`;
+            });
+
+            html += `</div>`;
+            return html;
+        }
+
+        function renderLineChart(labels, datasets, options, colors) {
+            const allValues = datasets.flatMap(ds => ds.values);
+            const maxValue = Math.max(...allValues);
+            const minValue = Math.min(...allValues);
+            const range = maxValue - minValue;
+            const height = 200;
+            const width = 600;
+            const padding = 40;
+
+            let html = `<svg width="${width}" height="${height}" style="max-width: 100%;">`;
+
+            // Grid lines
+            for (let i = 0; i <= 4; i++) {
+                const y = padding + (height - 2 * padding) * (i / 4);
+                const value = maxValue - (range * i / 4);
+                html += `<line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" stroke="#e0e0e0" stroke-width="1"/>`;
+                html += `<text x="${padding - 5}" y="${y + 4}" text-anchor="end" font-size="10" fill="#666">${value.toFixed(1)}</text>`;
+            }
+
+            // Draw lines for each dataset
+            datasets.forEach((ds, dsIndex) => {
+                const points = ds.values.map((value, i) => {
+                    const x = padding + (width - 2 * padding) * (i / (labels.length - 1));
+                    const y = padding + (height - 2 * padding) * (1 - (value - minValue) / range);
+                    return `${x},${y}`;
+                }).join(' ');
+
+                html += `<polyline points="${points}" fill="none" stroke="${colors[dsIndex % colors.length]}" stroke-width="2"/>`;
+
+                // Draw points
+                ds.values.forEach((value, i) => {
+                    const x = padding + (width - 2 * padding) * (i / (labels.length - 1));
+                    const y = padding + (height - 2 * padding) * (1 - (value - minValue) / range);
+                    html += `<circle cx="${x}" cy="${y}" r="4" fill="${colors[dsIndex % colors.length]}"/>`;
+                });
+            });
+
+            // X-axis labels
+            labels.forEach((label, i) => {
+                const x = padding + (width - 2 * padding) * (i / (labels.length - 1));
+                html += `<text x="${x}" y="${height - padding + 20}" text-anchor="middle" font-size="10" fill="#666">${label}</text>`;
+            });
+
+            html += `</svg>`;
+
+            // Legend
+            if (datasets.length > 1 && options.show_legend !== false) {
+                html += `<div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px;">`;
+                datasets.forEach((ds, i) => {
+                    html += `<div style="display: flex; align-items: center; gap: 5px;">
+                        <div style="width: 16px; height: 2px; background: ${colors[i % colors.length]};"></div>
+                        <span style="font-size: 0.85rem;">${ds.label || `Series ${i + 1}`}</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            return html;
+        }
+
+        function renderPieChart(labels, values, colors) {
+            const total = values.reduce((sum, v) => sum + v, 0);
+            const size = 200;
+            const radius = 80;
+            const centerX = size / 2;
+            const centerY = size / 2;
+
+            let html = `<div style="display: flex; gap: 30px; align-items: center; flex-wrap: wrap;">`;
+            html += `<svg width="${size}" height="${size}">`;
+
+            let currentAngle = -90; // Start from top
+            values.forEach((value, i) => {
+                const sliceAngle = (value / total) * 360;
+                const startAngle = currentAngle;
+                const endAngle = currentAngle + sliceAngle;
+
+                const x1 = centerX + radius * Math.cos(startAngle * Math.PI / 180);
+                const y1 = centerY + radius * Math.sin(startAngle * Math.PI / 180);
+                const x2 = centerX + radius * Math.cos(endAngle * Math.PI / 180);
+                const y2 = centerY + radius * Math.sin(endAngle * Math.PI / 180);
+
+                const largeArc = sliceAngle > 180 ? 1 : 0;
+
+                html += `<path d="M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z"
+                    fill="${colors[i % colors.length]}" stroke="white" stroke-width="2"/>`;
+
+                currentAngle += sliceAngle;
+            });
+
+            html += `</svg>`;
+
+            // Legend
+            html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
+            labels.forEach((label, i) => {
+                const percent = ((values[i] / total) * 100).toFixed(1);
+                html += `<div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 16px; height: 16px; background: ${colors[i % colors.length]}; border-radius: 2px;"></div>
+                    <span style="font-size: 0.85rem;">${label}: ${values[i]} (${percent}%)</span>
+                </div>`;
+            });
+            html += `</div></div>`;
+
+            return html;
+        }
+
+        function renderScatterChart(labels, datasets, options, colors) {
+            const allValues = datasets.flatMap(ds => ds.values);
+            const maxY = Math.max(...allValues);
+            const minY = Math.min(...allValues);
+            const rangeY = maxY - minY;
+            const maxX = labels.length - 1;
+            const height = 200;
+            const width = 600;
+            const padding = 40;
+
+            let html = `<svg width="${width}" height="${height}" style="max-width: 100%;">`;
+
+            // Grid
+            for (let i = 0; i <= 4; i++) {
+                const y = padding + (height - 2 * padding) * (i / 4);
+                html += `<line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" stroke="#e0e0e0" stroke-width="1"/>`;
+            }
+
+            // Draw points for each dataset
+            datasets.forEach((ds, dsIndex) => {
+                ds.values.forEach((value, i) => {
+                    const x = padding + (width - 2 * padding) * (i / maxX);
+                    const y = padding + (height - 2 * padding) * (1 - (value - minY) / rangeY);
+                    html += `<circle cx="${x}" cy="${y}" r="5" fill="${colors[dsIndex % colors.length]}" opacity="0.7"/>`;
+                });
+            });
+
+            html += `</svg>`;
+            return html;
+        }
+
+        function renderAreaChart(labels, datasets, options, colors) {
+            const allValues = datasets.flatMap(ds => ds.values);
+            const maxValue = Math.max(...allValues);
+            const minValue = Math.min(...allValues);
+            const range = maxValue - minValue;
+            const height = 200;
+            const width = 600;
+            const padding = 40;
+
+            let html = `<svg width="${width}" height="${height}" style="max-width: 100%;">`;
+
+            // Draw areas for each dataset (reverse order for proper stacking)
+            [...datasets].reverse().forEach((ds, dsIndex) => {
+                const actualIndex = datasets.length - 1 - dsIndex;
+                const points = ds.values.map((value, i) => {
+                    const x = padding + (width - 2 * padding) * (i / (labels.length - 1));
+                    const y = padding + (height - 2 * padding) * (1 - (value - minValue) / range);
+                    return `${x},${y}`;
+                }).join(' ');
+
+                const bottomLeft = `${padding},${height - padding}`;
+                const bottomRight = `${width - padding},${height - padding}`;
+
+                html += `<polygon points="${bottomLeft} ${points} ${bottomRight}"
+                    fill="${colors[actualIndex % colors.length]}" opacity="0.6" stroke="${colors[actualIndex % colors.length]}" stroke-width="2"/>`;
+            });
+
+            html += `</svg>`;
+            return html;
+        }
+
+        // Render code artifact
+        function renderCodeArtifact(artifact) {
+            const title = artifact.title || 'Code';
+            const data = artifact.data || {};
+            const language = data.language || 'text';
+            const code = data.code || '';
+
+            return `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 5px;">Language: ${language}</div>
+                </div>
+                <div style="position: relative;">
+                    <button onclick="copyToClipboard(this)" data-code="${code.replace(/"/g, '&quot;')}" style="position: absolute; top: 10px; right: 10px; padding: 5px 10px; background: #0082c9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.75rem;">Copy</button>
+                    <pre style="background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; margin: 0;"><code>${escapeHtml(code)}</code></pre>
+                </div>
+            `;
+        }
+
+        // Render markdown artifact
+        function renderMarkdownArtifact(artifact) {
+            const title = artifact.title || 'Document';
+            const data = artifact.data || {};
+            const markdown = data.content || '';
+
+            return `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <div class="markdown-content" style="line-height: 1.6;">
+                    ${marked.parse(markdown)}
+                </div>
+            `;
+        }
+
+        // Render diff artifact
+        function renderDiffArtifact(artifact) {
+            const title = artifact.title || 'Diff';
+            const data = artifact.data || {};
+            const diff = data.diff || '';
+
+            return `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <pre style="background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; margin: 0; font-size: 0.85rem; line-height: 1.4;">${formatDiff(diff)}</pre>
+            `;
+        }
+
+        // Render filetree artifact
+        function renderFiletreeArtifact(artifact) {
+            const title = artifact.title || 'File Tree';
+            const data = artifact.data || {};
+            const tree = data.tree || [];
+
+            function renderTreeNode(node, level = 0) {
+                const indent = level * 20;
+                const icon = node.type === 'directory' ? '📁' : '📄';
+                let html = `<div style="padding-left: ${indent}px; padding: 4px 0; font-size: 0.85rem;">${icon} ${node.name}</div>`;
+
+                if (node.children) {
+                    node.children.forEach(child => {
+                        html += renderTreeNode(child, level + 1);
+                    });
+                }
+
+                return html;
+            }
+
+            return `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <div style="background: #f9f9f9; padding: 15px; border-radius: 4px;">
+                    ${tree.map(node => renderTreeNode(node)).join('')}
+                </div>
+            `;
+        }
+
+        // Render kanban artifact
+        function renderKanbanArtifact(artifact) {
+            const title = artifact.title || 'Kanban Board';
+            const data = artifact.data || {};
+            const columns = data.columns || [];
+
+            return `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <div style="display: flex; gap: 10px; overflow-x: auto;">
+                    ${columns.map(col => `
+                        <div style="flex: 1; min-width: 200px; background: #f9f9f9; border-radius: 4px; padding: 10px;">
+                            <div style="font-weight: 600; margin-bottom: 10px; color: #333;">${col.name}</div>
+                            ${(col.items || []).map(item => `
+                                <div style="background: white; padding: 10px; margin-bottom: 8px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.85rem;">
+                                    ${item.title || item}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Render timeline artifact
+        function renderTimelineArtifact(artifact) {
+            const title = artifact.title || 'Timeline';
+            const data = artifact.data || {};
+            const events = data.events || [];
+
+            return `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                </div>
+                <div style="position: relative; padding-left: 30px;">
+                    <div style="position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e0e0e0;"></div>
+                    ${events.map(event => `
+                        <div style="position: relative; margin-bottom: 20px;">
+                            <div style="position: absolute; left: -24px; width: 12px; height: 12px; background: #0082c9; border-radius: 50%; border: 2px solid white;"></div>
+                            <div style="background: #f9f9f9; padding: 12px; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${event.title}</div>
+                                ${event.date ? `<div style="font-size: 0.75rem; color: #666; margin-bottom: 6px;">${event.date}</div>` : ''}
+                                <div style="font-size: 0.85rem;">${event.description || ''}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Render query builder artifact
+        function renderQueryBuilderArtifact(artifact) {
+            const title = artifact.title || 'Query Builder';
+            const data = artifact.data || {};
+            const availableTools = data.available_tools || [];
+            const toolCategories = data.tool_categories || {};
+            const suggestedTools = data.suggested_tools || [];
+            const commonPatterns = data.common_patterns || [];
+
+            let html = `
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 5px;">Search and discover available tools</div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <input type="text" id="toolSearchInput" placeholder="Search tools..."
+                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;"
+                        onkeyup="filterTools()">
+                </div>
+            `;
+
+            // Suggested tools section
+            if (suggestedTools.length > 0) {
+                html += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-weight: 600; margin-bottom: 10px; color: #0082c9;">💡 Suggested Tools</div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            ${suggestedTools.map(tool => `
+                                <button onclick="selectTool('${tool}')"
+                                    style="padding: 8px 12px; background: #e3f2fd; border: 1px solid #90caf9; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                                    ${tool}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Common patterns section
+            if (commonPatterns.length > 0) {
+                html += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-weight: 600; margin-bottom: 10px;">📋 Common Patterns</div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            ${commonPatterns.map((pattern, i) => `
+                                <div style="padding: 10px; background: #f5f5f5; border-radius: 4px; cursor: pointer; font-size: 0.85rem;"
+                                    onclick="applyPattern(${i})">
+                                    <div style="font-weight: 500; margin-bottom: 4px;">${pattern.name || 'Pattern ' + (i + 1)}</div>
+                                    <div style="font-size: 0.8rem; color: #666;">${pattern.description || ''}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Tools by category
+            html += `<div style="margin-bottom: 20px;">
+                <div style="font-weight: 600; margin-bottom: 10px;">🔧 Available Tools</div>
+                <div id="toolsList">`;
+
+            if (Object.keys(toolCategories).length > 0) {
+                for (const [category, tools] of Object.entries(toolCategories)) {
+                    html += `
+                        <div class="tool-category" style="margin-bottom: 15px;">
+                            <div style="font-weight: 500; color: #555; margin-bottom: 8px; text-transform: capitalize;">
+                                ${category}
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 6px; padding-left: 10px;">
+                                ${tools.map(tool => `
+                                    <div class="tool-item" data-tool-name="${tool.toLowerCase()}"
+                                        style="padding: 8px 12px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 0.85rem;"
+                                        onclick="selectTool('${tool}')">
+                                        ${tool}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                // No categories, show flat list
+                html += `<div style="display: flex; flex-direction: column; gap: 6px;">`;
+                availableTools.forEach(tool => {
+                    html += `
+                        <div class="tool-item" data-tool-name="${tool.toLowerCase()}"
+                            style="padding: 8px 12px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 0.85rem;"
+                            onclick="selectTool('${tool}')">
+                            ${tool}
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            }
+
+            html += `</div></div>`;
+
+            return html;
+        }
+
+        // Render tool wizard artifact
+        function renderToolWizardArtifact(artifact) {
+            const title = artifact.title || 'Tool Wizard';
+            const data = artifact.data || {};
+            const toolName = data.tool_name || '';
+            const steps = data.steps || [];
+            const currentStep = data.current_step || 0;
+            const navigation = data.navigation || {};
+
+            if (steps.length === 0) {
+                return `<div style="padding: 20px; text-align: center; color: #666;">No steps defined</div>`;
+            }
+
+            const step = steps[currentStep];
+            const progress = ((currentStep + 1) / steps.length) * 100;
+
+            let html = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 5px;">
+                        Step ${currentStep + 1} of ${steps.length}
+                    </div>
+                </div>
+            `;
+
+            // Progress bar
+            if (navigation.show_progress !== false) {
+                html += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: #0082c9; height: 100%; width: ${progress}%; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Current step content
+            html += `
+                <div style="padding: 20px; background: #f9f9f9; border-radius: 4px; margin-bottom: 20px;">
+                    <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 10px; color: #333;">
+                        ${step.title || 'Step ' + (currentStep + 1)}
+                    </div>
+                    ${step.description ? `<div style="font-size: 0.85rem; color: #666; margin-bottom: 15px;">${step.description}</div>` : ''}
+
+                    <form id="wizardStepForm" onsubmit="submitWizardStep(event, ${currentStep})">
+            `;
+
+            // Render fields for this step
+            const fields = step.fields || [];
+            fields.forEach((field, idx) => {
+                html += renderToolFormField(field, idx, {});
+            });
+
+            html += `
+                    </form>
+                </div>
+            `;
+
+            // Navigation buttons
+            html += `
+                <div style="display: flex; justify-content: space-between; gap: 10px;">
+                    <button onclick="wizardBack()" ${currentStep === 0 || navigation.allow_back === false ? 'disabled' : ''}
+                        style="padding: 10px 20px; background: ${currentStep === 0 || navigation.allow_back === false ? '#ccc' : '#fff'};
+                            border: 1px solid #ddd; border-radius: 4px; cursor: ${currentStep === 0 || navigation.allow_back === false ? 'not-allowed' : 'pointer'};">
+                        ← Back
+                    </button>
+                    <div style="display: flex; gap: 10px;">
+            `;
+
+            if (navigation.can_skip_optional && step.required === false) {
+                html += `
+                    <button onclick="wizardSkip(${currentStep})"
+                        style="padding: 10px 20px; background: #fff; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                        Skip
+                    </button>
+                `;
+            }
+
+            html += `
+                    <button onclick="wizardNext(${currentStep}, ${currentStep === steps.length - 1})"
+                        style="padding: 10px 20px; background: #0082c9; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        ${currentStep === steps.length - 1 ? 'Finish' : 'Next →'}
+                    </button>
+                </div></div>
+            `;
+
+            return html;
+        }
+
+        // Render batch tool artifact
+        function renderBatchToolArtifact(artifact) {
+            const title = artifact.title || 'Batch Tool';
+            const data = artifact.data || {};
+            const toolName = data.tool_name || '';
+            const schema = data.schema || {};
+            const inputMethod = data.input_method || 'manual';
+            const batchInputs = data.batch_inputs || [];
+            const executionOptions = data.execution_options || {};
+
+            let html = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: #333;">${title}</h3>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 5px;">
+                        Execute ${toolName} multiple times with different inputs
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="font-weight: 600; margin-bottom: 10px;">Input Method</div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="setBatchInputMethod('manual')"
+                            style="padding: 8px 16px; background: ${inputMethod === 'manual' ? '#0082c9' : '#fff'};
+                                color: ${inputMethod === 'manual' ? 'white' : '#333'}; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                            Manual Entry
+                        </button>
+                        <button onclick="setBatchInputMethod('json')"
+                            style="padding: 8px 16px; background: ${inputMethod === 'json' ? '#0082c9' : '#fff'};
+                                color: ${inputMethod === 'json' ? 'white' : '#333'}; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                            JSON Import
+                        </button>
+                        <button onclick="setBatchInputMethod('csv')"
+                            style="padding: 8px 16px; background: ${inputMethod === 'csv' ? '#0082c9' : '#fff'};
+                                color: ${inputMethod === 'csv' ? 'white' : '#333'}; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                            CSV Import
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            // Batch inputs list
+            html += `
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="font-weight: 600;">Batch Inputs (${batchInputs.length})</div>
+                        <button onclick="addBatchInput()"
+                            style="padding: 6px 12px; background: #0082c9; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                            + Add Input
+                        </button>
+                    </div>
+                    <div id="batchInputsList" style="display: flex; flex-direction: column; gap: 10px;">
+            `;
+
+            if (batchInputs.length === 0) {
+                html += `
+                    <div style="padding: 20px; text-align: center; color: #666; background: #f9f9f9; border-radius: 4px; font-size: 0.85rem;">
+                        No inputs added yet. Click "Add Input" to start.
+                    </div>
+                `;
+            } else {
+                batchInputs.forEach((input, idx) => {
+                    html += `
+                        <div style="padding: 12px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="font-weight: 500;">Input ${idx + 1}</div>
+                                <button onclick="removeBatchInput(${idx})"
+                                    style="padding: 4px 8px; background: #ff6b6b; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.75rem;">
+                                    Remove
+                                </button>
+                            </div>
+                            <pre style="margin: 0; font-size: 0.8rem; color: #666; overflow-x: auto;">${JSON.stringify(input, null, 2)}</pre>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            // Execution options
+            html += `
+                <div style="margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 4px;">
+                    <div style="font-weight: 600; margin-bottom: 10px;">Execution Options</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
+                            <input type="checkbox" id="parallelExecution" ${executionOptions.parallel ? 'checked' : ''}>
+                            Run in parallel
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
+                            <input type="checkbox" id="stopOnError" ${executionOptions.stop_on_error ? 'checked' : ''}>
+                            Stop on first error
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
+                            <input type="checkbox" id="showProgress" ${executionOptions.show_progress ? 'checked' : ''}>
+                            Show progress
+                        </label>
+                    </div>
+                </div>
+            `;
+
+            // Execute button
+            html += `
+                <div style="display: flex; justify-content: center;">
+                    <button onclick="executeBatchTool()"
+                        ${batchInputs.length === 0 ? 'disabled' : ''}
+                        style="padding: 12px 30px; background: ${batchInputs.length === 0 ? '#ccc' : '#0082c9'};
+                            color: white; border: none; border-radius: 4px; cursor: ${batchInputs.length === 0 ? 'not-allowed' : 'pointer'};
+                            font-size: 0.95rem; font-weight: 500;">
+                        Execute Batch (${batchInputs.length} items)
+                    </button>
+                </div>
+                <div id="batchResults" style="margin-top: 20px;"></div>
+            `;
+
+            return html;
+        }
+
+        // Helper functions for query builder
+        function filterTools() {
+            const searchTerm = document.getElementById('toolSearchInput').value.toLowerCase();
+            const toolItems = document.querySelectorAll('.tool-item');
+            const categories = document.querySelectorAll('.tool-category');
+
+            toolItems.forEach(item => {
+                const toolName = item.getAttribute('data-tool-name') || '';
+                if (toolName.includes(searchTerm)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            // Hide empty categories
+            categories.forEach(category => {
+                const visibleTools = category.querySelectorAll('.tool-item[style*="display: block"], .tool-item:not([style*="display: none"])');
+                category.style.display = visibleTools.length > 0 ? 'block' : 'none';
+            });
+        }
+
+        async function selectTool(toolName) {
+            // Directly generate a form for the selected tool using the API
+            try {
+                const response = await fetch(`${API_BASE}/tools/execute`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        tool_name: 'builtin.generate_tool_form',
+                        arguments: { tool_name: toolName }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.result) {
+                    // The result should be an artifact code block
+                    // Add it as an assistant message so it gets displayed
+                    addMessage('assistant', result.result);
+                } else {
+                    addMessage('assistant', `Error generating form for ${toolName}: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error selecting tool:', error);
+                addMessage('assistant', `Error generating form for ${toolName}: ${error.message}`);
+            }
+        }
+
+        function applyPattern(patternIndex) {
+            // Placeholder - would need pattern data from artifact
+            console.log('Apply pattern:', patternIndex);
+        }
+
+        // Helper functions for wizard
+        function wizardNext(currentStep, isLast) {
+            if (isLast) {
+                submitWizardStep(null, currentStep);
+            } else {
+                // Move to next step (would need state management)
+                console.log('Next step from', currentStep);
+            }
+        }
+
+        function wizardBack() {
+            console.log('Go back');
+        }
+
+        function wizardSkip(step) {
+            console.log('Skip step', step);
+        }
+
+        function submitWizardStep(event, step) {
+            if (event) event.preventDefault();
+            console.log('Submit step', step);
+        }
+
+        // Helper functions for batch tool
+        function setBatchInputMethod(method) {
+            console.log('Set input method:', method);
+            // Would need to update artifact state
+        }
+
+        function addBatchInput() {
+            console.log('Add batch input');
+            // Would open a form to add new input
+        }
+
+        function removeBatchInput(index) {
+            console.log('Remove batch input:', index);
+            // Would need to update artifact state
+        }
+
+        function executeBatchTool() {
+            console.log('Execute batch tool');
+            // Would execute all batch inputs
+        }
+
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Helper function to format diff
+        function formatDiff(diff) {
+            return diff.split('\n').map(line => {
+                if (line.startsWith('+')) {
+                    return `<span style="color: #22863a; background: #f0fff4;">${escapeHtml(line)}</span>`;
+                } else if (line.startsWith('-')) {
+                    return `<span style="color: #cb2431; background: #ffeef0;">${escapeHtml(line)}</span>`;
+                } else if (line.startsWith('@@')) {
+                    return `<span style="color: #005cc5; font-weight: 600;">${escapeHtml(line)}</span>`;
+                } else {
+                    return escapeHtml(line);
+                }
+            }).join('\n');
+        }
+
+        // Helper function to copy code to clipboard
+        function copyToClipboard(button) {
+            const code = button.getAttribute('data-code');
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            });
         }
 
         // ========================================================================
@@ -2600,6 +3971,15 @@
             messagesContainer.appendChild(messageDiv);
             scrollToBottom();
 
+            // Track in conversation history (don't add if streaming, will be added when complete)
+            if (!streaming && content) {
+                conversationHistory.push({ role, content });
+                // Keep last 20 messages for context
+                if (conversationHistory.length > 20) {
+                    conversationHistory = conversationHistory.slice(-20);
+                }
+            }
+
             return contentDiv;
         }
 
@@ -2661,9 +4041,15 @@
             let fullResponse = '';
 
             try {
+                // Prepare conversation context (last 5 messages for context)
+                const recentContext = conversationHistory.slice(-5);
+                const contextParam = recentContext.length > 0
+                    ? `&context=${encodeURIComponent(JSON.stringify(recentContext))}`
+                    : '';
+
                 // Open SSE connection for streaming
                 const encodedMessage = encodeURIComponent(message);
-                const url = `${API_BASE}/stream/chat?session_id=${sessionId}&message=${encodedMessage}`;
+                const url = `${API_BASE}/stream/chat?session_id=${sessionId}&message=${encodedMessage}${contextParam}`;
 
                 eventSource = new EventSource(url);
 
@@ -2680,6 +4066,15 @@
                         setStatus('connected', 'Connected');
                         assistantContent.parentElement.classList.remove('streaming');
                         messageInput.focus();
+
+                        // Add completed response to conversation history
+                        if (fullResponse) {
+                            conversationHistory.push({ role: 'assistant', content: fullResponse });
+                            // Keep last 20 messages for context
+                            if (conversationHistory.length > 20) {
+                                conversationHistory = conversationHistory.slice(-20);
+                            }
+                        }
                     } else if (data.chunk) {
                         // Append chunk to response
                         fullResponse += data.chunk;

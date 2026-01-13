@@ -77,6 +77,8 @@ class BuiltinToolManager:
             "generate_query_builder": self._handle_generate_query_builder,
             "generate_tool_wizard": self._handle_generate_tool_wizard,
             "generate_batch_tool": self._handle_generate_batch_tool,
+            "generate_spreadsheet": self._handle_generate_spreadsheet,
+            "generate_chart": self._handle_generate_chart,
         }
 
     def set_memory_tools(self, memory_tools: Any) -> None:
@@ -998,6 +1000,101 @@ class BuiltinToolManager:
             }
         )
 
+        # Spreadsheet generation tool
+        generate_spreadsheet_tool = Tool(
+            name="builtin.generate_spreadsheet",
+            description="Generate a spreadsheet artifact to display tabular data with columns and rows. Use this to create data tables, comparison matrices, or any structured data display.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Title for the spreadsheet"
+                    },
+                    "columns": {
+                        "type": "array",
+                        "description": "Array of column names/headers",
+                        "items": {"type": "string"}
+                    },
+                    "rows": {
+                        "type": "array",
+                        "description": "Array of row data (each row is an array of cell values)",
+                        "items": {
+                            "type": "array",
+                            "items": {}
+                        }
+                    },
+                    "caption": {
+                        "type": "string",
+                        "description": "Optional caption or description for the table"
+                    }
+                },
+                "required": ["columns", "rows"]
+            }
+        )
+
+        # Chart generation tool
+        generate_chart_tool = Tool(
+            name="builtin.generate_chart",
+            description="Generate a chart artifact to visualize data. Supports multiple chart types including bar, line, pie, scatter, and area charts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Title for the chart"
+                    },
+                    "chart_type": {
+                        "type": "string",
+                        "description": "Type of chart to generate",
+                        "enum": ["bar", "line", "pie", "scatter", "area"]
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "Chart data with labels and values (or datasets for multiple series)",
+                        "properties": {
+                            "labels": {
+                                "type": "array",
+                                "description": "X-axis labels or category names",
+                                "items": {"type": "string"}
+                            },
+                            "values": {
+                                "type": "array",
+                                "description": "Y-axis values (for single series)",
+                                "items": {"type": "number"}
+                            },
+                            "datasets": {
+                                "type": "array",
+                                "description": "Multiple data series (alternative to values)",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {"type": "string"},
+                                        "values": {
+                                            "type": "array",
+                                            "items": {"type": "number"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "required": ["labels"]
+                    },
+                    "options": {
+                        "type": "object",
+                        "description": "Optional chart configuration",
+                        "properties": {
+                            "x_label": {"type": "string"},
+                            "y_label": {"type": "string"},
+                            "show_legend": {"type": "boolean"},
+                            "stacked": {"type": "boolean"}
+                        }
+                    }
+                },
+                "required": ["chart_type", "data"]
+            }
+        )
+
         # Build the tool list - include memory tools only if memory_tools is available
         tools = [
             set_prompt_tool, get_prompt_tool, execute_python_code_tool, execute_bash_command_tool, run_pytest_tool,
@@ -1006,7 +1103,8 @@ class BuiltinToolManager:
             read_image_tool, open_file_tool, get_config_tool, update_config_section_tool,
             add_mcp_server_tool, remove_mcp_server_tool, list_mcp_servers_tool, get_config_path_tool,
             # Artifact generation tools
-            generate_tool_form_tool, generate_query_builder_tool, generate_tool_wizard_tool, generate_batch_tool_tool
+            generate_tool_form_tool, generate_query_builder_tool, generate_tool_wizard_tool, generate_batch_tool_tool,
+            generate_spreadsheet_tool, generate_chart_tool
         ]
 
         # Add memory tools if memory system is enabled
@@ -3292,12 +3390,17 @@ class BuiltinToolManager:
         tool_manager = self.parent_tool_manager if self.parent_tool_manager else self
         parser = ToolSchemaParser(tool_manager=tool_manager)
 
+        # Get conversation context if available (passed from web UI)
+        context = None
+        if hasattr(self, 'conversation_context') and self.conversation_context:
+            context = {'chat_history': self.conversation_context}
+
         try:
-            # Generate the artifact
+            # Generate the artifact with conversation context for smart prefilling
             artifact = parser.generate_form_artifact(
                 tool_name=tool_name,
                 prefill=prefill,
-                context=None  # Could pass chat history if available
+                context=context
             )
 
             # Return as formatted artifact code block
@@ -3414,6 +3517,82 @@ class BuiltinToolManager:
             return f"Error: {str(e)}"
         except Exception as e:
             return f"Error generating batch tool: {str(e)}"
+
+    def _handle_generate_spreadsheet(self, args: Dict[str, Any]) -> str:
+        """Handles the 'generate_spreadsheet' tool call."""
+        import json
+
+        title = args.get("title", "Data Table")
+        columns = args.get("columns")
+        rows = args.get("rows")
+        caption = args.get("caption")
+
+        if not columns or not rows:
+            return "Error: 'columns' and 'rows' are required for generate_spreadsheet."
+
+        # Validate data structure
+        if not isinstance(columns, list) or not isinstance(rows, list):
+            return "Error: 'columns' must be an array of strings, 'rows' must be an array of arrays."
+
+        # Build artifact
+        artifact = {
+            "type": "artifact:spreadsheet",
+            "version": "1.0",
+            "title": title,
+            "data": {
+                "columns": columns,
+                "rows": rows
+            }
+        }
+
+        if caption:
+            artifact["data"]["caption"] = caption
+
+        # Return as formatted artifact code block
+        artifact_json = json.dumps(artifact, indent=2)
+        return f"```artifact:spreadsheet\n{artifact_json}\n```"
+
+    def _handle_generate_chart(self, args: Dict[str, Any]) -> str:
+        """Handles the 'generate_chart' tool call."""
+        import json
+
+        title = args.get("title", "Chart")
+        chart_type = args.get("chart_type")
+        data = args.get("data")
+        options = args.get("options", {})
+
+        if not chart_type:
+            return "Error: 'chart_type' is required for generate_chart."
+
+        if not data:
+            return "Error: 'data' is required for generate_chart."
+
+        # Validate chart type
+        valid_types = ["bar", "line", "pie", "scatter", "area"]
+        if chart_type not in valid_types:
+            return f"Error: 'chart_type' must be one of {valid_types}."
+
+        # Validate data structure
+        if not isinstance(data, dict) or "labels" not in data:
+            return "Error: 'data' must be an object with 'labels' array and either 'values' array or 'datasets' array."
+
+        # Build artifact
+        artifact = {
+            "type": "artifact:chart",
+            "version": "1.0",
+            "title": title,
+            "data": {
+                "chart_type": chart_type,
+                "data": data
+            }
+        }
+
+        if options:
+            artifact["data"]["options"] = options
+
+        # Return as formatted artifact code block
+        artifact_json = json.dumps(artifact, indent=2)
+        return f"```artifact:chart\n{artifact_json}\n```"
 
     def _tool_matches_category(self, tool_name: str, category: str) -> bool:
         """Check if a tool matches a given category."""

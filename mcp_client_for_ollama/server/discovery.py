@@ -130,8 +130,16 @@ def parse_server_configs(config_path: str) -> Tuple[List[Dict[str, Any]], Option
                 # Transport field (alternative to type)
                 server_type = server_config_data["transport"]
             elif "url" in server_config_data:
-                # URL exists but no type/transport, default to streamable_http
-                server_type = "streamable_http"
+                # URL exists but no type/transport, infer from URL pattern
+                url = server_config_data.get("url", "")
+                parsed = urlparse(url)
+
+                # Check if URL suggests SSE endpoint
+                if "sse" in url.lower() or "/sse" in parsed.path.lower():
+                    server_type = "sse"
+                else:
+                    # Default to streamable_http for other HTTP URLs
+                    server_type = "streamable_http"
 
             # Create server config object
             server = {

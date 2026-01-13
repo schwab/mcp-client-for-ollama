@@ -15,8 +15,9 @@ def stream_chat():
     username = g.get('nextcloud_user', None)
     session_id = request.args.get('session_id')
     message = request.args.get('message')
+    context_json = request.args.get('context')
 
-    print(f"[SSE] stream_chat called: session_id={session_id}, message_len={len(message) if message else 0}, username={username}")
+    print(f"[SSE] stream_chat called: session_id={session_id}, message_len={len(message) if message else 0}, username={username}, has_context={bool(context_json)}")
 
     if not session_id or not message:
         error_msg = f"Missing parameters: session_id={bool(session_id)}, message={bool(message)}"
@@ -27,6 +28,15 @@ def stream_chat():
             mimetype='application/json'
         )
 
+    # Parse conversation context if provided
+    conversation_context = None
+    if context_json:
+        try:
+            conversation_context = json.loads(context_json)
+            print(f"[SSE] Parsed conversation context: {len(conversation_context)} messages")
+        except json.JSONDecodeError as e:
+            print(f"[SSE WARNING] Failed to parse context: {e}")
+
     client = session_manager.get_session(session_id, username=username)
     if not client:
         print(f"[SSE ERROR] Invalid session: {session_id}")
@@ -35,6 +45,10 @@ def stream_chat():
             status=404,
             mimetype='application/json'
         )
+
+    # Store context on client for use during message processing
+    if conversation_context:
+        client.conversation_context = conversation_context
 
     print(f"[SSE] Client found for session {session_id}, model={client.get_model()}")
 

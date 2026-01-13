@@ -399,6 +399,35 @@ class WebMCPClient:
                     servers.add(server_name)
         return sorted(list(servers))
 
+    async def execute_tool(self, tool_name: str, arguments: dict) -> str:
+        """
+        Execute a tool by name with the given arguments.
+
+        Args:
+            tool_name: Fully qualified tool name (e.g., "builtin.list_files" or "server.tool_name")
+            arguments: Dictionary of arguments to pass to the tool
+
+        Returns:
+            Tool execution result as a string
+
+        Raises:
+            ValueError: If tool name format is invalid
+            Exception: If tool execution fails
+        """
+        # Create a temporary MCP client for tool execution
+        temp_client = await self._create_mcp_client()
+        if not temp_client:
+            raise Exception("Could not create MCP client for tool execution")
+
+        try:
+            # Execute the tool using the MCP client's execute_tool method
+            result = await temp_client.execute_tool(tool_name, arguments)
+            return result
+        finally:
+            # Don't call cleanup() - causes cancel scope errors in Flask async context
+            # Temp client will be garbage collected automatically
+            pass
+
     # ========================================================================
     # MEMORY MANAGEMENT METHODS
     # ========================================================================

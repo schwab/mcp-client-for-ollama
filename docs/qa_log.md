@@ -2629,3 +2629,4 @@ This forces the model to check for the pattern BEFORE any other planning.
 
 **Note on pdf_extract server:**
 The directory error was a symptom, not the cause. The pdf_extract.get_unprocessed_files() tool correctly accepts a directory parameter and validates it. The error occurred because SHELL_EXECUTOR had no directory path in task description (due to wrong PLANNER output). With PLANNER fix, this is resolved.
+

@@ -50,20 +50,17 @@ class MCPClient:
         self.model_manager = ModelManager(console=self.console, default_model=model, ollama=self.ollama)
         # Initialize the model config manager
         self.model_config_manager = ModelConfigManager(console=self.console)
-        # Initialize the built-in tool manager with the configured Ollama host and config manager
-        self.builtin_tool_manager = BuiltinToolManager(
-            model_config_manager=self.model_config_manager,
-            ollama_host=host,
-            config_manager=self.config_manager,
-            console=self.console
-        )
         # Initialize the tool manager with server connector reference
+        # The tool manager will create its own builtin_tool_manager with parent reference
         self.tool_manager = ToolManager(
             console=self.console,
             server_connector=self.server_connector,
             model_config_manager=self.model_config_manager,
-            config_manager=self.config_manager
+            config_manager=self.config_manager,
+            ollama_host=host
         )
+        # Use the builtin_tool_manager from tool_manager (it has parent reference for artifact generation)
+        self.builtin_tool_manager = self.tool_manager.builtin_tool_manager
         # Initialize the streaming manager
         self.streaming_manager = StreamingManager(console=self.console)
         # Initialize the tool display manager
@@ -2224,6 +2221,45 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
+
+    async def execute_tool(self, tool_name: str, arguments: dict) -> str:
+        """
+        Execute a tool by name with the given arguments.
+
+        Args:
+            tool_name: Fully qualified tool name (e.g., "builtin.list_files" or "biblerag.get_topic_verses")
+            arguments: Dictionary of arguments to pass to the tool
+
+        Returns:
+            Tool execution result as a string
+
+        Raises:
+            ValueError: If tool name format is invalid
+            Exception: If tool execution fails
+        """
+        # Split tool name into server and tool
+        if '.' not in tool_name:
+            raise ValueError(f"Invalid tool name format: {tool_name}. Expected format: 'server.tool_name'")
+
+        server_name, actual_tool_name = tool_name.split('.', 1)
+
+        # Handle builtin tools
+        if server_name == "builtin":
+            return self.builtin_tool_manager.execute_tool(actual_tool_name, arguments)
+
+        # Handle MCP server tools
+        if server_name in self.sessions:
+            result = await self.sessions[server_name]["session"].call_tool(actual_tool_name, arguments)
+            if result.content:
+                # Combine all content items (MCP can return multiple)
+                response_parts = []
+                for content_item in result.content:
+                    if hasattr(content_item, 'text'):
+                        response_parts.append(content_item.text)
+                return "\n".join(response_parts)
+            return str(result)
+
+        raise ValueError(f"Unknown server or tool: {tool_name}")
 
     async def reload_servers(self):
         """Reload all MCP servers with the same connection parameters"""
