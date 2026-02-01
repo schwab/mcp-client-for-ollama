@@ -6,7 +6,7 @@ import asyncio
 from functools import wraps
 
 # Import blueprints
-from mcp_client_for_ollama.web.api import chat, config, sessions, models, tools, memory
+from mcp_client_for_ollama.web.api import chat, config, sessions, models, tools, memory, jsonl
 from mcp_client_for_ollama.web.sse import streaming
 from mcp_client_for_ollama.web.session.manager import session_manager
 
@@ -85,11 +85,17 @@ def create_app(app_config=None):
     app.register_blueprint(tools.bp, url_prefix='/api/tools')
     app.register_blueprint(memory.bp, url_prefix='/api/memory')
     app.register_blueprint(streaming.bp, url_prefix='/api/stream')
+    app.register_blueprint(jsonl.bp, url_prefix='/api/jsonl')
 
     # Root endpoint - serve UI
     @app.route('/')
     def index():
         return app.send_static_file('index.html')
+
+    # JSONL Viewer page
+    @app.route('/jsonl-viewer')
+    def jsonl_viewer():
+        return app.send_static_file('jsonl-viewer.html')
 
     # API info endpoint
     @app.route('/api')
@@ -105,7 +111,11 @@ def create_app(app_config=None):
                 'tools': '/api/tools',
                 'memory': '/api/memory',
                 'streaming': '/api/stream/chat',
-                'config': '/api/config'
+                'config': '/api/config',
+                'jsonl': '/api/jsonl'
+            },
+            'pages': {
+                'jsonl_viewer': '/jsonl-viewer'
             }
         })
 
@@ -202,6 +212,7 @@ def run_web_server(bind='0.0.0.0', port=5222, ollama_host='http://localhost:1143
         debug: Enable Flask debug mode
     """
     import json
+    from pathlib import Path
 
     # Load config file if config_dir is provided
     global_config = {
@@ -209,8 +220,28 @@ def run_web_server(bind='0.0.0.0', port=5222, ollama_host='http://localhost:1143
         'config_dir': config_dir
     }
 
+    # Print configuration file paths
+    print("\n" + "="*70)
+    print("📁 Configuration File Paths")
+    print("="*70)
+
+    config_paths_checked = []
+    config_loaded = False
+
     if config_dir:
+        # Primary config file
         config_file = os.path.join(config_dir, 'config.json')
+        config_paths_checked.append(('Primary config', config_file, os.path.exists(config_file)))
+
+        # Check for CLAUDE.md
+        claude_md = os.path.join(config_dir, '.config', 'CLAUDE.md')
+        config_paths_checked.append(('Claude context', claude_md, os.path.exists(claude_md)))
+
+        # Check for .config/config.json (project-specific)
+        project_config = os.path.join(config_dir, '.config', 'config.json')
+        config_paths_checked.append(('Project config', project_config, os.path.exists(project_config)))
+
+        # Attempt to load primary config
         if os.path.exists(config_file):
             try:
                 with open(config_file, 'r') as f:
@@ -219,12 +250,49 @@ def run_web_server(bind='0.0.0.0', port=5222, ollama_host='http://localhost:1143
                 # This ensures mcpServers and other settings are available
                 global_config.update(file_config)
                 global_config['config_dir'] = config_dir  # Preserve config_dir
-                print(f"Loaded config from: {config_file}")
+                config_loaded = True
+
+                # Print loaded config details
+                print(f"✓ Loaded config from: {config_file}")
                 if 'mcpServers' in file_config:
                     server_count = len(file_config['mcpServers'])
-                    print(f"Found {server_count} MCP server(s) in config")
+                    print(f"  └─ {server_count} MCP server(s) configured:")
+                    for server_name in file_config['mcpServers'].keys():
+                        print(f"     • {server_name}")
+                if 'delegation' in file_config:
+                    print(f"  └─ Delegation system: configured")
+                if 'memory' in file_config:
+                    memory_enabled = file_config['memory'].get('enabled', False)
+                    print(f"  └─ Memory system: {'enabled' if memory_enabled else 'disabled'}")
+                if 'model_intelligence' in file_config:
+                    intel_enabled = file_config['model_intelligence'].get('enabled', False)
+                    print(f"  └─ Model intelligence: {'enabled' if intel_enabled else 'disabled'}")
+
             except Exception as e:
-                print(f"Warning: Failed to load config file {config_file}: {e}")
+                print(f"✗ Warning: Failed to load config file {config_file}: {e}")
+    else:
+        # No config directory provided
+        print("  Config directory: Not specified")
+        # Check default locations
+        default_locations = [
+            ('~/.config/ollmcp/config.json', Path.home() / '.config' / 'ollmcp' / 'config.json'),
+            ('~/.ollmcp/config.json', Path.home() / '.ollmcp' / 'config.json'),
+            ('./config/config.json', Path('./config/config.json')),
+        ]
+        for desc, path in default_locations:
+            config_paths_checked.append((desc, str(path), path.exists()))
+
+    # Print all checked paths
+    print("\nConfiguration paths checked:")
+    for desc, path, exists in config_paths_checked:
+        status = "✓" if exists else "✗"
+        print(f"  {status} {desc}: {path}")
+
+    if not config_loaded and config_paths_checked:
+        print("\n⚠️  No configuration file loaded. Using defaults.")
+        print("   To configure MCP servers, create a config.json file at one of the above locations.")
+
+    print("="*70 + "\n")
 
     # Set global config with Ollama host, config directory, and loaded settings
     set_global_config(global_config)

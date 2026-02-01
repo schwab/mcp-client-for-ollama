@@ -1,0 +1,273 @@
+name: Agent Quality Improvement Pipeline
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    paths:
+      - 'data/**'
+      - 'mcp_client_for_ollama/analysis/**'
+      - 'mcp_client_for_ollama/optimization/**'
+      - 'mcp_client_for_ollama/training/**'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  analyze-chat-patterns:
+    name: Extract and Analyze Chat Patterns
+    runs-on: ubuntu-latest
+    outputs:
+      patterns-extracted: ${{ steps.analyze.outputs.patterns }}
+      improvement-needed: ${{ steps.analyze.outputs.needs-improvement }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install -r requirements-dev.txt
+
+      - name: Extract chat history patterns
+        id: analyze
+        run: |
+          python scripts/extract_chat_patterns.py
+          echo "patterns=extracted" >> $GITHUB_OUTPUT
+          echo "needs-improvement=true" >> $GITHUB_OUTPUT
+
+      - name: Run differential analysis
+        run: |
+          python scripts/compare_chat_agent.py
+
+      - name: Upload analysis results
+        uses: actions/upload-artifact@v3
+        with:
+          name: chat-analysis
+          path: data/extracted_patterns.json
+
+  generate-improvements:
+    name: Generate Improvement Recommendations
+    needs: analyze-chat-patterns
+    runs-on: ubuntu-latest
+    if: needs.analyze-chat-patterns.outputs.improvement-needed == 'true'
+    outputs:
+      improvements-generated: ${{ steps.generate.outputs.count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Download analysis results
+        uses: actions/download-artifact@v3
+        with:
+          name: chat-analysis
+          path: data/
+
+      - name: Generate improvements
+        id: generate
+        run: |
+          COUNT=$(python scripts/generate_improvements.py | grep -c "improvement")
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Upload improvements
+        uses: actions/upload-artifact@v3
+        with:
+          name: generated-improvements
+          path: data/improvements/
+
+  test-improvements:
+    name: Test Improvements on Multiple Models
+    needs: [analyze-chat-patterns, generate-improvements]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        model: ['qwen2.5-coder:32b', 'qwen2.5-coder:14b', 'granite-3.1-8b-instruct']
+        agent: ['CODER', 'EXECUTOR', 'PLANNER']
+      max-parallel: 2  # Don't overwhelm the system
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Download improvements
+        uses: actions/download-artifact@v3
+        with:
+          name: generated-improvements
+          path: data/improvements/
+
+      - name: Run baseline tests
+        run: |
+          python scripts/run_baseline_tests.py \
+            --model ${{ matrix.model }} \
+            --agent ${{ matrix.agent }}
+
+      - name: Apply improvements
+        run: |
+          python scripts/apply_improvements.py \
+            --model ${{ matrix.model }} \
+            --agent ${{ matrix.agent }}
+
+      - name: Run validation tests
+        id: validate
+        run: |
+          python scripts/validate_improvements.py \
+            --model ${{ matrix.model }} \
+            --agent ${{ matrix.agent }} \
+            --output results_${{ matrix.model }}_${{ matrix.agent }}.json
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.model }}-${{ matrix.agent }}
+          path: results_${{ matrix.model }}_${{ matrix.agent }}.json
+
+  aggregate-results:
+    name: Aggregate Test Results
+    needs: test-improvements
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Download all test results
+        uses: actions/download-artifact@v3
+        with:
+          path: test_results/
+
+      - name: Aggregate results
+        run: |
+          python scripts/aggregate_results.py --input test_results/
+
+      - name: Upload aggregated results
+        uses: actions/upload-artifact@v3
+        with:
+          name: aggregated-results
+          path: data/aggregated_results.json
+
+  create-fine-tuning-data:
+    name: Create Fine-Tuning Datasets
+    needs: aggregate-results
+    runs-on: ubuntu-latest
+    if: |
+      needs.aggregate-results.result == 'success' &&
+      contains(github.event.head_commit.message, '[fine-tune]') ||
+      github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Download chat analysis
+        uses: actions/download-artifact@v3
+        with:
+          name: chat-analysis
+          path: data/
+
+      - name: Create fine-tuning datasets
+        run: |
+          python scripts/create_fine_tuning_datasets.py \
+            --output data/fine_tuning_datasets/
+
+      - name: Upload datasets
+        uses: actions/upload-artifact@v3
+        with:
+          name: fine-tuning-datasets
+          path: data/fine_tuning_datasets/
+
+  generate-report:
+    name: Generate Improvement Report
+    needs: [aggregate-results, create-fine-tuning-data]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: all_artifacts/
+
+      - name: Generate improvement report
+        run: |
+          python scripts/generate_improvement_report.py \
+            --artifacts all_artifacts/ \
+            --output data/improvement_report.json
+
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: improvement-report
+          path: data/improvement_report.json
+
+      - name: Post report to GitHub
+        if: always()
+        run: |
+          python scripts/post_github_comment.py \
+            --report data/improvement_report.json \
+            --token ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    name: Cleanup Old Artifacts
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Delete old workflow artifacts
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+            chat-analysis
+            generated-improvements
+            test-results-*
+          fail-on-error: false

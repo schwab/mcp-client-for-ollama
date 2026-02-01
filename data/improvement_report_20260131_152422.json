@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-01-31T15:24:22.987562",
+  "summary": {
+    "overall_progress": "Reduced chat-agent gap by 60.0%",
+    "claude_reduction_potential": "Estimated 0.0% Claude usage reduction",
+    "models_analyzed": 0,
+    "agents_tested": 5,
+    "improvement_cycles": 10,
+    "models_improved": 2,
+    "fine_tuning_initiated": 3
+  },
+  "by_model": {
+    "qwen2.5-coder:32b": {
+      "baseline_score": 65.0,
+      "current_score": 65.0,
+      "total_improvement": 0.0,
+      "improvement_percentage": 0.0,
+      "cycles": 1,
+      "last_updated": 65.0
+    },
+    "qwen2.5-coder:14b": {
+      "baseline_score": 65.0,
+      "current_score": 65.0,
+      "total_improvement": 0.0,
+      "improvement_percentage": 0.0,
+      "cycles": 1,
+      "last_updated": 65.0
+    }
+  },
+  "by_agent": {
+    "CODER": {
+      "success_rate": 75,
+      "improvement": 15
+    },
+    "EXECUTOR": {
+      "success_rate": 70,
+      "improvement": 10
+    },
+    "PLANNER": {
+      "success_rate": 65,
+      "improvement": 8
+    },
+    "DEBUGGER": {
+      "success_rate": 68,
+      "improvement": 12
+    },
+    "READER": {
+      "success_rate": 80,
+      "improvement": 5
+    }
+  },
+  "chat_knowledge_transferred": {
+    "total_patterns_identified": 39,
+    "by_type": {
+      "command_execution": 19,
+      "code_generation": 0,
+      "tool_selection": 1,
+      "parameter_formatting": 3,
+      "system_interaction": 3,
+      "unknown": 13
+    },
+    "top_models": [],
+    "success_rates": {}
+  },
+  "fine_tuning_progress": {
+    "total_jobs": 3,
+    "successful_jobs": 3,
+    "success_rate": 100.0,
+    "average_improvement": 25.0,
+    "models_fine_tuned": [
+      "qwen2.5-coder:32b"
+    ],
+    "weaknesses_addressed": [
+      "reasoning",
+      "tool_calling",
+      "formatting"
+    ]
+  },
+  "next_priorities": [
+    "Focus on tool-calling improvements (largest gap)",
+    "Apply more aggressive optimization strategies",
+    "Replicate qwen2.5-coder:32b's success pattern to other models"
+  ],
+  "recommendations": [
+    "Increase focus on tool-calling and parameter formatting improvements.",
+    "Extract more examples from chat for knowledge transfer."
+  ]
+}

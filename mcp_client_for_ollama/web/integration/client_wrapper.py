@@ -53,6 +53,10 @@ class WebMCPClient:
         self._mcp_client = None  # Real MCP client for tool management
         self._tools_cache = None  # Cache tools list
 
+        # Initialize tool state persistence
+        from mcp_client_for_ollama.config.tool_persistence import ToolStatePersistence
+        self._tool_persistence = ToolStatePersistence(config_dir=self.config_dir)
+
     def _get_ollama_client(self):
         """Get or create ollama client in current event loop"""
         # Always create a new client to ensure it's in the current event loop
@@ -128,7 +132,7 @@ class WebMCPClient:
         return True
 
     async def _load_tools(self):
-        """Load tools from MCP client's tool manager"""
+        """Load tools from MCP client's tool manager and apply persistent enabled states"""
         if not self._mcp_client or not hasattr(self._mcp_client, 'tool_manager'):
             print("WARNING: No MCP client or tool_manager available")
             self._tools_cache = []
@@ -137,17 +141,42 @@ class WebMCPClient:
         tool_manager = self._mcp_client.tool_manager
         print(f"Loading tools from tool_manager, available_tools: {len(tool_manager.available_tools)}")
 
+        # Load disabled tools and servers from config
+        disabled_tools = self._tool_persistence.get_disabled_tools()
+        disabled_servers = self._tool_persistence.get_disabled_servers()
+
         # Get all available tools with their status
         tools_list = []
         for tool in tool_manager.available_tools:
+            tool_name = tool.name
+
+            # Determine server name
+            if '.' in tool_name:
+                server_name = tool_name.split('.')[0]
+            else:
+                server_name = 'builtin'
+
+            # Determine if tool should be enabled
+            # Tool is disabled if:
+            # 1. The specific tool is in disabled list, OR
+            # 2. The tool's server is in disabled servers list
+            enabled = (tool_name not in disabled_tools and
+                      server_name not in disabled_servers)
+
             tools_list.append({
-                "name": tool.name,
+                "name": tool_name,
                 "description": tool.description or "No description",
-                "enabled": tool_manager.enabled_tools.get(tool.name, False)
+                "enabled": enabled
             })
 
         self._tools_cache = tools_list
         print(f"Loaded {len(tools_list)} tools: {[t['name'] for t in tools_list]}")
+
+        # Log disabled tools/servers if any
+        if disabled_tools:
+            print(f"Disabled tools from config: {sorted(disabled_tools)}")
+        if disabled_servers:
+            print(f"Disabled servers from config: {sorted(disabled_servers)}")
 
     async def send_message_streaming(self, message: str, status_queue=None) -> AsyncIterator[str]:
         """Send message and yield streaming response chunks
@@ -353,15 +382,35 @@ class WebMCPClient:
         return self._tools_cache
 
     def set_tool_enabled(self, tool_name: str, enabled: bool) -> bool:
-        """Enable or disable a tool"""
-        # TODO: Implement config persistence for tool enabled/disabled state
-        # Since we create fresh MCP clients for each request, we need to save
-        # the tool state to config.json and load it when creating clients
-        raise NotImplementedError(
-            "Tool enable/disable persistence not yet implemented. "
-            "This requires saving to config.json which is tracked in bug: "
-            "'Tool selections not saving to config for the ui'"
-        )
+        """Enable or disable a tool and persist to config
+
+        Args:
+            tool_name: Fully qualified tool name (e.g., 'filesystem.write')
+            enabled: Whether to enable or disable the tool
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Update tool in cache
+        tool_found = False
+        for tool in self._tools_cache or []:
+            if tool.get('name') == tool_name:
+                tool['enabled'] = enabled
+                tool_found = True
+                break
+
+        if not tool_found:
+            return False
+
+        # Persist to config.json
+        success = self._tool_persistence.set_tool_enabled(tool_name, enabled)
+
+        if success:
+            print(f"Tool {tool_name} {'enabled' if enabled else 'disabled'} and saved to config")
+        else:
+            print(f"Warning: Failed to persist tool state for {tool_name}")
+
+        return success
 
     def get_enabled_tools(self) -> List[Dict]:
         """Get list of enabled tools"""
@@ -398,6 +447,103 @@ class WebMCPClient:
                 if server_name != 'builtin':
                     servers.add(server_name)
         return sorted(list(servers))
+
+    def get_servers_info(self) -> List[Dict]:
+        """Get detailed information about all MCP servers"""
+        servers_info = {}
+
+        # Group tools by server
+        for tool in self._tools_cache or []:
+            tool_name = tool.get('name', '')
+            if '.' in tool_name:
+                server_name = tool_name.split('.')[0]
+            else:
+                server_name = 'builtin'
+
+            if server_name not in servers_info:
+                servers_info[server_name] = {
+                    'name': server_name,
+                    'tool_count': 0,
+                    'enabled_count': 0,
+                    'disabled_count': 0,
+                    'enabled': True  # Default to enabled
+                }
+
+            servers_info[server_name]['tool_count'] += 1
+            if tool.get('enabled', False):
+                servers_info[server_name]['enabled_count'] += 1
+            else:
+                servers_info[server_name]['disabled_count'] += 1
+
+        # Determine if server is enabled (all tools enabled)
+        for server_name, info in servers_info.items():
+            info['enabled'] = info['enabled_count'] == info['tool_count']
+            info['partial'] = (info['enabled_count'] > 0 and
+                             info['disabled_count'] > 0)
+
+        return sorted(servers_info.values(), key=lambda x: (x['name'] != 'builtin', x['name']))
+
+    def get_tools_by_server(self) -> Dict[str, List[Dict]]:
+        """Get tools grouped by server"""
+        groups = {}
+
+        for tool in self._tools_cache or []:
+            tool_name = tool.get('name', '')
+            if '.' in tool_name:
+                server_name = tool_name.split('.')[0]
+            else:
+                server_name = 'builtin'
+
+            if server_name not in groups:
+                groups[server_name] = []
+
+            groups[server_name].append(tool)
+
+        return groups
+
+    async def set_server_enabled(self, server_name: str, enabled: bool) -> bool:
+        """Enable or disable all tools from an MCP server and persist to config
+
+        Args:
+            server_name: Name of the server (e.g., 'filesystem', 'obsidian')
+            enabled: Whether to enable or disable all tools from this server
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Find all tools for this server
+        server_tools = []
+        tool_names = []
+
+        for tool in self._tools_cache or []:
+            tool_name = tool.get('name', '')
+            if '.' in tool_name:
+                tool_server = tool_name.split('.')[0]
+            else:
+                tool_server = 'builtin'
+
+            if tool_server == server_name:
+                server_tools.append(tool)
+                tool_names.append(tool_name)
+
+        if not server_tools:
+            return False
+
+        # Update enabled status for all tools from this server in cache
+        for tool in server_tools:
+            tool['enabled'] = enabled
+
+        # Persist to config.json
+        # We save the server-level state, which is more efficient than individual tools
+        success = self._tool_persistence.set_server_enabled(server_name, enabled)
+
+        if success:
+            print(f"Server {server_name} {'enabled' if enabled else 'disabled'} "
+                  f"({len(server_tools)} tools) and saved to config")
+        else:
+            print(f"Warning: Failed to persist server state for {server_name}")
+
+        return success
 
     async def execute_tool(self, tool_name: str, arguments: dict) -> str:
         """

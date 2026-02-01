@@ -1,0 +1,61 @@
+{
+  "remote_gpu_server": {
+    "enabled": true,
+    "host": "192.168.1.240",
+    "user": "mcstar",
+    "port": 22,
+    "identity_file": "~/.ssh/id_rsa",
+    "remote_data_dir": "/mnt/12_tb/ollama_data/finetune",
+    "remote_models_dir": "/mnt/12_tb/ollama_data/models",
+    "description": "GPU server for fine-tuning Ollama models"
+  },
+  "fine_tuning": {
+    "enabled": true,
+    "method": "ollama",
+    "methods": {
+      "ollama": {
+        "description": "Use ollama fine-tune command",
+        "enabled": true
+      },
+      "script": {
+        "description": "Use custom Python script",
+        "enabled": false,
+        "script_path": "./scripts/fine_tune_ollama.py"
+      },
+      "transformers": {
+        "description": "Use HuggingFace transformers",
+        "enabled": false,
+        "script_path": "./scripts/fine_tune_transformers.py"
+      }
+    },
+    "defaults": {
+      "learning_rate": 0.00002,
+      "batch_size": 16,
+      "num_epochs": 10,
+      "warmup_steps": 100,
+      "weight_decay": 0.01,
+      "save_steps": 100
+    },
+    "model_specific": {
+      "qwen2.5-coder:32b": {
+        "learning_rate": 0.00002,
+        "batch_size": 8,
+        "num_epochs": 3
+      },
+      "qwen2.5-coder:14b": {
+        "learning_rate": 0.00003,
+        "batch_size": 16,
+        "num_epochs": 3
+      },
+      "granite-3.1-8b-instruct": {
+        "learning_rate": 0.00005,
+        "batch_size": 32,
+        "num_epochs": 2
+      }
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "./logs/remote_finetune.log"
+  }
+}

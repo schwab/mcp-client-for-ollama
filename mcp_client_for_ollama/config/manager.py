@@ -333,4 +333,15 @@ class ConfigManager:
         if "memory" in config_data and isinstance(config_data["memory"], dict):
             validated["memory"] = config_data["memory"]
 
+        # Preserve model intelligence settings
+        if "model_intelligence" in config_data and isinstance(config_data["model_intelligence"], dict):
+            validated["model_intelligence"] = config_data["model_intelligence"]
+
+        # Preserve disabled tools/servers (tool persistence)
+        if "disabledTools" in config_data and isinstance(config_data["disabledTools"], list):
+            validated["disabledTools"] = config_data["disabledTools"]
+
+        if "disabledServers" in config_data and isinstance(config_data["disabledServers"], list):
+            validated["disabledServers"] = config_data["disabledServers"]
+
         return validated

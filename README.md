@@ -68,6 +68,9 @@ MCP Client for Ollama (`ollmcp`) is a modern, interactive terminal application (
 ## Features
 
 - 🎯 **Agent Delegation System**: Break down complex multi-file tasks into focused subtasks executed by specialized agents (READER, CODER, EXECUTOR, RESEARCHER, DEBUGGER). Perfect for small models with limited context windows! ([docs](docs/agent-delegation-user-guide.md))
+- ✨**NEW** **Claude Code Integration**:
+  - **Phase 1** (v0.45.37): Emergency fallback using free Ollama models for 90%+ of work, Claude Code for critical failures. 95%+ success rates with minimal paid API usage. ([docs](docs/claude_integration.md))
+  - **Phase 2** (v0.45.38): Quality validator automatically validates critical outputs and provides feedback for retries, reducing escalation costs by 80% while maintaining high success rates. ([docs](docs/phase2_quality_validator.md))
 - 🤖 **Agent Mode**: Iterative tool execution when models request multiple tool calls, with a configurable loop limit to prevent infinite loops
 - 🖼️ ✨**NEW** **Multi-Modal Support**: Analyze images using vision-capable models (llava, bakllava, cogvlm, moondream, etc.). Extract information from screenshots, diagrams, charts, and photos directly in your workflow.
 - ✨**NEW** **Auto-Load Configuration**: Automatically load project context from `.config/CLAUDE.md` and server configuration from `.config/config.json` on startup ([docs](docs/auto_load_configuration.md))

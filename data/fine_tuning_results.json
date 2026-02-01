@@ -1,0 +1,41 @@
+[
+  {
+    "job_id": "qwen2.5-coder:32b__tool_calling__20260131161243",
+    "model_name": "qwen2.5-coder:32b",
+    "weakness": "tool_calling",
+    "success": true,
+    "original_score": 65.0,
+    "fine_tuned_score": 84.5,
+    "improvement": 19.5,
+    "improvement_percentage": 30.0,
+    "new_model_name": "qwen2.5-coder:32b_ft_too",
+    "training_loss": 0.789,
+    "completed_at": "2026-01-31T16:12:43.371509"
+  },
+  {
+    "job_id": "qwen2.5-coder:32b__formatting__20260131161243",
+    "model_name": "qwen2.5-coder:32b",
+    "weakness": "formatting",
+    "success": true,
+    "original_score": 65.0,
+    "fine_tuned_score": 81.25,
+    "improvement": 16.25,
+    "improvement_percentage": 25.0,
+    "new_model_name": "qwen2.5-coder:32b_ft_for",
+    "training_loss": 0.6309,
+    "completed_at": "2026-01-31T16:12:43.373362"
+  },
+  {
+    "job_id": "qwen2.5-coder:32b__reasoning__20260131161243",
+    "model_name": "qwen2.5-coder:32b",
+    "weakness": "reasoning",
+    "success": true,
+    "original_score": 65.0,
+    "fine_tuned_score": 78.0,
+    "improvement": 13.0,
+    "improvement_percentage": 20.0,
+    "new_model_name": "qwen2.5-coder:32b_ft_rea",
+    "training_loss": 0.6115,
+    "completed_at": "2026-01-31T16:12:43.375991"
+  }
+]

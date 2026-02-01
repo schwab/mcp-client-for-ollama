@@ -1,0 +1,65 @@
+# Model Intelligence Configuration Example
+# Copy this to model_intelligence.yaml and customize as needed
+
+model_intelligence:
+  # Enable/disable intelligent model selection
+  enabled: true
+
+  # Path to os_llm_testing_suite results directory
+  # This should contain JSON report files with model performance data
+  test_suite_path: "~/project/os_llm_testing_suite/results"
+
+  # Selection strategy
+  selection:
+    strategy: "intelligent"  # Options: "intelligent", "manual", "round_robin"
+    use_fallbacks: true      # Try fallback models if primary fails
+    max_fallbacks: 2         # Maximum number of fallbacks to try
+
+  # Optimization settings
+  optimization:
+    enabled: true            # Enable automatic optimization
+    auto_adjust: false       # Automatically switch models based on performance (future)
+    speed_priority: 0.3      # 0.0 = quality only, 1.0 = speed only
+
+  # Monitoring and alerting (future phases)
+  monitoring:
+    enabled: false
+    alert_threshold: 0.7     # Alert if success rate drops below this
+
+  # Testing integration (future phases)
+  testing:
+    auto_test_new_models: false
+    periodic_retest: false
+    retest_interval_hours: 168  # 1 week
+
+  # Machine learning enhancement (future phases)
+  learning:
+    enabled: false
+    min_history: 100
+    retrain_interval: 50
+
+# Agent-specific requirements (optional overrides)
+# These override the defaults defined in performance_store.py
+agent_requirements:
+  PLANNER:
+    min_score: 75.0
+    min_tier: 2
+    critical_dimensions:
+      - planning
+      - tool_selection
+    important_dimensions:
+      - context
+      - parameters
+
+  CODER:
+    min_score: 80.0
+    min_tier: 2
+    critical_dimensions:
+      - parameters
+      - planning
+      - tool_selection
+    important_dimensions:
+      - context
+      - error_handling
+
+  # Add more agent-specific requirements as needed...

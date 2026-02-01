@@ -432,7 +432,21 @@ class ServerConnector:
     async def disconnect_all_servers(self):
         """Disconnect from all servers and reset state"""
         # Close all existing connections via exit stack
-        await self.exit_stack.aclose()
+        # Suppress errors related to SSE client async generator cleanup
+        # These occur when the cancel scope is exited in a different task
+        try:
+            await self.exit_stack.aclose()
+        except RuntimeError as e:
+            if "Attempted to exit cancel scope in a different task" in str(e):
+                # This is a known issue with anyio task groups in SSE client cleanup
+                # Safe to suppress as the connections are being closed anyway
+                pass
+            else:
+                raise
+        except Exception:
+            # Suppress other cleanup errors during disconnect
+            # The important thing is that we're disconnecting
+            pass
 
         # Create a new exit stack for future connections
         self.exit_stack = AsyncExitStack()

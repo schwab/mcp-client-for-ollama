@@ -1,6 +1,6 @@
 [project]
 name = "mcp-client-for-ollama"
-version = "0.45.11"
+version = "0.45.38"
 description = "MCP Client for Ollama - A client for connecting to Model Context Protocol servers using Ollama"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,11 @@ Issues = "https://github.com/jonigl/mcp-client-for-ollama/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mcp_client_for_ollama"]
+
+[project.optional-dependencies]
+claude = [
+    "anthropic>=0.40.0",
+]
 
 [dependency-groups]
 dev = [

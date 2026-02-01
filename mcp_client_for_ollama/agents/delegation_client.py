@@ -7,6 +7,7 @@ the delegation workflow: planning, task execution, and result aggregation.
 
 import asyncio
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -28,6 +29,7 @@ from ..memory import (
     BootRitual,
     MemoryTools,
 )
+from ..models import PerformanceStore, ModelSelector, SelectionContext
 
 
 class DelegationClient:
@@ -122,6 +124,53 @@ class DelegationClient:
             self.memory_initializer = None
             self.memory_tools = None
             self.current_memory = None
+
+        # Initialize model intelligence system (Phase 1)
+        intelligence_config = config.get('model_intelligence', {})
+        self.intelligence_enabled = intelligence_config.get('enabled', False)
+        if self.intelligence_enabled:
+            test_suite_path = intelligence_config.get('test_suite_path', '~/project/os_llm_testing_suite/results')
+            self.performance_store = PerformanceStore(test_suite_path=test_suite_path)
+            self.model_selector = ModelSelector(self.performance_store)
+            self.console.print(f"[dim green]✓ Model intelligence enabled ({len(self.performance_store.models)} models loaded)[/dim green]")
+        else:
+            self.performance_store = None
+            self.model_selector = None
+
+        # Initialize Claude provider (Phase 1: Emergency Fallback)
+        from ..providers import ClaudeProvider
+        claude_config = config.get('claude_integration', {})
+        self.claude_enabled = claude_config.get('enabled', False)
+        if self.claude_enabled:
+            self.claude_provider = ClaudeProvider(
+                config=claude_config,
+                console=self.console
+            )
+            model_name = claude_config.get('model', 'claude-3-5-sonnet-20241022')
+            model_display = {
+                'claude-opus-4-5-20250514': 'Opus 4.5',
+                'claude-opus-4-20250514': 'Opus 4',
+                'claude-3-5-sonnet-20241022': 'Sonnet 3.5',
+                'claude-3-5-haiku-20241022': 'Haiku 3.5',
+            }.get(model_name, model_name)
+            escalation_threshold = claude_config.get('escalation_threshold', 2)
+            self.console.print(f"[dim green]✓ Claude fallback enabled (model: {model_display}, threshold: {escalation_threshold} failures)[/dim green]")
+
+            # Initialize Phase 2: Quality Validator if configured
+            validation_config = claude_config.get('validation', {})
+            if validation_config.get('enabled', False):
+                from ..providers import ClaudeQualityValidator
+                self.quality_validator = ClaudeQualityValidator(self.claude_provider)
+                self.validation_enabled = True
+                self.validation_tasks = validation_config.get('validate_tasks', ['CODER', 'FILE_EXECUTOR'])
+                self.console.print(f"[dim green]✓ Quality validation enabled for: {', '.join(self.validation_tasks)}[/dim green]")
+            else:
+                self.quality_validator = None
+                self.validation_enabled = False
+        else:
+            self.claude_provider = None
+            self.quality_validator = None
+            self.validation_enabled = False
 
     @staticmethod
     def _load_shared_prompt(filename: str) -> str:
@@ -1165,27 +1214,177 @@ Please create a NEW plan that fixes this issue. Pay careful attention to the MAN
             messages = self._build_task_context(task, agent_config, agent_tools)
 
             # Execute with tool support enabled
-            # Use agent-specific model if configured, otherwise use endpoint model
-            model_to_use = agent_config.model or endpoint.model
+            # Use intelligent model selection if enabled, otherwise use configured model
+            model_to_use, fallback_models = self._select_model_for_task(task, agent_config, endpoint)
 
             # Display execution with model info and emoji
             agent_emoji = agent_config.emoji if hasattr(agent_config, 'emoji') and agent_config.emoji else ""
             agent_display = f"{agent_emoji} {task.agent_type}" if agent_emoji else task.agent_type
-            self.console.print(f"\n[cyan]▶️  Executing {task.id} ({agent_display}) <{model_to_use}>[/cyan]")
+            intelligence_indicator = "🧠 " if self.intelligence_enabled else ""
+            self.console.print(f"\n[cyan]▶️  Executing {task.id} ({agent_display}) <{intelligence_indicator}{model_to_use}>[/cyan]")
             self.console.print(f"[dim]   {task.description}[/dim]")
+            if fallback_models:
+                self.console.print(f"[dim]   Fallbacks: {', '.join(fallback_models)}[/dim]")
 
-            response_text = await self._execute_with_tools(
-                messages=messages,
-                model=model_to_use,
-                temperature=agent_config.temperature,
-                tools=agent_tools,
-                loop_limit=agent_config.loop_limit,
-                task_id=task.id,
-                agent_type=task.agent_type
-            )
+            # Track failed models for fallback logic
+            failed_models = []
+            task_success = False
+
+            # Try primary model and fallbacks if needed
+            models_to_try = [model_to_use] + fallback_models
+            last_error = None
+
+            for attempt_model in models_to_try:
+                try:
+                    response_text = await self._execute_with_tools(
+                        messages=messages,
+                        model=attempt_model,
+                        temperature=agent_config.temperature,
+                        tools=agent_tools,
+                        loop_limit=agent_config.loop_limit,
+                        task_id=task.id,
+                        agent_type=task.agent_type
+                    )
+
+                    # Validate response is not empty
+                    if not response_text or not response_text.strip():
+                        error_msg = f"Agent {task.agent_type} completed with empty response. Model {attempt_model} may be too small or not properly configured for tool calling."
+                        self.console.print(f"[yellow]⚠️  {error_msg}[/yellow]")
+                        # Treat as failure and try fallback
+                        raise ValueError(error_msg)
+
+                    # Validate response is not ONLY thinking text
+                    response_stripped = response_text.strip()
+                    if response_stripped.startswith("<think>") and response_stripped.endswith("</think>"):
+                        # Response is ONLY thinking text, no actual work done
+                        error_msg = f"Agent {task.agent_type} completed with only thinking text (no actions taken). Model {attempt_model} did not perform the requested work."
+                        self.console.print(f"[yellow]⚠️  {error_msg}[/yellow]")
+                        raise ValueError(error_msg)
+
+                    # Check for thinking-only responses that might not have closing tag
+                    if response_stripped.startswith("<think>") and len(response_stripped) < 5000:
+                        # Check if there's any content after </think>
+                        if "</think>" in response_stripped:
+                            after_think = response_stripped.split("</think>", 1)[1].strip()
+                            if not after_think or len(after_think) < 50:
+                                error_msg = f"Agent {task.agent_type} completed with mostly thinking text and minimal action. Model {attempt_model} may not be following instructions."
+                                self.console.print(f"[yellow]⚠️  {error_msg}[/yellow]")
+                                raise ValueError(error_msg)
+
+                    # Detect corrupted/garbage output (starts with non-ASCII, contains garbled text)
+                    if response_stripped and ord(response_stripped[0]) > 127:
+                        # Response starts with non-ASCII character (likely corruption or language mismatch)
+                        error_msg = f"Agent {task.agent_type} produced corrupted output (starts with non-ASCII character). Model {attempt_model} may be confused or malfunctioning."
+                        self.console.print(f"[yellow]⚠️  {error_msg}[/yellow]")
+                        raise ValueError(error_msg)
+
+                    # Phase 2: Validate output if enabled (before marking complete)
+                    if self.validation_enabled and task.agent_type in self.validation_tasks:
+                        self.console.print(f"[cyan]🔍 Validating {task.agent_type} output...[/cyan]")
+                        is_valid, feedback = await self.quality_validator.validate_output(
+                            task.agent_type,
+                            task.description,
+                            response_text
+                        )
+
+                        if not is_valid:
+                            # Validation failed - provide feedback for retry
+                            self.console.print(f"[yellow]⚠️  Validation failed: {feedback}[/yellow]")
+                            extracted_feedback = self.quality_validator.extract_feedback(feedback)
+
+                            # Retry with feedback (treat as error to continue loop)
+                            error_msg = f"Output validation failed. Feedback: {extracted_feedback}"
+                            raise ValueError(error_msg)
+                        else:
+                            # Validation passed
+                            self.console.print(f"[green]✓ Output validated successfully[/green]")
+
+                    # Success! Report to intelligence system
+                    if self.intelligence_enabled and self.model_selector:
+                        self.model_selector.report_success(attempt_model, task.agent_type)
+
+                    task_success = True
+                    break  # Success, exit loop
+
+                except Exception as e:
+                    last_error = e
+                    failed_models.append(attempt_model)
+
+                    # Report failure to intelligence system
+                    if self.intelligence_enabled and self.model_selector:
+                        self.model_selector.report_failure(attempt_model, task.agent_type, str(e))
+
+                    # Try next fallback if available
+                    if attempt_model != models_to_try[-1]:
+                        self.console.print(f"[yellow]⚠️  {attempt_model} failed, trying fallback...[/yellow]")
+                        continue
+                    else:
+                        # No more Ollama fallbacks available
+                        # Try Claude escalation if enabled (Phase 1: Emergency Fallback)
+                        if self.claude_enabled and hasattr(self, 'claude_provider'):
+                            should_use, reason = self.claude_provider.should_use_claude(
+                                task,
+                                ollama_failures=len(failed_models)
+                            )
+
+                            if should_use:
+                                try:
+                                    # Build context for Claude
+                                    context = {
+                                        'working_directory': str(self.working_directory),
+                                        'previous_attempts': [
+                                            {
+                                                'model': model,
+                                                'error': str(last_error)
+                                            } for model in failed_models
+                                        ],
+                                        'agent_definitions': {
+                                            task.agent_type: {
+                                                'system_prompt': agent_config.system_prompt
+                                            }
+                                        }
+                                    }
+
+                                    # Execute with Claude
+                                    response_text = await self.claude_provider.execute_task(task, context, reason)
+
+                                    # Success with Claude!
+                                    task_success = True
+                                    task.mark_completed(response_text)
+
+                                    # Log task completion with Claude
+                                    duration_ms = (time.time() - start_time) * 1000
+                                    self.trace_logger.log_task_end(
+                                        task_id=task.id,
+                                        agent_type=task.agent_type,
+                                        status="completed",
+                                        result=response_text,
+                                        duration_ms=duration_ms,
+                                        metadata={"escalated_to_claude": True, "reason": reason}
+                                    )
+
+                                    # Display result
+                                    self.task_output.print_task_result(
+                                        task_id=task.id,
+                                        agent_type=task.agent_type,
+                                        description=task.description,
+                                        result=response_text,
+                                        status="completed"
+                                    )
+
+                                    # Exit successfully without raising
+                                    return
+
+                                except Exception as claude_error:
+                                    self.console.print(f"[red]✗ Claude escalation also failed: {claude_error}[/red]")
+                                    # Fall through to raise original Ollama error
+
+                        # No Claude available or Claude also failed, raise original error
+                        raise
 
             # Store result
-            task.mark_completed(response_text)
+            if task_success:
+                task.mark_completed(response_text)
 
             # Log task completion
             duration_ms = (time.time() - start_time) * 1000
@@ -1226,6 +1425,99 @@ Please create a NEW plan that fixes this issue. Pay careful attention to the MAN
             success = task.status == TaskStatus.COMPLETED
             await self.model_pool.release(endpoint, success=success)
 
+    def _select_model_for_task(self, task: Task, agent_config: AgentConfig, endpoint) -> Tuple[str, List[str]]:
+        """
+        Select the optimal model for a task using intelligent selection if enabled.
+
+        Args:
+            task: Task to execute
+            agent_config: Agent configuration
+            endpoint: Model pool endpoint
+
+        Returns:
+            Tuple of (primary_model, fallback_models)
+        """
+        # If intelligent selection is disabled, use configured model
+        if not self.intelligence_enabled or not self.model_selector:
+            model = agent_config.model or endpoint.model
+            return model, []
+
+        # Estimate task complexity (simple heuristic)
+        complexity = self._estimate_task_complexity(task)
+
+        # Get available models from pool
+        available_models = []
+        try:
+            # Try to get available models from Ollama
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in an async context, but can't await here
+                # Just use models from pool config
+                available_models = [ep.model for ep in self.model_pool.endpoints]
+            else:
+                # Sync context, can get models
+                available_models = [ep.model for ep in self.model_pool.endpoints]
+        except Exception:
+            # Fallback: use models from pool config
+            available_models = [ep.model for ep in self.model_pool.endpoints]
+
+        # Create selection context
+        context = SelectionContext(
+            agent_type=task.agent_type,
+            task_complexity=complexity,
+            previous_failures=getattr(task, 'failed_models', None)
+        )
+
+        # Use intelligent selection
+        try:
+            primary_model, fallback_models = self.model_selector.select_model(
+                context=context,
+                available_models=available_models if available_models else None
+            )
+            return primary_model, fallback_models
+        except Exception as e:
+            # Fallback to configured model on error
+            self.console.print(f"[yellow]Warning: Model selection failed ({e}), using configured model[/yellow]")
+            model = agent_config.model or endpoint.model
+            return model, []
+
+    def _estimate_task_complexity(self, task: Task) -> int:
+        """
+        Estimate task complexity tier (1-3) based on description and agent type.
+
+        Args:
+            task: Task to estimate
+
+        Returns:
+            Complexity tier (1=simple, 2=moderate, 3=complex)
+        """
+        description_lower = task.description.lower()
+
+        # Tier 3 indicators (complex multi-step)
+        tier3_keywords = [
+            'analyze', 'compare', 'synthesize', 'aggregate', 'coordinate',
+            'multiple', 'all', 'complex', 'comprehensive', 'refactor'
+        ]
+        if any(kw in description_lower for kw in tier3_keywords):
+            return 3
+
+        # Tier 2 indicators (moderate multi-step)
+        tier2_keywords = [
+            'implement', 'create', 'modify', 'update', 'debug',
+            'test', 'validate', 'generate', 'process'
+        ]
+        if any(kw in description_lower for kw in tier2_keywords):
+            return 2
+
+        # Agent types that typically need Tier 2+
+        complex_agents = ['PLANNER', 'CODER', 'DEBUGGER', 'AGGREGATOR']
+        if task.agent_type in complex_agents:
+            return 2
+
+        # Default: Tier 1 (simple)
+        return 1
+
     async def aggregate_results(self, original_query: str, tasks: List[Task]) -> str:
         """
         Aggregate results from all tasks into a final answer.
@@ -1248,16 +1540,20 @@ Please create a NEW plan that fixes this issue. Pay careful attention to the MAN
             return "No tasks completed successfully. Unable to provide a response."
 
         # SKIP AGGREGATION FOR ARTIFACTS - they should be returned verbatim
-        # Check if any task result contains an artifact
+        # Check if any task result contains artifacts and collect ALL of them
         import re
+        artifact_results = []
         for task in tasks:
             if task.status == TaskStatus.COMPLETED and task.result:
                 # Check for artifact pattern (supports both correct and malformed formats)
                 if re.search(r'```\s*artifact:\w+', task.result):
-                    # Artifact-generating agents (TOOL_FORM_AGENT, ARTIFACT_AGENT) should
-                    # have their output passed directly to the UI without synthesis
-                    self.console.print(f"[green]✓[/green] Artifact detected, skipping aggregation")
-                    return task.result
+                    artifact_results.append(task.result)
+
+        # If we found artifacts, return ALL of them concatenated
+        if artifact_results:
+            self.console.print(f"[green]✓[/green] {len(artifact_results)} artifact(s) detected, skipping aggregation")
+            # Concatenate all artifacts with double newlines for separation
+            return "\n\n".join(artifact_results)
 
         # If we have only one task, return its result directly (no need to synthesize)
         if len(successful_results) == 1:
@@ -1336,6 +1632,10 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
 
         # Build enhanced system prompt with shared components
         system_prompt_parts = [agent_config.system_prompt]
+
+        # Add current working directory context
+        current_dir = os.getcwd()
+        system_prompt_parts.append(f"\n\n# Working Directory\nYour current working directory is: {current_dir}")
 
         # Inject shared tool protocol (for all agents)
         tool_protocol = self._load_shared_prompt("tool_protocol.txt")
@@ -1492,6 +1792,7 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
         # Handle tool calls in a loop
         loop_count = 0
         pending_tool_calls = tool_calls
+        empty_response_count = 0
 
         # Build set of allowed tool names for validation
         allowed_tool_names = set(tool.name for tool in tools) if tools else set()
@@ -1550,6 +1851,17 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
                 show_metrics=False
             )
 
+            # Early exit if model produces repeated empty responses (indicates stuck/broken model)
+            if not response_text or not response_text.strip():
+                empty_response_count += 1
+                if empty_response_count >= 2:
+                    # Model is stuck producing empty responses - break to escalate to Claude
+                    tool_calls = None
+                    break
+            else:
+                # Reset counter on non-empty response
+                empty_response_count = 0
+
             # Log subsequent LLM call
             prompt_text = "\n".join([msg.get("content", "") for msg in messages])
             tool_names = [tc.function.name for tc in (tool_calls or [])]
@@ -1573,12 +1885,13 @@ Summary: {len(successful_results)} of {len(tasks)} tasks completed successfully.
 
             pending_tool_calls = tool_calls
 
-        # TOOL_FORM_AGENT FIX: Extract artifact from tool result if agent didn't output it correctly
+        # ARTIFACT EXTRACTION FIX: Extract artifact from tool result if agent didn't output it correctly
         # Small models (llama3.2) often:
         # 1. Describe the artifact instead of outputting it verbatim
         # 2. Output malformed artifacts with extra whitespace (e.g., ```\nartifact:type)
+        # Applies to TOOL_FORM_AGENT and ARTIFACT_AGENT
         import re
-        if agent_type == "TOOL_FORM_AGENT":
+        if agent_type in ["TOOL_FORM_AGENT", "ARTIFACT_AGENT"]:
             # Check if response has a correctly formatted artifact
             correct_artifact = re.search(r'```artifact:(\w+)\n([\s\S]*?)\n```', response_text)
 

@@ -23,16 +23,30 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/memory-system.md",
+                "file": "docs/Chat_To_Agent_Knowledge_Transfer.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "memory-system"
+              "title": "Chat_To_Agent_Knowledge_Transfer"
+            }
+          },
+          {
+            "id": "45a185a9a762bcdc",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/Chat_To_Agent_user_observations.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Chat_To_Agent_user_observations"
             }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -207,43 +221,43 @@
       "smart-connections:Smart Connections: Open random connection": false
     }
   },
-  "active": "fd6734c8ad7bab24",
+  "active": "c057e2c2e6eb7c6c",
   "lastOpenFiles": [
-    "dist/mcp_client_for_ollama-0.45.8-py3-none-any.whl",
-    "dist/mcp_client_for_ollama-0.45.8.tar.gz",
-    "docs/qa_bugs.md.tmp.1450747.1768231379882",
-    "mcp_client_for_ollama/client.py.tmp.1450747.1768230943021",
-    "mcp_client_for_ollama/web/api/tools.py.tmp.1450747.1768230896805",
-    "dist/mcp_client_for_ollama-0.45.7-py3-none-any.whl",
-    "dist/mcp_client_for_ollama-0.45.7.tar.gz",
-    "docs/qa_bugs.md.tmp.1450747.1768229048041",
-    "mcp_client_for_ollama/agents/delegation_client.py.tmp.1450747.1768228465766",
-    "dist/mcp_client_for_ollama-0.45.6-py3-none-any.whl",
-    "dist/mcp_client_for_ollama-0.45.6.tar.gz",
+    "docs/USING_FINETUNED_MODEL.md",
+    "docs/USING_FINETUNED_MODEL.md.tmp.50490.1769907375481",
+    "docs/QLORA_SUCCESS.md",
+    "docs/QLORA_SUCCESS.md.tmp.50490.1769907029129",
+    "mcp_client_for_ollama/training/remote_fine_tuner.py.tmp.50490.1769906935525",
+    "mcp_client_for_ollama/training/remote_fine_tuner.py.tmp.50490.1769906930955",
+    "mcp_client_for_ollama/training/remote_fine_tuner.py.tmp.50490.1769906923117",
+    "mcp_client_for_ollama/training/remote_fine_tuner.py.tmp.50490.1769906911327",
+    "docs/GPU_memory_issues.md",
+    "mcp_client_for_ollama/training/__pycache__/remote_fine_tuner.cpython-310.pyc.140229268607344",
+    "mcp_client_for_ollama/training/remote_fine_tuner.py.tmp.50490.1769905983616",
+    "docs/SSH_STABILITY_IMPROVEMENTS.md",
+    "docs/SSH_STABILITY_IMPROVEMENTS.md.tmp.50490.1769905809082",
+    "mcp_client_for_ollama/training/remote_fine_tuner.py.tmp.50490.1769905786628",
+    "docs/REMOTE_FINETUNING_COMPLETE_FIX.md",
+    "docs/FINETUNING_IMPLEMENTATION_FIX.md",
+    "docs/Fine_tuning_guidance.md",
+    "docs/REMOTE_FINETUNING_QUICK_START.md",
+    "docs/REMOTE_FINETUNING_CONFIG_FIX.md",
+    "docs/REMOTE_FINETUNING_GUIDE.md",
+    "docs/JSONL_VIEWER_GUIDE.md",
+    "docs/IMPLEMENTATION_COMPLETE.md",
+    "docs/QUICK_START_IMPROVEMENT_PIPELINE.md",
+    "docs/CHAT_TO_AGENT_IMPLEMENTATION.md",
+    "IMPLEMENTATION_COMPLETE.md",
+    "QUICK_START_IMPROVEMENT_PIPELINE.md",
+    "CHAT_TO_AGENT_IMPLEMENTATION.md",
+    "docs/Chat_To_Agent_Knowledge_Transfer.md",
+    "docs/Chat_To_Agent_user_observations.md",
+    "docs/memory-system.md",
     "docs/ARTIFACT_UI_IMPLEMENTATION.md",
     "docs/ARTIFACT_SYSTEM_FIXES.md",
     "docs/CHANGELOG.md",
     "docs/CHANGELOG_v0.44.0.md",
     "docs/CHANGELOG_v0.28.6.md",
-    "docs/CHANGELOG_v0.28.5.md",
-    "docs/CHANGELOG_v0.28.4.md",
-    "docs/CHANGELOG_v0.28.3.md",
-    "docs/CHANGELOG_v0.28.2.md",
-    "docs/CHANGELOG_v0.28.1.md",
-    "docs/CHANGELOG_v0.28.0.md",
-    "docs/CHANGELOG_v0.27.0.md",
-    "docs/CHANGELOG_v0.23.20.md",
-    "WEB_MCP_SERVERS_FIX.md",
-    "UI_COMPLETE.md",
-    "ARTIFACT_UI_IMPLEMENTATION.md",
-    "ARTIFACT_SYSTEM_FIXES.md",
-    "QUICK_START_v0.44.0.md",
-    "VERSION_0.44.0_SUMMARY.md",
-    "TESTING.md",
-    "CHANGELOG_v0.44.0.md",
-    "CHANGELOG.md",
-    "docs/artifact-system-summary.md",
-    "docs/artifact-context-integration.md",
-    "docs/artifact-context-system.md"
+    "docs/CHANGELOG_v0.28.5.md"
   ]
 }

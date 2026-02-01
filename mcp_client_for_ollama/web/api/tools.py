@@ -117,3 +117,66 @@ async def execute_tool():
             'tool_name': tool_name,
             'error': str(e)
         }), 500
+
+
+@bp.route('/servers', methods=['GET'])
+async def list_servers():
+    """Get all MCP servers with tool counts and status"""
+    username = g.get('nextcloud_user', None)
+    session_id = request.args.get('session_id')
+
+    if not session_id:
+        return jsonify({'error': 'session_id required'}), 400
+
+    client = session_manager.get_session(session_id, username=username)
+    if not client:
+        return jsonify({'error': 'Invalid session'}), 404
+
+    # Ensure client is initialized
+    await client.initialize()
+
+    servers_info = client.get_servers_info()
+    return jsonify({'servers': servers_info})
+
+
+@bp.route('/servers/toggle', methods=['POST'])
+async def toggle_server():
+    """Enable or disable all tools from an MCP server"""
+    username = g.get('nextcloud_user', None)
+    data = request.json
+    session_id = data.get('session_id')
+    server_name = data.get('server_name')
+    enabled = data.get('enabled')
+
+    if not session_id or not server_name or enabled is None:
+        return jsonify({'error': 'session_id, server_name, and enabled required'}), 400
+
+    client = session_manager.get_session(session_id, username=username)
+    if not client:
+        return jsonify({'error': 'Invalid session'}), 404
+
+    success = await client.set_server_enabled(server_name, enabled)
+    if not success:
+        return jsonify({'error': 'Server not found or operation failed'}), 404
+
+    return jsonify({'status': 'ok', 'server_name': server_name, 'enabled': enabled})
+
+
+@bp.route('/groups', methods=['GET'])
+async def list_tool_groups():
+    """Get tools grouped by server/category"""
+    username = g.get('nextcloud_user', None)
+    session_id = request.args.get('session_id')
+
+    if not session_id:
+        return jsonify({'error': 'session_id required'}), 400
+
+    client = session_manager.get_session(session_id, username=username)
+    if not client:
+        return jsonify({'error': 'Invalid session'}), 404
+
+    # Ensure client is initialized
+    await client.initialize()
+
+    groups = client.get_tools_by_server()
+    return jsonify({'groups': groups})

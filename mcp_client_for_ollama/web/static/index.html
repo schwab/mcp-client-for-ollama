@@ -35,7 +35,7 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
-            width: 400px;
+            width: 800px;
         }
 
         .artifact-panel {
@@ -59,10 +59,99 @@
             align-items: center;
         }
 
+        /* Artifact Tabs */
+        .artifact-tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #e0e0e0;
+            overflow-x: auto;
+            flex-shrink: 0;
+            scrollbar-width: thin;
+            scrollbar-color: #ccc #f5f5f5;
+        }
+
+        .artifact-tabs::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .artifact-tabs::-webkit-scrollbar-track {
+            background: #f5f5f5;
+        }
+
+        .artifact-tabs::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
+        }
+
+        .artifact-tabs::-webkit-scrollbar-thumb:hover {
+            background: #999;
+        }
+
+        .artifact-tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            font-size: 0.9rem;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .artifact-tab:hover {
+            background: #ebebeb;
+            color: #333;
+        }
+
+        .artifact-tab.active {
+            background: white;
+            color: #0082c9;
+            border-bottom-color: #0082c9;
+            font-weight: 600;
+        }
+
+        .artifact-tab-close {
+            margin-left: 4px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 1.1rem;
+            line-height: 1;
+            opacity: 0.6;
+            transition: all 0.2s;
+        }
+
+        .artifact-tab-close:hover {
+            background: rgba(0, 0, 0, 0.1);
+            opacity: 1;
+        }
+
+        .artifact-tab.active .artifact-tab-close:hover {
+            background: rgba(0, 130, 201, 0.1);
+        }
+
+        #artifactTabsContent {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+        }
+
         .artifact-content {
             padding: 20px;
             overflow-y: auto;
-            flex: 1;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+        }
+
+        .artifact-content.active {
+            display: block;
         }
 
         .artifact-empty {
@@ -170,6 +259,22 @@
             margin: 0;
             white-space: pre-wrap;
             word-wrap: break-word;
+        }
+
+        .convert-to-artifact-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .convert-to-artifact-btn:hover {
+            background: #45a049;
         }
 
         .left-panel {
@@ -1309,7 +1414,7 @@
                     <span id="statusText">Connected</span>
                 </div>
                 <div id="sessionInfo">Session: <span id="sessionId">...</span></div>
-                <div style="color: #999; font-size: 0.75rem;">v0.45.11</div>
+                <div style="color: #999; font-size: 0.75rem;">v0.45.30</div>
             </div>
         </div>
 
@@ -1318,13 +1423,16 @@
             <div class="artifact-panel">
                 <div class="artifact-header">
                     <span>🎨 Artifacts</span>
-                    <button class="icon-btn" onclick="clearArtifacts()" title="Clear Artifacts" style="color: white;">🗑️</button>
+                    <button class="icon-btn" onclick="clearAllArtifacts()" title="Clear All Artifacts" style="color: white;">🗑️</button>
                 </div>
-                <div class="artifact-content" id="artifactContent">
-                    <div class="artifact-empty">
-                        <span style="font-size: 3rem; opacity: 0.2;">🎨</span>
-                        <div style="margin-top: 10px;">No artifacts yet</div>
-                        <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
+                <div class="artifact-tabs" id="artifactTabs"></div>
+                <div id="artifactTabsContent">
+                    <div class="artifact-content active" id="artifactContent-empty">
+                        <div class="artifact-empty">
+                            <span style="font-size: 3rem; opacity: 0.2;">🎨</span>
+                            <div style="margin-top: 10px;">No artifacts yet</div>
+                            <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2464,7 +2572,10 @@
         // ========================================================================
 
         // Artifact state
-        let currentArtifact = null;
+        let artifacts = {};  // Map of tabId -> artifact data
+        let activeArtifactTab = null;
+        let artifactTabCounter = 0;
+        let renderedArtifactSignatures = new Set();  // Track already rendered artifacts to prevent duplicates
 
         // Detect artifacts in LLM response
         // Handles both correct format (```artifact:type) and malformed (```\nartifact:type)
@@ -2492,63 +2603,224 @@
             return artifacts;
         }
 
-        // Render artifact in the artifact panel
+        // Render artifact in a new tab
         function renderArtifact(artifact) {
-            const artifactContent = document.getElementById('artifactContent');
-            currentArtifact = artifact;
+            // Generate a signature for this artifact to detect duplicates
+            // Use JSON.stringify to create a unique fingerprint of the artifact data
+            const artifactSignature = JSON.stringify(artifact);
+
+            // Check if we've already rendered this exact artifact
+            if (renderedArtifactSignatures.has(artifactSignature)) {
+                // Already rendered, skip to avoid duplicates
+                return;
+            }
+
+            // Mark this artifact as rendered
+            renderedArtifactSignatures.add(artifactSignature);
+
+            // Generate unique tab ID
+            const tabId = `artifact-${++artifactTabCounter}`;
 
             // Remove artifact: prefix if present
             const type = artifact.type.replace('artifact:', '');
 
+            // Get tab title from artifact data
+            const tabTitle = artifact.data?.title || type.charAt(0).toUpperCase() + type.slice(1);
+
+            // Store artifact data
+            artifacts[tabId] = artifact;
+
+            // Hide empty state
+            const emptyContent = document.getElementById('artifactContent-empty');
+            if (emptyContent) {
+                emptyContent.style.display = 'none';
+            }
+
+            // Create tab button
+            createArtifactTab(tabId, tabTitle, type);
+
+            // Create content panel
+            createArtifactContent(tabId, artifact, type);
+
+            // Switch to new tab
+            switchArtifactTab(tabId);
+        }
+
+        // Create artifact tab button
+        function createArtifactTab(tabId, title, type) {
+            const tabsContainer = document.getElementById('artifactTabs');
+
+            // Icon for artifact type
+            const iconMap = {
+                'form': '📝',
+                'toolform': '🔧',
+                'spreadsheet': '📊',
+                'chart': '📈',
+                'querybuilder': '🔍',
+                'code': '💻',
+                'markdown': '📄',
+                'diff': '↔️',
+                'filetree': '🌳',
+                'kanban': '📋',
+                'timeline': '⏳',
+                'toolwizard': '🪄',
+                'batchtool': '⚙️'
+            };
+            const icon = iconMap[type] || '🎨';
+
+            // Abbreviate title if too long (keep max 20 characters)
+            const maxLength = 20;
+            const displayTitle = title.length > maxLength ? title.substring(0, maxLength) + '...' : title;
+
+            const tab = document.createElement('button');
+            tab.className = 'artifact-tab';
+            tab.id = `tab-${tabId}`;
+            tab.title = title;  // Full title shown on hover
+            tab.onclick = (e) => {
+                if (!e.target.classList.contains('artifact-tab-close')) {
+                    switchArtifactTab(tabId);
+                }
+            };
+
+            tab.innerHTML = `
+                <span>${icon} ${displayTitle}</span>
+                <span class="artifact-tab-close" onclick="closeArtifactTab('${tabId}', event)" title="Close tab">×</span>
+            `;
+
+            tabsContainer.appendChild(tab);
+        }
+
+        // Create artifact content panel
+        function createArtifactContent(tabId, artifact, type) {
+            const contentContainer = document.getElementById('artifactTabsContent');
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'artifact-content';
+            contentDiv.id = `content-${tabId}`;
+
             // Render based on type
             switch (type) {
                 case 'form':
-                    artifactContent.innerHTML = renderFormArtifact(artifact.data);
+                    contentDiv.innerHTML = renderFormArtifact(artifact.data);
                     break;
                 case 'toolform':
-                    artifactContent.innerHTML = renderToolFormArtifact(artifact.data);
+                    contentDiv.innerHTML = renderToolFormArtifact(artifact.data);
                     break;
                 case 'spreadsheet':
-                    artifactContent.innerHTML = renderSpreadsheetArtifact(artifact);
+                    contentDiv.innerHTML = renderSpreadsheetArtifact(artifact.data);
                     break;
                 case 'chart':
-                    artifactContent.innerHTML = renderChartArtifact(artifact);
+                    contentDiv.innerHTML = renderChartArtifact(artifact.data);
                     break;
                 case 'code':
-                    artifactContent.innerHTML = renderCodeArtifact(artifact);
+                    contentDiv.innerHTML = renderCodeArtifact(artifact);
                     break;
                 case 'markdown':
-                    artifactContent.innerHTML = renderMarkdownArtifact(artifact);
+                    contentDiv.innerHTML = renderMarkdownArtifact(artifact);
                     break;
                 case 'diff':
-                    artifactContent.innerHTML = renderDiffArtifact(artifact);
+                    contentDiv.innerHTML = renderDiffArtifact(artifact);
                     break;
                 case 'filetree':
-                    artifactContent.innerHTML = renderFiletreeArtifact(artifact);
+                    contentDiv.innerHTML = renderFiletreeArtifact(artifact);
                     break;
                 case 'kanban':
-                    artifactContent.innerHTML = renderKanbanArtifact(artifact);
+                    contentDiv.innerHTML = renderKanbanArtifact(artifact);
                     break;
                 case 'timeline':
-                    artifactContent.innerHTML = renderTimelineArtifact(artifact);
+                    contentDiv.innerHTML = renderTimelineArtifact(artifact);
                     break;
                 case 'querybuilder':
-                    artifactContent.innerHTML = renderQueryBuilderArtifact(artifact);
+                    contentDiv.innerHTML = renderQueryBuilderArtifact(artifact);
                     break;
                 case 'toolwizard':
-                    artifactContent.innerHTML = renderToolWizardArtifact(artifact);
+                    contentDiv.innerHTML = renderToolWizardArtifact(artifact);
                     break;
                 case 'batchtool':
-                    artifactContent.innerHTML = renderBatchToolArtifact(artifact);
+                    contentDiv.innerHTML = renderBatchToolArtifact(artifact);
                     break;
                 default:
-                    artifactContent.innerHTML = `
+                    contentDiv.innerHTML = `
                         <div class="artifact-empty">
                             <span style="font-size: 3rem; opacity: 0.2;">⚠️</span>
                             <div style="margin-top: 10px;">Unsupported artifact type: ${type}</div>
                             <div style="font-size: 0.85rem; margin-top: 5px;">Renderer not yet implemented</div>
                         </div>
                     `;
+            }
+
+            contentContainer.appendChild(contentDiv);
+        }
+
+        // Switch to a different artifact tab
+        function switchArtifactTab(tabId) {
+            // Deactivate all tabs and content
+            document.querySelectorAll('.artifact-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.artifact-content').forEach(content => content.classList.remove('active'));
+
+            // Activate selected tab and content
+            const tab = document.getElementById(`tab-${tabId}`);
+            const content = document.getElementById(`content-${tabId}`);
+
+            if (tab && content) {
+                tab.classList.add('active');
+                content.classList.add('active');
+                activeArtifactTab = tabId;
+            }
+        }
+
+        // Close an artifact tab
+        function closeArtifactTab(tabId, event) {
+            if (event) {
+                event.stopPropagation();
+            }
+
+            // Remove tab and content
+            const tab = document.getElementById(`tab-${tabId}`);
+            const content = document.getElementById(`content-${tabId}`);
+
+            if (tab) tab.remove();
+            if (content) content.remove();
+
+            // Remove from state
+            delete artifacts[tabId];
+
+            // If this was the active tab, switch to another or show empty state
+            if (activeArtifactTab === tabId) {
+                const remainingTabs = document.querySelectorAll('.artifact-tab');
+                if (remainingTabs.length > 0) {
+                    // Switch to last remaining tab
+                    const lastTab = remainingTabs[remainingTabs.length - 1];
+                    const lastTabId = lastTab.id.replace('tab-', '');
+                    switchArtifactTab(lastTabId);
+                } else {
+                    // Show empty state
+                    const emptyContent = document.getElementById('artifactContent-empty');
+                    if (emptyContent) {
+                        emptyContent.style.display = 'block';
+                        emptyContent.classList.add('active');
+                    }
+                    activeArtifactTab = null;
+                }
+            }
+        }
+
+        // Clear all artifacts
+        function clearAllArtifacts() {
+            // Remove all tabs and content
+            document.getElementById('artifactTabs').innerHTML = '';
+            document.querySelectorAll('.artifact-content:not(#artifactContent-empty)').forEach(el => el.remove());
+
+            // Reset state
+            artifacts = {};
+            activeArtifactTab = null;
+            artifactTabCounter = 0;
+
+            // Show empty state
+            const emptyContent = document.getElementById('artifactContent-empty');
+            if (emptyContent) {
+                emptyContent.style.display = 'block';
+                emptyContent.classList.add('active');
             }
         }
 
@@ -2729,13 +3001,20 @@
             }
 
             // For generic forms, just display the data
-            const resultDiv = document.getElementById('formResult');
-            resultDiv.innerHTML = `
-                <div class="form-result">
-                    <strong>Form Data:</strong>
-                    <pre>${JSON.stringify(data, null, 2)}</pre>
-                </div>
-            `;
+            // Find result div within the form (not globally by ID, to support multiple forms in tabs)
+            const resultDiv = form.querySelector('#formResult');
+            if (resultDiv) {
+                const resultText = JSON.stringify(data, null, 2);
+                resultDiv.innerHTML = `
+                    <div class="form-result">
+                        <strong>Form Data:</strong>
+                        <pre>${resultText}</pre>
+                        <button class="convert-to-artifact-btn" onclick="convertToArtifact(this)">
+                            🎨 Convert to Artifact
+                        </button>
+                    </div>
+                `;
+            }
         }
 
         // Parse array input from various formats
@@ -2744,9 +3023,9 @@
                 return [];
             }
 
-            const trimmed = value.trim();
+            let trimmed = value.trim();
 
-            // Try to parse as JSON array first
+            // Try to parse as JSON array first (e.g., [".pdf", ".docx"])
             if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
                 try {
                     const parsed = JSON.parse(trimmed);
@@ -2754,7 +3033,12 @@
                         return parsed;
                     }
                 } catch (e) {
-                    // Not valid JSON, fall through to comma-separated
+                    // Not valid JSON - strip brackets and parse as comma-separated
+                    // This handles inputs like [.pdf] or [.pdf, .docx]
+                    trimmed = trimmed.slice(1, -1).trim();
+                    if (trimmed === '') {
+                        return [];
+                    }
                 }
             }
 
@@ -2789,12 +3073,12 @@
                 // Handle array/list fields
                 else if (dataType === 'array') {
                     if (value.trim() === '') {
-                        // Empty value - use default if available
+                        // Empty value - use default if available, otherwise empty array
                         if (propSchema.default !== undefined) {
                             args[key] = propSchema.default;
+                        } else {
+                            args[key] = [];
                         }
-                        // If no default and field is required, validation will catch it
-                        // If optional, don't include it
                     } else {
                         // Parse the value as an array
                         args[key] = parseArrayInput(value);
@@ -2813,12 +3097,15 @@
                 }
             }
 
-            const resultDiv = document.getElementById('formResult');
-            resultDiv.innerHTML = `
-                <div class="form-result">
-                    <strong>Executing ${toolName}...</strong>
-                </div>
-            `;
+            // Find result div within the form (not globally by ID, to support multiple forms in tabs)
+            const resultDiv = form.querySelector('#formResult');
+            if (resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="form-result">
+                        <strong>Executing ${toolName}...</strong>
+                    </div>
+                `;
+            }
 
             try {
                 // Call the tool via API
@@ -2837,12 +3124,17 @@
 
                 if (response.ok) {
                     const resultText = typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2);
-                    resultDiv.innerHTML = `
-                        <div class="form-result">
-                            <strong>Result:</strong>
-                            <pre>${resultText}</pre>
-                        </div>
-                    `;
+                    if (resultDiv) {
+                        resultDiv.innerHTML = `
+                            <div class="form-result">
+                                <strong>Result:</strong>
+                                <pre>${resultText}</pre>
+                                <button class="convert-to-artifact-btn" onclick="convertToArtifact(this)">
+                                    🎨 Convert to Artifact
+                                </button>
+                            </div>
+                        `;
+                    }
 
                     // Record artifact execution for context
                     recordArtifactExecution(toolName, args, resultText);
@@ -2850,21 +3142,66 @@
                     // Add to agent activity
                     addAgentActivity(`Executed ${toolName} via artifact`, 'tool');
                 } else {
+                    const errorText = result.error || 'Unknown error';
+                    if (resultDiv) {
+                        resultDiv.innerHTML = `
+                            <div class="form-result" style="border-left-color: #f44336; background: #ffebee;">
+                                <strong>Error:</strong>
+                                <pre>${errorText}</pre>
+                                <button class="convert-to-artifact-btn" onclick="convertToArtifact(this)">
+                                    🎨 Convert to Artifact
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                if (resultDiv) {
                     resultDiv.innerHTML = `
                         <div class="form-result" style="border-left-color: #f44336; background: #ffebee;">
                             <strong>Error:</strong>
-                            <pre>${result.error || 'Unknown error'}</pre>
+                            <pre>${error.message}</pre>
+                            <button class="convert-to-artifact-btn" onclick="convertToArtifact(this)">
+                                🎨 Convert to Artifact
+                            </button>
                         </div>
                     `;
                 }
-            } catch (error) {
-                resultDiv.innerHTML = `
-                    <div class="form-result" style="border-left-color: #f44336; background: #ffebee;">
-                        <strong>Error:</strong>
-                        <pre>${error.message}</pre>
-                    </div>
-                `;
             }
+        }
+
+        // Convert form result content to artifact via AI prompt
+        async function convertToArtifact(button) {
+            // Find the result content from the same form-result div
+            const formResultDiv = button.closest('.form-result');
+            if (!formResultDiv) {
+                console.error('Form result div not found');
+                return;
+            }
+
+            // Get the text content from the pre element
+            const preElement = formResultDiv.querySelector('pre');
+            if (!preElement) {
+                console.error('Result content not found');
+                return;
+            }
+
+            const content = preElement.textContent;
+
+            const messageInput = document.getElementById('messageInput');
+            if (!messageInput) {
+                console.error('Message input not found');
+                return;
+            }
+
+            // Create prompt with the content
+            const prompt = `Turn this content into an easy to view spreadsheet, form, or chart:\n\n${content}`;
+
+            // Set the message input value
+            messageInput.value = prompt;
+
+            // Send the message to AI
+            await sendMessage();
         }
 
         // Record artifact execution for context tracking
@@ -2922,29 +3259,17 @@
             }
         }
 
-        // Clear artifacts
-        function clearArtifacts() {
-            const artifactContent = document.getElementById('artifactContent');
-            currentArtifact = null;
-            artifactContent.innerHTML = `
-                <div class="artifact-empty">
-                    <span style="font-size: 3rem; opacity: 0.2;">🎨</span>
-                    <div style="margin-top: 10px;">No artifacts yet</div>
-                    <div style="font-size: 0.85rem; margin-top: 5px;">Artifacts will appear here when generated</div>
-                </div>
-            `;
-        }
 
         // ========================================================================
         // ADVANCED ARTIFACT RENDERERS
         // ========================================================================
 
         // Render spreadsheet artifact
-        function renderSpreadsheetArtifact(artifact) {
-            const title = artifact.title || 'Spreadsheet';
-            const data = artifact.data || {};
-            let columns = data.columns || [];
-            let rows = data.rows || [];
+        function renderSpreadsheetArtifact(data) {
+            const title = data.title || 'Spreadsheet';
+            const spreadsheetData = data.data || {};
+            let columns = spreadsheetData.columns || [];
+            let rows = spreadsheetData.rows || [];
 
             // Normalize columns: handle both string arrays and object arrays
             if (columns.length > 0 && typeof columns[0] === 'object') {
@@ -2984,12 +3309,12 @@
         }
 
         // Render chart artifact
-        function renderChartArtifact(artifact) {
-            const title = artifact.title || 'Chart';
-            const data = artifact.data || {};
-            const chartType = data.chart_type || 'bar';
-            const chartData = data.data || {};
-            const options = data.options || {};
+        function renderChartArtifact(data) {
+            const title = data.title || 'Chart';
+            const chartInfo = data.data || {};
+            const chartType = chartInfo.chart_type || 'bar';
+            const chartData = chartInfo.data || {};
+            const options = chartInfo.options || {};
 
             let html = `
                 <div style="margin-bottom: 15px;">
@@ -3897,19 +4222,47 @@
 
         function createToolElement(tool) {
             const displayName = cleanToolName(tool.name);
+            // Escape tool name for safe use in HTML attributes
+            const escapedName = tool.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             return `
                 <div class="tool-item" data-tool-name="${tool.name}">
-                    <div class="tool-info">
+                    <div class="tool-info" onclick="requestToolForm('${escapedName}')" style="cursor: pointer;" title="Click to create a form for this tool">
                         <div class="tool-name">${displayName}</div>
                         <div class="tool-description">${tool.description}</div>
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox" ${tool.enabled ? 'checked' : ''}
-                               onchange="toggleTool('${tool.name}', this.checked)">
+                               onchange="toggleTool('${escapedName}', this.checked)">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
             `;
+        }
+
+        // Request form creation for a tool
+        function requestToolForm(toolName) {
+            const messageInput = document.getElementById('messageInput');
+            if (!messageInput) {
+                console.error('Message input not found');
+                return;
+            }
+
+            const currentText = messageInput.value.trim();
+            const formRequest = `Create a user form to expose the tool ${toolName} to the user`;
+
+            // Append to existing text or set as new text
+            if (currentText) {
+                messageInput.value = currentText + '\n' + formRequest;
+            } else {
+                messageInput.value = formRequest;
+            }
+
+            // Focus the input and move cursor to end
+            messageInput.focus();
+            messageInput.setSelectionRange(messageInput.value.length, messageInput.value.length);
+
+            // Scroll to bottom if needed
+            messageInput.scrollTop = messageInput.scrollHeight;
         }
 
         // Toggle tool enabled/disabled
@@ -3959,6 +4312,12 @@
 
         // Add message to UI
         function addMessage(role, content, streaming = false) {
+            // Clear rendered artifacts tracking when starting a new assistant message
+            // This prevents duplicate detection across different responses
+            if (role === 'assistant' && streaming) {
+                renderedArtifactSignatures.clear();
+            }
+
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             if (streaming) messageDiv.classList.add('streaming');
@@ -3997,8 +4356,10 @@
             // Detect and render artifacts
             const artifacts = detectArtifacts(newContent);
             if (artifacts.length > 0) {
-                // Render the first artifact (in future, could support multiple)
-                renderArtifact(artifacts[0]);
+                // Render all artifacts
+                artifacts.forEach(artifact => {
+                    renderArtifact(artifact);
+                });
             }
         }
 

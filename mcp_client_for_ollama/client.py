@@ -1517,7 +1517,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
 
         # Save the configuration
         current_config["delegation"] = delegation
-        self.config_manager.save_configuration("default", current_config)
+        self.config_manager.save_configuration(current_config, "default")
 
         # Display the new state
         status = "[green]enabled[/green]" if new_state else "[yellow]disabled[/yellow]"
@@ -1676,7 +1676,7 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
                     current_config = {}
 
                 current_config["vision_model"] = selected_model
-                self.config_manager.save_configuration("default", current_config)
+                self.config_manager.save_configuration(current_config, "default")
 
                 self.console.print(f"\n[bold green]✓ Vision model set to: {selected_model}[/bold green]")
                 self.console.print(f"[dim]This model will be used for all image analysis tasks[/dim]\n")
@@ -2220,7 +2220,19 @@ If the user asks you to make changes, remind them to switch to ACT mode (Shift+T
 
     async def cleanup(self):
         """Clean up resources"""
-        await self.exit_stack.aclose()
+        # Suppress errors related to SSE client async generator cleanup
+        try:
+            await self.exit_stack.aclose()
+        except RuntimeError as e:
+            if "Attempted to exit cancel scope in a different task" in str(e):
+                # This is a known issue with anyio task groups in SSE client cleanup
+                # Safe to suppress as the connections are being closed anyway
+                pass
+            else:
+                raise
+        except Exception:
+            # Suppress other cleanup errors
+            pass
 
     async def execute_tool(self, tool_name: str, arguments: dict) -> str:
         """

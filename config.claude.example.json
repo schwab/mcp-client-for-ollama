@@ -1,0 +1,61 @@
+{
+  "comment": "Example configuration for Claude Code integration (Phase 1 + Phase 2)",
+  "comment2": "Copy this section to your config.json and add your API key",
+
+  "claude_integration": {
+    "comment": "Phase 1: Emergency Fallback - Claude steps in when Ollama models fail",
+    "comment2": "Phase 2: Quality Validator - Claude validates critical outputs before task complete",
+
+    "enabled": true,
+
+    "api_key": "sk-ant-api03-YOUR_API_KEY_HERE",
+
+    "model": "claude-3-5-sonnet-20241022",
+    "comment_model": "Options: claude-3-5-haiku-20241022 (cheapest), claude-3-5-sonnet-20241022 (recommended), claude-opus-4-20250514 (powerful), claude-opus-4-5-20250514 (most powerful)",
+
+    "escalation_threshold": 1,
+    "comment_threshold": "Number of Ollama failures before escalating to Claude. Use 1 for reliable batch processing (escalates after first failure). Use 2-3 for cost savings (accepts some failures). Lower = more Claude usage = higher cost but higher success rate.",
+
+    "max_calls_per_hour": 50,
+    "comment_limit": "Maximum Claude API calls per hour to prevent runaway costs. Adjust based on your budget and needs",
+
+    "critical_tasks": [
+      "batch_process",
+      "code_generation",
+      "file_write",
+      "database_write"
+    ],
+    "comment_critical": "Tasks that escalate to Claude after only 1 failure instead of threshold. Use for operations that must succeed",
+
+    "validation": {
+      "comment": "Phase 2: Quality Validator - Validate outputs before marking tasks complete",
+
+      "enabled": false,
+      "comment_enabled": "Set to true to enable validation system",
+
+      "validate_tasks": [
+        "CODER",
+        "FILE_EXECUTOR",
+        "SHELL_EXECUTOR"
+      ],
+      "comment_validate_tasks": "Which agent types should have outputs validated. Add PLANNER for even more coverage",
+
+      "max_retries": 3,
+      "comment_max_retries": "Maximum retry attempts after validation failure. Higher = more robust but slower",
+
+      "validation_model": "claude-3-5-haiku-20241022",
+      "comment_validation_model": "Model to use for validation (usually cheaper/faster Haiku is fine)",
+
+      "feedback_model": "claude-3-5-sonnet-20241022",
+      "comment_feedback_model": "Model to use for generating improvement feedback"
+    }
+  },
+
+  "comment_cost_examples": "Phase 1 cost per 100 tasks with 5% escalation: Haiku=$0.035, Sonnet=$0.105 (recommended), Opus 4=$0.175",
+
+  "comment_phase2_cost": "Phase 2 validation cost per 100 tasks: $0.020 (vs $0.105 Phase 1 only) - 80% savings with validation feedback",
+
+  "comment_usage_tracking": "All Claude usage logged to ~/.ollmcp/claude_usage.json with costs and reasons. View with: cat ~/.ollmcp/claude_usage.json | jq",
+
+  "comment_see_docs": "Phase 1: See docs/claude_integration.md | Phase 2: See docs/phase2_quality_validator.md"
+}
